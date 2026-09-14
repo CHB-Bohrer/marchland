@@ -166,7 +166,8 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
           <button id="zout" aria-label="Zoom out">−</button>
-          <button id="home" aria-label="Centre on your keep">◎</button>
+          <button id="home" aria-label="Centre on your keep" title="Centre on your keep">◎</button>
+          <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
         </div>
       </div>
 
@@ -174,7 +175,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
         <button id="m-claim" aria-pressed="true">Spend a march</button>
         <button id="m-wall" aria-pressed="false">Wall <span class="cost">30 st</span></button>
         <button id="m-tower" aria-pressed="false">Tower <span class="cost">40 st · 30 tm</span></button>
-        <button id="m-castle" aria-pressed="false">Castle <span class="cost">80 tm · 60 st</span></button>
+        <button id="m-castle" aria-pressed="false">Castle <span class="cost">260 tm · 200 st · 60 ir</span></button>
         <button id="m-upgrade" aria-pressed="false">Upgrade</button>
         <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
       </div>
@@ -303,6 +304,7 @@ try{ myName=localStorage.getItem('marchland.name')||''; }catch(e){}
    G = { v, code, created, players:{pid:{name,seat,q,r,res,field,squares,
          lastCollect,collected,lastTick,seen}}, cells:{ "q_r": {o,w,k,l,g,d} } }   */
 var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
+var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
   return { v:1, code:code, created:Date.now(), players:{}, cells:{} };
@@ -517,18 +519,38 @@ function spendMarch(q,r){
   say(m+' <b>'+pl.squares+'</b> left.');
 }
 
+/* Castles are meant to be rare: each one costs more than the last, and they
+   cannot be crowded together, so a second keep is a campaign rather than a
+   purchase. They are also the only thing supply is measured from. */
+var CASTLE_SPACING=7;
+function myCastleCells(pid){
+  var out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&c.k===CASTLE){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }
+  return out;
+}
+function castleCost(pid){
+  var n=Math.max(1,myCastleCells(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 …
+  return {timber:260*n, stone:200*n, iron:60*n};
+}
 function build(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return say('Build on ground you hold.');
   if(c.k) return say('Something already stands here.');
-  var cost=SPEC[kind].cost;
-  for(var k in cost){ if(pl.res[k]<cost[k]) return say('Not enough materials.'); }
+  var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
+  if(kind===CASTLE){
+    var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
+    if(near.length) return say('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
+  }
+  for(var k in cost){ if(pl.res[k]<cost[k]) return say('Not enough materials — a castle here needs '+costLine(cost)+'.'); }
   if(pl.field<SPEC[kind].gar[1]) return say('No one to man it. Muster a soldier first.');
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   pl.field-=1; c.k=kind; c.l=1; c.g=1; c.w=0;
   writeCell(q,r,c); render(); pushCell(q,r); pushMe();
-  say((kind===TOWER?'Watchtower':'Castle')+' raised — one soldier garrisoned and no longer free to attack with.');
+  say(kind===TOWER
+    ? 'Watchtower raised — one soldier garrisoned and no longer free to attack with.'
+    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.');
 }
+function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 function upgrade(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME||!c.k) return say('Click one of your own towers or castles.');
@@ -573,8 +595,15 @@ function layout(){
   canvas.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0);
 }
 function hexPx(q,r){ return [S*Math.sqrt(3)*(q+r/2), S*1.5*r]; }
-function toScreen(q,r){ var a=hexPx(q,r),b=hexPx(viewQ,viewR); return [W/2+a[0]-b[0], H/2+a[1]-b[1]]; }
-function fromScreen(x,y){ var b=hexPx(viewQ,viewR),px=x-W/2+b[0],py=y-H/2+b[1]; return cubeRound((Math.sqrt(3)/3*px-py/3)/S,(2/3*py)/S); }
+function toScreen(q,r){ var a=hexPx(q,r),b=hexPx(viewQ,viewR); return [W/2+a[0]-b[0]+panX, H/2+a[1]-b[1]+panY]; }
+function fromScreen(x,y){ var b=hexPx(viewQ,viewR),px=x-W/2+b[0]-panX,py=y-H/2+b[1]-panY; return cubeRound((Math.sqrt(3)/3*px-py/3)/S,(2/3*py)/S); }
+function centreOn(q,r){ viewQ=q; viewR=r; panX=0; panY=0; }
+function setZoom(next){                              // zoom about the middle of the screen
+  next=Math.max(5,Math.min(52,next));
+  if(next===S) return;
+  var mid=fromScreen(W/2,H/2);
+  S=next; centreOn(mid[0],mid[1]);
+}
 function hexPath(cx,cy,s){ ctx.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180,x=cx+s*Math.cos(a),y=cy+s*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.closePath(); }
 function colorFor(pid){ return pid&&G.players[pid] ? T[seatColor(G.players[pid].seat)] : T['--ink-2']; }
 function mark(t,cx,cy,s,col){
@@ -617,8 +646,9 @@ function draw(){
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
     var c=cellOf(q,r), col=colorFor(c.o);
     hexPath(p[0],p[1],S*0.94);
-    if(c.o){ ctx.save(); ctx.globalAlpha=.20; ctx.fillStyle=col; ctx.fill(); ctx.restore(); }
-    if(c.o===ME && !sup[key(q,r)]){
+    var cut = c.o===ME && !sup[key(q,r)];
+    if(c.o){ ctx.save(); ctx.globalAlpha=cut?.07:.20; ctx.fillStyle=col; ctx.fill(); ctx.restore(); }
+    if(cut){
       ctx.save(); ctx.clip(); ctx.strokeStyle=T['--ink-2']; ctx.globalAlpha=.55; ctx.lineWidth=1; ctx.beginPath();
       for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
       ctx.stroke(); ctx.restore();
@@ -654,6 +684,31 @@ function draw(){
     }
   });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2]); });
+
+  // Anyone off the edge of the screen gets an arrow pointing at their keep, with
+  // how far away it is — otherwise a distant opponent is simply invisible.
+  Object.keys(G.players).forEach(function(pid){
+    if(pid===ME||!me()) return;
+    var p=G.players[pid], sp=toScreen(p.q,p.r);
+    var pad=26;
+    if(sp[0]>pad && sp[0]<W-pad && sp[1]>pad && sp[1]<H-pad) return;   // visible already
+    var cx=W/2, cy=H/2, dx=sp[0]-cx, dy=sp[1]-cy, len=Math.hypot(dx,dy)||1;
+    var t=Math.min((W/2-pad)/Math.abs(dx||1e-6), (H/2-pad)/Math.abs(dy||1e-6));
+    var ax=cx+dx*t, ay=cy+dy*t, ang=Math.atan2(dy,dx);
+    var col=T[seatColor(p.seat)];
+    ctx.save();
+    ctx.translate(ax,ay); ctx.rotate(ang);
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath(); ctx.fill();
+    ctx.restore();
+    var label=p.name+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
+    ctx.font='500 11px ui-monospace, monospace';
+    var tw=ctx.measureText(label).width;
+    var lx=Math.min(Math.max(ax-tw/2,4), W-tw-8), ly=ay+(ay<H/2?22:-14);
+    ctx.fillStyle=T['--surface']; ctx.globalAlpha=.9;
+    ctx.fillRect(lx-4,ly-11,tw+8,15); ctx.globalAlpha=1;
+    ctx.fillStyle=col; ctx.fillText(label,lx,ly);
+  });
 }
 
 /* ═══ render ═══════════════════════════════════════════════════════════ */
@@ -691,28 +746,76 @@ function render(){
   }).join('');
   document.getElementById('m-wall').disabled=pl.res.stone<30;
   document.getElementById('m-tower').disabled=!(pl.res.stone>=40&&pl.res.timber>=30);
-  document.getElementById('m-castle').disabled=!(pl.res.timber>=80&&pl.res.stone>=60);
+  var cc=castleCost(ME);
+  document.getElementById('m-castle').disabled=!(pl.res.timber>=cc.timber&&pl.res.stone>=cc.stone&&pl.res.iron>=cc.iron);
+  var ccLabel=document.querySelector('#m-castle .cost');
+  if(ccLabel) ccLabel.textContent=cc.timber+' tm · '+cc.stone+' st · '+cc.iron+' ir';
   document.getElementById('m-troop').disabled=!(pl.res.iron>=25&&pl.res.grain>=40);
   draw();
 }
 
 /* ═══ interaction ══════════════════════════════════════════════════════ */
+/* One pointer drags the map; a pointer that barely moves is a tap and acts on
+   the cell. Two pointers pinch to zoom. Without this you can only ever see the
+   patch of grid you started on, which hides the other player entirely. */
+var pointers={}, dragFrom=null, dragged=false, pinchFrom=null;
+function pts(){ return Object.keys(pointers).map(function(k){ return pointers[k]; }); }
+
 canvas.addEventListener('pointerdown',function(ev){
   if(!G||!me()) return;
-  var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top);
-  if(mode==='claim') spendMarch(h[0],h[1]);
-  else if(mode==='wall') wall(h[0],h[1]);
-  else if(mode==='tower') build(h[0],h[1],TOWER);
-  else if(mode==='castle') build(h[0],h[1],CASTLE);
-  else if(mode==='upgrade') upgrade(h[0],h[1]);
-  else if(mode==='troop') muster(h[0],h[1]);
+  canvas.setPointerCapture(ev.pointerId);
+  pointers[ev.pointerId]={x:ev.clientX,y:ev.clientY};
+  var p=pts();
+  if(p.length===1){ dragFrom={x:ev.clientX,y:ev.clientY,panX:panX,panY:panY}; dragged=false; }
+  else if(p.length===2){
+    pinchFrom={dist:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y), S:S};
+    dragged=true;                                   // a pinch is never a tap
+  }
 });
+canvas.addEventListener('pointermove',function(ev){
+  if(!pointers[ev.pointerId]) return;
+  pointers[ev.pointerId]={x:ev.clientX,y:ev.clientY};
+  var p=pts();
+  if(p.length>=2 && pinchFrom){
+    var d=Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y);
+    if(pinchFrom.dist>10) setZoom(pinchFrom.S*(d/pinchFrom.dist));
+    draw(); return;
+  }
+  if(!dragFrom) return;
+  var dx=ev.clientX-dragFrom.x, dy=ev.clientY-dragFrom.y;
+  if(!dragged && Math.hypot(dx,dy)>8) dragged=true;
+  if(dragged){ panX=dragFrom.panX+dx; panY=dragFrom.panY+dy; draw(); }
+});
+function endPointer(ev){
+  var wasDragging=!!dragFrom, moved=dragged;
+  delete pointers[ev.pointerId];
+  if(pts().length<2) pinchFrom=null;
+  if(pts().length===0){
+    dragFrom=null;
+    if(wasDragging && !moved && G && me()){
+      var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top);
+      if(mode==='claim') spendMarch(h[0],h[1]);
+      else if(mode==='wall') wall(h[0],h[1]);
+      else if(mode==='tower') build(h[0],h[1],TOWER);
+      else if(mode==='castle') build(h[0],h[1],CASTLE);
+      else if(mode==='upgrade') upgrade(h[0],h[1]);
+      else if(mode==='troop') muster(h[0],h[1]);
+    }
+    dragged=false;
+  }
+}
+canvas.addEventListener('pointerup',endPointer);
+canvas.addEventListener('pointercancel',endPointer);
+canvas.addEventListener('wheel',function(ev){
+  ev.preventDefault();
+  setZoom(S*(ev.deltaY<0?1.15:1/1.15)); draw();
+},{passive:false});
 var MODES={claim:'m-claim',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop'};
 var HINTS={
   claim:'Click any dashed cell touching your ground to spend a march. Someone else&rsquo;s ground costs two, and their walls and manned guns cost soldiers on top.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. It needs a soldier standing in it from the moment it exists.',
-  castle:'Click ground you hold to found a castle. Supply is measured from these.',
+  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing.',
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier.'
 };
@@ -723,9 +826,20 @@ Object.keys(MODES).forEach(function(m){
     say(HINTS[m]); draw();
   });
 });
-document.getElementById('zin').addEventListener('click',function(){ S=Math.min(44,S+6); draw(); });
-document.getElementById('zout').addEventListener('click',function(){ S=Math.max(11,S-6); draw(); });
-document.getElementById('home').addEventListener('click',function(){ if(me()){ viewQ=me().q; viewR=me().r; draw(); } });
+document.getElementById('zin').addEventListener('click',function(){ setZoom(S*1.35); draw(); });
+document.getElementById('zout').addEventListener('click',function(){ setZoom(S/1.35); draw(); });
+document.getElementById('home').addEventListener('click',function(){ if(me()){ centreOn(me().q,me().r); draw(); } });
+document.getElementById('rival').addEventListener('click',function(){
+  var best=null,bd=Infinity;
+  Object.keys(G.players).forEach(function(pid){
+    if(pid===ME) return;
+    var p=G.players[pid], d=hexDist(me().q,me().r,p.q,p.r);
+    if(d<bd){ bd=d; best=p; }
+  });
+  if(!best) return say('Nobody else has joined this march yet. Send them the invite link above.');
+  centreOn(best.q,best.r); draw();
+  say('Centred on <b>'+esc(best.name)+'</b>&rsquo;s keep &mdash; '+bd+' cells from yours. Drag the map to move, pinch or use +/&minus; to zoom.');
+});
 document.getElementById('collect').addEventListener('click',collect);
 document.getElementById('stepsin').addEventListener('keydown',function(e){ if(e.key==='Enter') collect(); });
 
