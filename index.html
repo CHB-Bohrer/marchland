@@ -1,0 +1,821 @@
+TESTLINE-1
+TESTLINE-2<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Marchland — two players</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Fraunces:opsz,wght@9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<script>
+/* ───────────────────────────────────────────────────────────────────────────
+   SETTINGS — paste your Firebase Realtime Database URL between the quotes.
+   Setup takes about ten minutes, costs nothing, and nobody who plays needs
+   an account of any kind. Step-by-step instructions are in the app itself
+   (press "Set up the database") and in the README that came with this file.
+   ─────────────────────────────────────────────────────────────────────────── */
+var DB_URL = "https://marchland-352fc-default-rtdb.firebaseio.com";
+</script>
+
+<style>
+:root{
+  --paper:#E5E8E2; --surface:#F2F4EE; --sink:#DCE0D8;
+  --ink:#16242A; --ink-2:#54666A; --rule:#C2C9BE;
+  --p0:#1C6B57; --p1:#B23F2E; --p2:#3E5E86; --p3:#8F6F1C;
+  --brass:#8F6F1C; --steel:#3E5E86;
+  --display:"Fraunces","Iowan Old Style",Georgia,serif;
+  --body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0E1619; --surface:#162226; --sink:#0A1114;
+    --ink:#DDE5DF; --ink-2:#8DA1A2; --rule:#2B3B3F;
+    --p0:#41BC97; --p1:#E2705B; --p2:#7FA5CE; --p3:#D2A544;
+    --brass:#D2A544; --steel:#7FA5CE;
+  }
+}
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{ background:var(--paper); color:var(--ink); font-family:var(--body); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+.wrap{ max-width:1000px; margin:0 auto; padding-inline:16px; padding-block:20px 60px; }
+h1{ font-family:var(--display); font-weight:700; font-size:clamp(30px,7vw,48px); margin:0 0 2px; letter-spacing:-.02em; }
+.sub{ font-family:var(--mono); font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-2); margin:0 0 16px; }
+.panel{ border:1px solid var(--rule); background:var(--surface); margin-bottom:14px; }
+.panel h2{ font-family:var(--display); font-size:20px; margin:0 0 8px; font-weight:700; }
+.pad{ padding:16px 18px; }
+p{ margin:0 0 10px; } p:last-child{ margin-bottom:0; }
+.muted{ color:var(--ink-2); font-size:14px; }
+code{ font-family:var(--mono); font-size:12.5px; background:var(--paper); border:1px solid var(--rule); padding:1px 4px; }
+button{ font-family:var(--body); font-size:13px; font-weight:500; color:var(--ink); background:var(--surface); border:1px solid var(--rule); padding:8px 13px; border-radius:2px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+button:hover:not(:disabled){ border-color:var(--ink-2); }
+button[aria-pressed="true"]{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+button:disabled{ opacity:.4; cursor:not-allowed; }
+button:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+button.go{ border-color:var(--p0); color:var(--p0); font-weight:600; }
+button.go:hover{ background:var(--p0); color:var(--paper); }
+.cost{ font-family:var(--mono); font-size:10.5px; color:var(--ink-2); }
+button[aria-pressed="true"] .cost{ color:var(--paper); opacity:.75; }
+input, select{ font-family:var(--body); font-size:14px; color:var(--ink); background:var(--paper); border:1px solid var(--rule); border-radius:2px; padding:7px 9px; }
+input:focus-visible, select:focus-visible{ outline:2px solid var(--brass); outline-offset:1px; }
+.mono{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.row{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.spacer{ flex:1 1 auto; }
+.hide{ display:none !important; }
+
+.ledger{ display:flex; flex-wrap:wrap; border-bottom:1px solid var(--rule); }
+.stat{ flex:1 1 78px; padding:9px 12px; border-right:1px solid var(--rule); display:flex; flex-direction:column; gap:1px; }
+.stat:last-child{ border-right:0; }
+.stat .k{ font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); }
+.stat .v{ font-family:var(--mono); font-size:18px; font-variant-numeric:tabular-nums; }
+.stat .u{ font-family:var(--mono); font-size:9.5px; color:var(--ink-2); }
+.stat.warn .u{ color:var(--p1); }
+
+.bar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 12px; border-bottom:1px solid var(--rule); background:var(--paper); }
+.rail{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; padding:10px 12px; border-top:1px solid var(--rule); }
+.canvas-pad{ position:relative; background:var(--sink); }
+canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crosshair; }
+.mapctl{ position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:5px; }
+.mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
+.status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
+.status b{ color:var(--ink); font-weight:500; }
+.status .good{ color:var(--p0); } .status .bad{ color:var(--p1); }
+.legend{ display:flex; flex-wrap:wrap; gap:4px 14px; padding:8px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:10.5px; color:var(--ink-2); }
+.sw{ width:9px; height:9px; display:inline-block; border:1px solid var(--ink-2); }
+
+table{ width:100%; border-collapse:collapse; font-size:14px; }
+th,td{ text-align:left; padding:8px 12px; border-bottom:1px solid var(--rule); }
+th{ font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-2); font-weight:500; }
+td.n{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
+.dot{ width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:7px; vertical-align:-1px; }
+
+.steps{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+.field{ display:flex; flex-direction:column; gap:4px; }
+.field label{ font-family:var(--mono); font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--ink-2); }
+.banner{ padding:10px 14px; border:1px solid var(--p1); color:var(--p1); font-size:13.5px; margin-bottom:14px; background:var(--surface); }
+ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; }
+.copybox{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+.copybox input{ flex:1 1 auto; font-family:var(--mono); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Marchland</h1>
+  <p class="sub" id="subline">Two players · shared board</p>
+
+  <div id="offline-note" class="banner hide"></div>
+
+  <!-- ── join / create ─────────────────────────────────────────────── -->
+  <div class="panel" id="join-panel">
+    <div class="pad">
+      <h2>Join a march</h2>
+      <p class="muted">Pick a name your opponent will recognise, then either start a new march or type the code they sent you.</p>
+      <div class="steps" style="margin-top:12px">
+        <div class="field"><label for="handle">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:150px"></div>
+        <div class="field"><label for="code">March code</label><input id="code" maxlength="10" placeholder="e.g. OTTER" style="width:130px;text-transform:uppercase"></div>
+        <button id="join" class="go">Join that march</button>
+        <button id="create">Start a new one</button>
+        <button id="test">Test connection</button>
+      </div>
+      <p class="muted" style="margin-top:12px" id="join-hint">Your name is stored only in this browser. No sign-up, no email, no password.</p>
+    </div>
+  </div>
+
+  <!-- ── the game ──────────────────────────────────────────────────── -->
+  <div id="game" class="hide">
+
+    <div class="panel">
+      <div class="pad" style="padding-bottom:12px">
+        <div class="row">
+          <div><span class="muted">March</span> <b class="mono" id="gamecode">—</b></div>
+          <div><span class="muted">You are</span> <b id="myname">—</b> <span class="dot" id="mydot"></span></div>
+          <span class="spacer"></span>
+          <span class="muted mono" id="syncstate">·</span>
+          <button id="leave">Leave</button>
+        </div>
+        <div class="copybox">
+          <input id="invite" readonly>
+          <button id="copy">Copy invite</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="ledger">
+        <div class="stat"><span class="k">Stone</span><span class="v" id="v-stone">0</span><span class="u">walls, towers</span></div>
+        <div class="stat"><span class="k">Timber</span><span class="v" id="v-timber">0</span><span class="u">castles</span></div>
+        <div class="stat"><span class="k">Iron</span><span class="v" id="v-iron">0</span><span class="u">soldiers</span></div>
+        <div class="stat" id="s-grain"><span class="k">Grain</span><span class="v" id="v-grain">0</span><span class="u" id="u-grain">+0 net</span></div>
+        <div class="stat"><span class="k">Field</span><span class="v" id="v-field">0</span><span class="u">soldiers</span></div>
+        <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
+        <div class="stat"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u">squares</span></div>
+      </div>
+
+      <div class="bar">
+        <div class="field"><label for="stepsin">Steps since you last collected</label>
+          <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="read it off Health" style="width:180px">
+        </div>
+        <button id="collect" class="go">Collect</button>
+        <span class="muted mono" id="bankinfo">—</span>
+      </div>
+
+      <div class="canvas-pad">
+        <canvas id="board"></canvas>
+        <div class="mapctl">
+          <button id="zin" aria-label="Zoom in">+</button>
+          <button id="zout" aria-label="Zoom out">−</button>
+          <button id="home" aria-label="Centre on your keep">◎</button>
+        </div>
+      </div>
+
+      <div class="rail">
+        <button id="m-claim" aria-pressed="true">Spend a march</button>
+        <button id="m-wall" aria-pressed="false">Wall <span class="cost">30 st</span></button>
+        <button id="m-tower" aria-pressed="false">Tower <span class="cost">40 st · 30 tm</span></button>
+        <button id="m-castle" aria-pressed="false">Castle <span class="cost">80 tm · 60 st</span></button>
+        <button id="m-upgrade" aria-pressed="false">Upgrade</button>
+        <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
+      </div>
+
+      <div class="status" id="status"><span>Loading…</span></div>
+
+      <div class="legend">
+        <span><span class="sw" style="background:var(--brass);border-color:var(--brass)"></span> wall I–III</span>
+        <span>▲ timber</span><span>◆ stone</span><span>● iron</span><span>≡ grain</span>
+        <span>/// cut off from your keep</span>
+        <span>dotted ring = field of fire</span>
+        <span>dashed cell = you can take it</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <table>
+        <thead><tr><th>#</th><th>Player</th><th>Cells</th><th>Steps banked</th><th>Last seen</th></tr></thead>
+        <tbody id="standings"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── setup ─────────────────────────────────────────────────────── -->
+  <div class="panel" id="setup-panel">
+    <div class="pad">
+      <h2>Set up the shared database</h2>
+      <p class="muted">This is the only setup anyone has to do, you do it once, it costs nothing, and <b>nobody you invite needs an account of any kind</b> — they just open the link and type a name.</p>
+      <ol>
+        <li>Go to <code>console.firebase.google.com</code> and sign in with your Google account. Press <b>Create a project</b>, name it <code>marchland</code>, and turn Google Analytics off when it offers.</li>
+        <li>In the left sidebar choose <b>Build → Realtime Database</b>, press <b>Create Database</b>, pick the location nearest you, and choose <b>Start in test mode</b>.</li>
+        <li>Copy the database URL it shows you at the top — it looks like <code>https://marchland-1234-default-rtdb.firebaseio.com</code>.</li>
+        <li>Open this file in a text editor, find the line near the top that reads <code>var DB_URL = "";</code> and paste the URL between the quotes. Save.</li>
+        <li>Put the file online so your opponent can reach it — a free GitHub Pages repo, Netlify or Cloudflare Pages all work. Send them the link.</li>
+      </ol>
+      <p class="muted" style="margin-top:12px"><b>Two things worth knowing.</b> Test mode leaves the database open to anyone who has the URL, which is fine for a game between people who trust each other and wrong for anything else — Firebase will email you in 30 days to say the rules are about to expire, and you can set them to <code>{"rules":{"marchland":{".read":true,".write":true}}}</code> to keep it as is. And because the board lives in your database, a determined player could edit their own step count. Between family that is a social problem, not a technical one; the notes on real anti-cheat are in the design document.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ═══ constants ════════════════════════════════════════════════════════ */
+var CAP_DAYS=4, STEPS_PER_KM=1350, MAX_STEPS_DAY=30000;
+var TICK_MS=4*60*60*1000, MAX_TICKS=18;         // harvest accrues offline: 6 ticks a day, capped at 3 days
+var AX=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+var PLAIN=0,FOREST=1,QUARRY=2,IRON=3,FARM=4;
+var YIELD={}; YIELD[FOREST]={r:'timber',n:2}; YIELD[QUARRY]={r:'stone',n:2};
+YIELD[IRON]={r:'iron',n:1}; YIELD[FARM]={r:'grain',n:3};
+var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
+var SPEC={};
+SPEC[TOWER] ={range:[0,1,2,3],volley:[0,1,2,3],gar:[0,1,2,4],cost:{stone:40,timber:30}};
+SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,stone:60}};
+var SEATS=[{q:0,r:0},{q:18,r:-3},{q:9,r:14},{q:-9,r:12}];  // keeps far enough apart for a few days' expansion
+
+/* ═══ helpers ══════════════════════════════════════════════════════════ */
+function key(q,r){ return q+'_'+r; }
+function hexDist(aq,ar,bq,br){ var dq=aq-bq,dr=ar-br; return (Math.abs(dq)+Math.abs(dq+dr)+Math.abs(dr))/2; }
+function cubeRound(q,r){
+  var x=q,z=r,y=-x-z,rx=Math.round(x),ry=Math.round(y),rz=Math.round(z);
+  var dx=Math.abs(rx-x),dy=Math.abs(ry-y),dz=Math.abs(rz-z);
+  if(dx>dy&&dx>dz) rx=-ry-rz; else if(dy>dz) ry=-rx-rz; else rz=-rx-ry;
+  return [rx,rz];
+}
+function hash2(a,b){ var h=Math.imul(a,374761393)^Math.imul(b,668265263); h=Math.imul(h^(h>>>13),1274126177); return ((h^(h>>>16))>>>0)/4294967296; }
+function noise(q,r,s,seed){
+  var x=q/s+seed,y=r/s-seed,x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;
+  fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy);
+  var a=hash2(x0,y0),b=hash2(x0+1,y0),c=hash2(x0,y0+1),d=hash2(x0+1,y0+1);
+  return (a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy;
+}
+function fbm(q,r,s,seed){ return 0.65*noise(q,r,s,seed)+0.35*noise(q,r,s/2.3,seed+37); }
+function terrainAt(q,r){
+  var f=fbm(q,r,6,11),a=fbm(q,r,5,73),s=fbm(q,r,3.5,129),i=fbm(q,r,3,201);
+  if(s>0.66&&s>=f&&s>=a) return QUARRY;
+  if(i>0.70&&i>=f&&i>=a) return IRON;
+  if(f>0.58&&f>=a) return FOREST;
+  if(a>0.56) return FARM;
+  return PLAIN;
+}
+function squaresFor(km){ return Math.max(1,Math.round(5*Math.sqrt(Math.max(0,km)))); }
+function since(ts){
+  if(!ts) return '—';
+  var m=(Date.now()-ts)/60000;
+  if(m<2) return 'now'; if(m<60) return Math.round(m)+'m ago';
+  if(m<48*60) return Math.round(m/60)+'h ago';
+  return Math.round(m/1440)+'d ago';
+}
+function esc(s){ return String(s).replace(/[<>&"]/g,function(c){ return {'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]; }); }
+
+/* ═══ transport: Firebase Realtime Database over plain REST ═════════════
+   No SDK, no libraries. If DB_URL is blank we fall back to a local board
+   held in this browser, so the page is playable before any setup.        */
+var online = !!(window.DB_URL && /^https:\/\/.+/.test(window.DB_URL));
+var LOCAL_KEY='marchland.local';
+function dbGet(path){
+  if(!online) return Promise.resolve(JSON.parse(localStorage.getItem(LOCAL_KEY)||'null'));
+  return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',{cache:'no-store'})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+function dbPut(path,val){
+  if(!online){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(val)); }catch(e){} return Promise.resolve(val); }
+  return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
+    {method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json'}})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+
+/* ═══ identity ═════════════════════════════════════════════════════════ */
+/* Identity is derived from the name you type, not from browser storage. Two
+   consequences, both wanted: the game works where storage is blocked (embedded
+   pages, private windows), and the same name means the same player, so you can
+   pick up your own march on a phone and a laptop without anything to sync. */
+var ME='';
+function pidFor(name){
+  var s=(name||'').toLowerCase().trim(), h=2166136261;
+  for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); }
+  return 'p'+(h>>>0).toString(36);
+}
+var myName='';
+try{ myName=localStorage.getItem('marchland.name')||''; }catch(e){}
+
+/* ═══ game state ═══════════════════════════════════════════════════════
+   G = { v, code, created, players:{pid:{name,seat,q,r,res,field,squares,
+         lastCollect,collected,lastTick,seen}}, cells:{ "q_r": {o,w,k,l,g,d} } }   */
+var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
+
+function blankGame(code){
+  return { v:1, code:code, created:Date.now(), players:{}, cells:{} };
+}
+function cellOf(q,r){
+  var c=G.cells[key(q,r)];
+  if(!c) return {o:null,w:0,k:null,l:0,g:0,d:0,q:q,r:r,t:terrainAt(q,r)};
+  c.q=q; c.r=r; c.t=terrainAt(q,r);
+  return c;
+}
+function writeCell(q,r,c){
+  var k=key(q,r);
+  if(!c.o && !c.k){ delete G.cells[k]; return; }
+  G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
+}
+function eachCell(fn){ for(var k in G.cells){ var p=k.split('_'); fn(cellOf(parseInt(p[0],10),parseInt(p[1],10))); } }
+function me(){ return G.players[ME]; }
+function seatColor(seat){ return ['--p0','--p1','--p2','--p3'][seat%4]; }
+function cellsOf(pid){ var n=0; for(var k in G.cells){ if(G.cells[k].o===pid) n++; } return n; }
+
+function seedPlayer(pid,name){
+  var used={}; for(var p in G.players) used[G.players[p].seat]=1;
+  var seat=0; while(used[seat]&&seat<3) seat++;
+  var s=SEATS[seat];
+  G.players[pid]={name:name,seat:seat,q:s.q,r:s.r,res:{stone:120,timber:100,iron:60,grain:80},
+    field:3,squares:10,lastCollect:Date.now()-864e5,collected:0,lastTick:Date.now(),seen:Date.now()};
+  // a small holding and a keep
+  var q=[[s.q,s.r]],seen={},placed=0,guard=0;
+  while(q.length&&placed<13&&guard++<300){
+    var cur=q.shift(),k=key(cur[0],cur[1]);
+    if(seen[k]) continue; seen[k]=1;
+    var c=cellOf(cur[0],cur[1]);
+    if(c.o) continue;
+    c.o=pid; writeCell(cur[0],cur[1],c); placed++;
+    for(var i=0;i<6;i++){ if(hash2(cur[0]*(seat+3),cur[1]+i)>0.25) q.push([cur[0]+AX[i][0],cur[1]+AX[i][1]]); }
+  }
+  var hc=cellOf(s.q,s.r); hc.o=pid; hc.k=CASTLE; hc.l=1; hc.g=1;
+  writeCell(s.q,s.r,hc);
+  G.players[pid].field=2;
+}
+
+/* ═══ rules ════════════════════════════════════════════════════════════ */
+function supplied(pid){
+  var set={}, stack=[];
+  for(var k in G.cells){
+    var c=G.cells[k];
+    if(c.o===pid && c.k===CASTLE){ set[k]=1; var p=k.split('_'); stack.push([parseInt(p[0],10),parseInt(p[1],10)]); }
+  }
+  while(stack.length){
+    var cur=stack.pop();
+    for(var i=0;i<6;i++){
+      var nq=cur[0]+AX[i][0], nr=cur[1]+AX[i][1], nk=key(nq,nr);
+      if(set[nk]) continue;
+      var n=G.cells[nk];
+      if(n && n.o===pid){ set[nk]=1; stack.push([nq,nr]); }
+    }
+  }
+  return set;
+}
+function garrisonNeed(pid){
+  var have=0,need=0;
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k) continue; have+=c.g||0; need+=SPEC[c.k].gar[c.l]; }
+  return [have,need];
+}
+function ratesFor(pid){
+  var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==pid) continue; own++;
+    if(!sup[k]) continue; s++;
+    var p=k.split('_'), y=YIELD[terrainAt(parseInt(p[0],10),parseInt(p[1],10))];
+    if(y) out[y.r]+=y.n;
+    if(c.k===CASTLE) out.grain+=2;
+  }
+  var g=garrisonNeed(pid), pl=G.players[pid];
+  return {out:out,sup:s,own:own,mouths:pl.field+g[0],net:out.grain-(pl.field+g[0]),supset:sup,gar:g};
+}
+function coverOn(q,r,notPid){        // manned guns of everyone except notPid
+  var shots=0;
+  for(var k in G.cells){
+    var c=G.cells[k];
+    if(!c.k||!c.o||c.o===notPid||!c.g) continue;
+    var p=k.split('_');
+    if(hexDist(q,r,parseInt(p[0],10),parseInt(p[1],10))<=SPEC[c.k].range[c.l]) shots+=SPEC[c.k].volley[c.l];
+  }
+  return shots;
+}
+function adjacentTo(q,r,pid){
+  for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===pid) return true; }
+  return false;
+}
+
+/* offline accrual: harvest and decay are computed from elapsed real time */
+function catchUp(pid){
+  var pl=G.players[pid]; if(!pl) return 0;
+  var ticks=Math.min(MAX_TICKS,Math.floor((Date.now()-(pl.lastTick||Date.now()))/TICK_MS));
+  if(ticks<1) return 0;
+  for(var t=0;t<ticks;t++){
+    var R=ratesFor(pid);
+    pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
+    pl.res.grain+=R.out.grain-R.mouths;
+    if(pl.res.grain<0){ var gone=Math.min(pl.field,Math.ceil(-pl.res.grain/2)); pl.field-=gone; pl.res.grain=0; }
+    // garrison top-up then decay
+    for(var k in G.cells){
+      var c=G.cells[k]; if(c.o!==pid||!c.k) continue;
+      var need=SPEC[c.k].gar[c.l];
+      if(c.g<need && pl.field>0){ var take=Math.min(need-c.g,pl.field); pl.field-=take; c.g+=take; }
+      if(c.g<need){
+        c.d=(c.d||0)+1;
+        if(c.d>=12){ c.d=0;                       // two days undermanned costs a level
+          if(c.l>1){ c.l--; }
+          else { pl.field+=c.g; c.g=0; c.k=null; c.l=0; }
+        }
+      } else c.d=0;
+    }
+  }
+  pl.lastTick=(pl.lastTick||Date.now())+ticks*TICK_MS;
+  return ticks;
+}
+
+/* ═══ sync ═════════════════════════════════════════════════════════════ */
+/* Writes go to the narrowest path that changed — one cell, or just my own
+   player record — so two people acting at once can't overwrite each other.
+   Only a genuine race for the same cell is last-writer-wins. */
+function pushAll(){
+  if(!G) return Promise.resolve();
+  if(me()) me().seen=Date.now();
+  return dbPut('/marchland/'+gameCode,G).then(ok,fail);
+}
+function pushMe(){
+  if(!G||!me()) return Promise.resolve();
+  me().seen=Date.now();
+  return dbPut('/marchland/'+gameCode+'/players/'+ME, me()).then(ok,fail);
+}
+function pushCell(q,r){
+  if(!G) return Promise.resolve();
+  var k=key(q,r);
+  return dbPut('/marchland/'+gameCode+'/cells/'+k, G.cells[k]||null).then(ok,fail);
+}
+function ok(){ dirty=false; setSync('saved '+new Date().toLocaleTimeString()); }
+function fail(){ dirty=true; setSync('could not save — retrying'); }
+function push(){ return pushMe(); }
+
+function pull(){
+  if(!G||pulling||dirty) return;
+  pulling=true;
+  dbGet('/marchland/'+gameCode).then(function(remote){
+    pulling=false;
+    if(!remote||!remote.players) return;
+    var before=JSON.stringify(G.cells);
+    G.cells=remote.cells||{};
+    // adopt everyone else's record; keep my own, which only this tab edits
+    var mine=me();
+    Object.keys(remote.players).forEach(function(pid){
+      if(pid!==ME) G.players[pid]=remote.players[pid];
+    });
+    if(!mine && remote.players[ME]) G.players[ME]=remote.players[ME];
+    Object.keys(G.players).forEach(function(pid){
+      if(pid!==ME && !remote.players[pid]) delete G.players[pid];
+    });
+    if(JSON.stringify(G.cells)!==before){
+      render();
+      setSync('board updated '+new Date().toLocaleTimeString());
+    }
+  }).catch(function(){ pulling=false; setSync('offline'); });
+}
+function setSync(t){ var e=document.getElementById('syncstate'); if(e) e.textContent = online? t : 'local only'; }
+
+/* ═══ actions ══════════════════════════════════════════════════════════ */
+function say(h){ document.getElementById('status').innerHTML='<span>'+h+'</span>'; }
+
+var MAX_COLLECTS=2;                                  // per rolling 24 hours
+function recentCollects(pl){ return (pl.collects||[]).filter(function(t){ return Date.now()-t<864e5; }); }
+function collect(){
+  var pl=me(); if(!pl) return;
+  var input=document.getElementById('stepsin');
+  var recent=recentCollects(pl);
+  if(recent.length>=MAX_COLLECTS){
+    var next=Math.min.apply(null,recent)+864e5, h=(next-Date.now())/36e5;
+    return say('<span class="bad">Twice a day is the limit.</span> Next collection in <b>'+(h<1?Math.round(h*60)+' minutes':h.toFixed(1)+' hours')+'</b> — the steps keep counting in the meantime.');
+  }
+  var steps=parseFloat(input.value);
+  if(!isFinite(steps)||steps<=0) return say('Type the number of steps your phone recorded since you last collected.');
+  var days=Math.min(CAP_DAYS,(Date.now()-pl.lastCollect)/864e5);
+  var ceiling=Math.round(days*MAX_STEPS_DAY);
+  var capped=false;
+  if(steps>ceiling){ steps=ceiling; capped=true; }
+  var km=steps/STEPS_PER_KM, got=squaresFor(km);
+  pl.squares+=got; pl.collected=(pl.collected||0)+steps; pl.lastCollect=Date.now();
+  recent.push(Date.now()); pl.collects=recent;
+  input.value='';
+  render(); push();
+  var m='Banked <b>'+Math.round(steps).toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+got+' marches</span>.';
+  if(capped) m+=' <span class="bad">Trimmed to '+CAP_DAYS+' days&rsquo; worth</span> — the store only holds '+CAP_DAYS+' days.';
+  say(m);
+}
+
+function spendMarch(q,r){
+  var pl=me(); if(!pl) return;
+  var c=cellOf(q,r);
+  if(c.o===ME) return say('You already hold that ground.');
+  if(!adjacentTo(q,r,ME)) return say('Marches extend a border — pick a cell touching your own ground.');
+  if(c.k) return say('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
+  var cost=c.o?2:1;
+  if(pl.squares<cost) return say('Not enough marches — that cell costs '+cost+'. Collect your steps.');
+  var guns=c.o?coverOn(q,r,ME):0, need=guns+(c.w||0);
+  if(need>pl.field) return say('<span class="bad">That cell needs '+need+' soldier'+(need>1?'s':'')+'</span> — '+(guns?guns+' to cross the guns':'')+(guns&&c.w?' and ':'')+(c.w?c.w+' to break the wall':'')+'. You have '+pl.field+'.');
+  pl.squares-=cost; pl.field-=need; c.w=0; c.o=ME;
+  writeCell(q,r,c);
+  render(); pushCell(q,r); pushMe();
+  var m='Cell taken for <b>'+cost+'</b> march'+(cost>1?'es':'')+'.';
+  if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost.</span>';
+  say(m+' <b>'+pl.squares+'</b> left.');
+}
+
+function build(q,r,kind){
+  var pl=me(), c=cellOf(q,r);
+  if(c.o!==ME) return say('Build on ground you hold.');
+  if(c.k) return say('Something already stands here.');
+  var cost=SPEC[kind].cost;
+  for(var k in cost){ if(pl.res[k]<cost[k]) return say('Not enough materials.'); }
+  if(pl.field<SPEC[kind].gar[1]) return say('No one to man it. Muster a soldier first.');
+  for(var k2 in cost) pl.res[k2]-=cost[k2];
+  pl.field-=1; c.k=kind; c.l=1; c.g=1; c.w=0;
+  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  say((kind===TOWER?'Watchtower':'Castle')+' raised — one soldier garrisoned and no longer free to attack with.');
+}
+function upgrade(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(c.o!==ME||!c.k) return say('Click one of your own towers or castles.');
+  if(c.l>=3) return say('Already at level III.');
+  var lvl=c.l+1, cost=SPEC[c.k].cost, extra=SPEC[c.k].gar[lvl]-c.g;
+  for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return say('Upgrade needs '+cost[k]*lvl+' '+k+'.'); }
+  if(pl.field<extra) return say('Level '+ROMAN[lvl]+' needs '+SPEC[c.k].gar[lvl]+' men inside — you are '+(extra-pl.field)+' short.');
+  for(var k2 in cost) pl.res[k2]-=cost[k2]*lvl;
+  pl.field-=extra; c.l=lvl; c.g+=extra;
+  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  say('Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
+}
+function wall(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(c.o!==ME) return say('Walls go on ground you hold.');
+  if(c.k) return say('That cell holds a structure — upgrade it instead.');
+  if((c.w||0)>=3) return say('Already walled to level III.');
+  if(pl.res.stone<30) return say('Not enough stone — 30 a course.');
+  pl.res.stone-=30; c.w=(c.w||0)+1;
+  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  say('Wall at level <b>'+ROMAN[c.w]+'</b> — costs an attacker '+c.w+' soldier'+(c.w>1?'s':'')+' to break.');
+}
+function muster(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!(c.o===ME&&c.k===CASTLE)) return say('Soldiers muster at your castles.');
+  if(pl.res.iron<25||pl.res.grain<40) return say('Not enough iron and grain.');
+  pl.res.iron-=25; pl.res.grain-=40; pl.field++;
+  render(); push();
+  say('<b>'+pl.field+' in the field.</b> Every soldier eats grain whether he marches or stands on a wall.');
+}
+
+/* ═══ drawing ══════════════════════════════════════════════════════════ */
+var canvas=document.getElementById('board'), ctx=canvas.getContext('2d');
+var W=900,H=520,dpr=1,T={};
+function tok(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function readTokens(){ ['--paper','--surface','--sink','--ink','--ink-2','--rule','--p0','--p1','--p2','--p3','--brass','--steel'].forEach(function(k){ T[k]=tok(k); }); }
+function layout(){
+  W=canvas.parentElement.clientWidth;
+  H=Math.max(360,Math.min(Math.round(W*0.62),Math.round(window.innerHeight*0.68)));
+  dpr=Math.min(window.devicePixelRatio||1,2);
+  canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr);
+  canvas.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function hexPx(q,r){ return [S*Math.sqrt(3)*(q+r/2), S*1.5*r]; }
+function toScreen(q,r){ var a=hexPx(q,r),b=hexPx(viewQ,viewR); return [W/2+a[0]-b[0], H/2+a[1]-b[1]]; }
+function fromScreen(x,y){ var b=hexPx(viewQ,viewR),px=x-W/2+b[0],py=y-H/2+b[1]; return cubeRound((Math.sqrt(3)/3*px-py/3)/S,(2/3*py)/S); }
+function hexPath(cx,cy,s){ ctx.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180,x=cx+s*Math.cos(a),y=cy+s*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.closePath(); }
+function colorFor(pid){ return pid&&G.players[pid] ? T[seatColor(G.players[pid].seat)] : T['--ink-2']; }
+function mark(t,cx,cy,s,col){
+  ctx.fillStyle=col; ctx.strokeStyle=col; ctx.lineWidth=1;
+  var m=s*0.36;
+  if(t===FOREST){ ctx.beginPath(); ctx.moveTo(cx,cy-m); ctx.lineTo(cx+m*.85,cy+m*.6); ctx.lineTo(cx-m*.85,cy+m*.6); ctx.closePath(); ctx.fill(); }
+  else if(t===QUARRY){ ctx.beginPath(); ctx.moveTo(cx,cy-m*.9); ctx.lineTo(cx+m*.8,cy); ctx.lineTo(cx,cy+m*.9); ctx.lineTo(cx-m*.8,cy); ctx.closePath(); ctx.fill(); }
+  else if(t===IRON){ ctx.beginPath(); ctx.arc(cx,cy,m*.6,0,6.284); ctx.fill(); }
+  else if(t===FARM){ ctx.beginPath(); for(var i=-1;i<=1;i++){ ctx.moveTo(cx-m*.8,cy+i*m*.55); ctx.lineTo(cx+m*.8,cy+i*m*.55); } ctx.stroke(); }
+}
+function drawBuilding(c,cx,cy,r,col){
+  ctx.fillStyle=col; ctx.strokeStyle=col;
+  var b=r*0.30;
+  if(c.k===CASTLE){
+    ctx.fillRect(cx-b,cy-b*.5,b*2,b*1.3);
+    ctx.fillRect(cx-b,cy-b,b*.6,b*.6); ctx.fillRect(cx-b*.3,cy-b,b*.6,b*.6); ctx.fillRect(cx+b*.4,cy-b,b*.6,b*.6);
+  } else {
+    ctx.fillRect(cx-b*.42,cy-b*.6,b*.84,b*1.6);
+    ctx.fillRect(cx-b*.7,cy-b,b*1.4,b*.45);
+  }
+  var need=SPEC[c.k].gar[c.l];
+  for(var i=0;i<c.l;i++){
+    var px=cx-(c.l-1)*r*0.13+i*r*0.26, py=cy+r*0.62;
+    ctx.beginPath(); ctx.arc(px,py,Math.max(1.4,r*0.075),0,6.284);
+    if(i<c.g||c.g>=need){ ctx.fillStyle=T['--steel']; ctx.fill(); }
+    else { ctx.strokeStyle=T['--p1']; ctx.lineWidth=1.2; ctx.stroke(); }
+  }
+}
+function draw(){
+  if(!G) return;
+  readTokens();
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=T['--sink']; ctx.fillRect(0,0,W,H);
+  var sup=me()?supplied(ME):{};
+  var haveMarch=me()&&me().squares>0;
+  var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
+  var guns=[], walls=[], builds=[];
+  for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
+    var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
+    if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
+    var c=cellOf(q,r), col=colorFor(c.o);
+    hexPath(p[0],p[1],S*0.94);
+    if(c.o){ ctx.save(); ctx.globalAlpha=.20; ctx.fillStyle=col; ctx.fill(); ctx.restore(); }
+    if(c.o===ME && !sup[key(q,r)]){
+      ctx.save(); ctx.clip(); ctx.strokeStyle=T['--ink-2']; ctx.globalAlpha=.55; ctx.lineWidth=1; ctx.beginPath();
+      for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
+      ctx.stroke(); ctx.restore();
+    }
+    if(mode==='claim'&&haveMarch&&c.o!==ME&&!c.k&&adjacentTo(q,r,ME)){
+      ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=T[seatColor(me().seat)]; ctx.globalAlpha=.8; ctx.lineWidth=1.3;
+      hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
+      hexPath(p[0],p[1],S*0.94);
+    }
+    ctx.lineWidth=1; ctx.globalAlpha=c.o?.85:.28;
+    ctx.strokeStyle=c.o?col:T['--rule']; ctx.stroke(); ctx.globalAlpha=1;
+    if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
+    if(c.w>0) walls.push([c,p]);
+    if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
+  }
+  ctx.setLineDash([3,4]);
+  guns.forEach(function(e){
+    ctx.strokeStyle=e[2]; ctx.globalAlpha=.4; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.arc(e[1][0],e[1][1],S*1.72*SPEC[e[0].k].range[e[0].l],0,6.284); ctx.stroke(); ctx.globalAlpha=1;
+  });
+  ctx.setLineDash([]); ctx.lineCap='round';
+  walls.forEach(function(e){
+    var c=e[0],p=e[1];
+    ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,S*(0.08+0.05*c.w));
+    for(var i=0;i<6;i++){
+      var n=G.cells[key(c.q+AX[i][0],c.r+AX[i][1])];
+      if(n&&n.o===c.o&&n.w>0) continue;
+      var a1=(60*i-30)*Math.PI/180,a2=(60*i+30)*Math.PI/180,rr=S*0.94;
+      ctx.beginPath();
+      ctx.moveTo(p[0]+rr*Math.cos(a1),p[1]+rr*Math.sin(a1));
+      ctx.lineTo(p[0]+rr*Math.cos(a2),p[1]+rr*Math.sin(a2));
+      ctx.stroke();
+    }
+  });
+  builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2]); });
+}
+
+/* ═══ render ═══════════════════════════════════════════════════════════ */
+function render(){
+  if(!G||!me()) return;
+  var pl=me(), R=ratesFor(ME);
+  document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
+  document.getElementById('v-timber').textContent=Math.round(pl.res.timber);
+  document.getElementById('v-iron').textContent=Math.round(pl.res.iron);
+  document.getElementById('v-grain').textContent=Math.round(pl.res.grain);
+  document.getElementById('v-field').textContent=pl.field;
+  document.getElementById('v-march').textContent=pl.squares;
+  document.getElementById('u-grain').textContent=(R.net>=0?'+':'')+R.net+' / tick';
+  document.getElementById('s-grain').classList.toggle('warn',R.net<0);
+  document.getElementById('v-gar').textContent=R.gar[0]+'/'+R.gar[1];
+  document.getElementById('u-gar').textContent=R.gar[0]<R.gar[1]?(R.gar[1]-R.gar[0])+' short — decaying':'manned';
+  document.getElementById('s-gar').classList.toggle('warn',R.gar[0]<R.gar[1]);
+  var days=Math.min(CAP_DAYS,(Date.now()-pl.lastCollect)/864e5);
+  var raw=(Date.now()-pl.lastCollect)/864e5;
+  var used=recentCollects(pl).length;
+  document.getElementById('bankinfo').textContent =
+    'bank: '+days.toFixed(1)+' of '+CAP_DAYS+' days'+(raw>CAP_DAYS?' — '+(raw-CAP_DAYS).toFixed(1)+'d expired':'')
+    +' · '+used+'/'+MAX_COLLECTS+' collections today'
+    +' · '+R.sup+'/'+R.own+' cells supplied';
+  document.getElementById('collect').disabled = used>=MAX_COLLECTS;
+  var rows=Object.keys(G.players).map(function(pid){
+    var p=G.players[pid];
+    return {pid:pid,name:p.name,cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
+  }).sort(function(a,b){ return b.cells-a.cells; });
+  document.getElementById('standings').innerHTML=rows.map(function(r,i){
+    return '<tr><td class="n">'+(i+1)+'</td>'
+      +'<td><span class="dot" style="background:var('+seatColor(r.seat)+')"></span>'+esc(r.name)+(r.pid===ME?' — you':'')+'</td>'
+      +'<td class="n">'+r.cells+'</td><td class="n">'+r.steps.toLocaleString()+'</td>'
+      +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
+  }).join('');
+  document.getElementById('m-wall').disabled=pl.res.stone<30;
+  document.getElementById('m-tower').disabled=!(pl.res.stone>=40&&pl.res.timber>=30);
+  document.getElementById('m-castle').disabled=!(pl.res.timber>=80&&pl.res.stone>=60);
+  document.getElementById('m-troop').disabled=!(pl.res.iron>=25&&pl.res.grain>=40);
+  draw();
+}
+
+/* ═══ interaction ══════════════════════════════════════════════════════ */
+canvas.addEventListener('pointerdown',function(ev){
+  if(!G||!me()) return;
+  var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top);
+  if(mode==='claim') spendMarch(h[0],h[1]);
+  else if(mode==='wall') wall(h[0],h[1]);
+  else if(mode==='tower') build(h[0],h[1],TOWER);
+  else if(mode==='castle') build(h[0],h[1],CASTLE);
+  else if(mode==='upgrade') upgrade(h[0],h[1]);
+  else if(mode==='troop') muster(h[0],h[1]);
+});
+var MODES={claim:'m-claim',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop'};
+var HINTS={
+  claim:'Click any dashed cell touching your ground to spend a march. Someone else&rsquo;s ground costs two, and their walls and manned guns cost soldiers on top.',
+  wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
+  tower:'Click ground you hold to raise a watchtower. It needs a soldier standing in it from the moment it exists.',
+  castle:'Click ground you hold to found a castle. Supply is measured from these.',
+  upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
+  troop:'Click one of your castles to muster a soldier.'
+};
+Object.keys(MODES).forEach(function(m){
+  document.getElementById(MODES[m]).addEventListener('click',function(){
+    mode=m;
+    Object.keys(MODES).forEach(function(k){ document.getElementById(MODES[k]).setAttribute('aria-pressed',String(k===m)); });
+    say(HINTS[m]); draw();
+  });
+});
+document.getElementById('zin').addEventListener('click',function(){ S=Math.min(44,S+6); draw(); });
+document.getElementById('zout').addEventListener('click',function(){ S=Math.max(11,S-6); draw(); });
+document.getElementById('home').addEventListener('click',function(){ if(me()){ viewQ=me().q; viewR=me().r; draw(); } });
+document.getElementById('collect').addEventListener('click',collect);
+document.getElementById('stepsin').addEventListener('keydown',function(e){ if(e.key==='Enter') collect(); });
+
+/* ═══ join / create ════════════════════════════════════════════════════ */
+function enterGame(){
+  document.getElementById('join-panel').classList.add('hide');
+  document.getElementById('setup-panel').classList.add('hide');
+  document.getElementById('game').classList.remove('hide');
+  document.getElementById('gamecode').textContent=gameCode;
+  document.getElementById('myname').textContent=me()?me().name:'—';
+  document.getElementById('mydot').style.background='var('+seatColor(me()?me().seat:0)+')';
+  var url=location.href.split('#')[0]+'#'+gameCode;
+  document.getElementById('invite').value=url;
+  viewQ=me().q; viewR=me().r;
+  layout(); render();
+  say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then collect your steps when you have walked some.');
+}
+function joinOrCreate(code,creating){
+  var name=(document.getElementById('handle').value||'').trim().slice(0,16);
+  if(!name) { document.getElementById('join-hint').textContent='Type a name first — it is how your opponent knows which border is yours.'; return; }
+  myName=name; try{ localStorage.setItem('marchland.name',name); }catch(e){}
+  ME=pidFor(name);
+  gameCode=code;
+  dbGet('/marchland/'+gameCode).then(function(remote){
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; }
+    else if(creating||!online){ G=blankGame(gameCode); }
+    else { document.getElementById('join-hint').textContent='No march with that code yet. Check the spelling, or start a new one.'; return; }
+    if(!G.players[ME]) seedPlayer(ME,name); else G.players[ME].name=name;
+    catchUp(ME);
+    enterGame(); pushAll();
+    location.hash=gameCode;
+  }).catch(function(e){
+    document.getElementById('join-hint').textContent='Could not reach the database ('+e.message+'). Check the URL in the settings at the top of this file.';
+  });
+}
+document.getElementById('create').addEventListener('click',function(){
+  var words=['OTTER','HEATH','MARCH','KEEP','BRIAR','FLINT','GORSE','WREN','ALDER','SPINE'];
+  var c=words[Math.floor(Math.random()*words.length)]+Math.floor(10+Math.random()*89);
+  document.getElementById('code').value=c;
+  joinOrCreate(c,true);
+});
+document.getElementById('join').addEventListener('click',function(){
+  var c=(document.getElementById('code').value||'').trim().toUpperCase();
+  if(!c) { document.getElementById('join-hint').textContent='Enter the code your opponent sent you, or start a new march.'; return; }
+  joinOrCreate(c,false);
+});
+document.getElementById('test').addEventListener('click',function(){
+  var hint=document.getElementById('join-hint');
+  if(!online){ hint.innerHTML='<b>No database URL set.</b> Paste your Firebase URL into line 18 of this file — the panel at the bottom of the page walks through it.'; return; }
+  hint.textContent='Testing…';
+  var stamp=Date.now();
+  dbPut('/marchland/_test',{at:stamp})
+    .then(function(){ return dbGet('/marchland/_test'); })
+    .then(function(back){
+      if(back && back.at===stamp) hint.innerHTML='<b style="color:var(--p0)">Connected.</b> Wrote to the database and read it straight back — you and anyone you invite will share a board.';
+      else hint.innerHTML='<b style="color:var(--p1)">Half working.</b> The write went through but came back wrong. Check that the database rules allow writes.';
+    })
+    .catch(function(e){
+      hint.innerHTML='<b style="color:var(--p1)">Could not reach the database</b> ('+esc(e.message)+'). Three things to check: the URL on line 18 is exactly what Firebase showed you, the database was created in <i>test mode</i>, and — if you opened this file straight off your desktop — try putting it online instead, since some browsers block requests from local files.';
+    });
+});
+document.getElementById('copy').addEventListener('click',function(){
+  var i=document.getElementById('invite');
+  i.select();
+  try{ document.execCommand('copy'); this.textContent='Copied'; var b=this; setTimeout(function(){ b.textContent='Copy invite'; },1500); }catch(e){}
+});
+document.getElementById('leave').addEventListener('click',function(){
+  push().then(function(){ location.hash=''; location.reload(); });
+});
+
+/* ═══ boot ═════════════════════════════════════════════════════════════ */
+readTokens();
+if(myName) document.getElementById('handle').value=myName;
+if(location.hash.length>1) document.getElementById('code').value=location.hash.slice(1).toUpperCase();
+if(!online){
+  var n=document.getElementById('offline-note');
+  n.classList.remove('hide');
+  n.innerHTML='<b>No database configured yet</b> — the board below works, but it lives only in this browser and nobody else can see it. The panel at the bottom of the page sets up sharing; it takes about ten minutes and costs nothing.';
+  document.getElementById('subline').textContent='Local board · not shared';
+} else {
+  document.getElementById('setup-panel').classList.add('hide');
+  document.getElementById('subline').textContent='Shared board · no accounts needed';
+}
+setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); } } },30000);
+setInterval(function(){ if(G&&online) pull(); },4000);
+setInterval(function(){ if(G&&me()) render(); },20000);
+window.addEventListener('resize',function(){ if(G){ layout(); draw(); } });
+window.addEventListener('beforeunload',function(){ if(dirty) push(); });
+})();
+</script>
+</body>
+</html>
