@@ -232,7 +232,18 @@ var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
 var SPEC={};
 SPEC[TOWER] ={range:[0,1,2,3],volley:[0,1,2,3],gar:[0,1,2,4],cost:{stone:40,timber:30}};
 SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,stone:60}};
-var SEATS=[{q:0,r:0},{q:18,r:-3},{q:9,r:14},{q:-9,r:12}];  // keeps far enough apart for a few days' expansion
+/* Starting keeps are generated on rings around the origin rather than picked from
+   a fixed list, so the fifth player gets their own ground instead of spawning on
+   top of the fourth. Six seats per ring, each ring 18 cells further out. */
+var SEAT_GAP=27;                                    // tuned so no two keeps sit closer than 18 cells
+function seatFor(n){
+  if(n===0) return {q:0,r:0};
+  var i=n-1, ring=Math.floor(i/6)+1, idx=i%6;
+  var ang=idx*Math.PI/3 + (ring%2?Math.PI/6:0);
+  var d=SEAT_GAP*ring, x=d*Math.cos(ang), y=d*Math.sin(ang);
+  var h=cubeRound(Math.sqrt(3)/3*x - y/3, 2/3*y);
+  return {q:h[0], r:h[1]};
+}
 
 /* ═══ helpers ══════════════════════════════════════════════════════════ */
 function key(q,r){ return q+'_'+r; }
@@ -327,8 +338,8 @@ function cellsOf(pid){ var n=0; for(var k in G.cells){ if(G.cells[k].o===pid) n+
 
 function seedPlayer(pid,name){
   var used={}; for(var p in G.players) used[G.players[p].seat]=1;
-  var seat=0; while(used[seat]&&seat<3) seat++;
-  var s=SEATS[seat];
+  var seat=0; while(used[seat]) seat++;              // no upper bound now
+  var s=seatFor(seat);
   G.players[pid]={name:name,seat:seat,q:s.q,r:s.r,res:{stone:120,timber:100,iron:60,grain:80},
     field:3,squares:10,lastCollect:Date.now()-864e5,collected:0,lastTick:Date.now(),seen:Date.now()};
   // a small holding and a keep
@@ -428,46 +439,64 @@ function catchUp(pid){
 /* Writes go to the narrowest path that changed — one cell, or just my own
    player record — so two people acting at once can't overwrite each other.
    Only a genuine race for the same cell is last-writer-wins. */
+/* Polling the whole board every few seconds is what eats a free Firebase quota:
+   a mature board is tens of KB, and one tab left open overnight can spend the
+   month's allowance by itself. So every write stamps a tiny revision key, and
+   the poll fetches only that (~15 bytes). The board is downloaded only when the
+   revision has actually moved — which, in a game paced by walking, is rare. */
+var myRev=0;                                        // last revision this tab knows about
+function bumpRev(){
+  myRev=Date.now();
+  return dbPut('/marchland/'+gameCode+'/rev', myRev);
+}
 function pushAll(){
   if(!G) return Promise.resolve();
   if(me()) me().seen=Date.now();
-  return dbPut('/marchland/'+gameCode,G).then(ok,fail);
+  return dbPut('/marchland/'+gameCode,G).then(bumpRev).then(ok,fail);
 }
 function pushMe(){
   if(!G||!me()) return Promise.resolve();
   me().seen=Date.now();
-  return dbPut('/marchland/'+gameCode+'/players/'+ME, me()).then(ok,fail);
+  return dbPut('/marchland/'+gameCode+'/players/'+ME, me()).then(bumpRev).then(ok,fail);
 }
 function pushCell(q,r){
   if(!G) return Promise.resolve();
   var k=key(q,r);
-  return dbPut('/marchland/'+gameCode+'/cells/'+k, G.cells[k]||null).then(ok,fail);
+  return dbPut('/marchland/'+gameCode+'/cells/'+k, G.cells[k]||null).then(bumpRev).then(ok,fail);
 }
 function ok(){ dirty=false; setSync('saved '+new Date().toLocaleTimeString()); }
 function fail(){ dirty=true; setSync('could not save — retrying'); }
 function push(){ return pushMe(); }
 
+function applyRemote(remote){
+  if(!remote||!remote.players) return false;
+  var before=JSON.stringify(G.cells);
+  G.cells=remote.cells||{};
+  // adopt everyone else's record; keep my own, which only this tab edits
+  var mine=me();
+  Object.keys(remote.players).forEach(function(pid){
+    if(pid!==ME) G.players[pid]=remote.players[pid];
+  });
+  if(!mine && remote.players[ME]) G.players[ME]=remote.players[ME];
+  Object.keys(G.players).forEach(function(pid){
+    if(pid!==ME && !remote.players[pid]) delete G.players[pid];
+  });
+  return JSON.stringify(G.cells)!==before;
+}
 function pull(){
   if(!G||pulling||dirty) return;
+  if(typeof document!=='undefined' && document.hidden) return;   // a hidden tab costs nothing
   pulling=true;
-  dbGet('/marchland/'+gameCode).then(function(remote){
-    pulling=false;
-    if(!remote||!remote.players) return;
-    var before=JSON.stringify(G.cells);
-    G.cells=remote.cells||{};
-    // adopt everyone else's record; keep my own, which only this tab edits
-    var mine=me();
-    Object.keys(remote.players).forEach(function(pid){
-      if(pid!==ME) G.players[pid]=remote.players[pid];
+  dbGet('/marchland/'+gameCode+'/rev').then(function(rev){
+    if(!rev || rev<=myRev){ pulling=false; return; }              // nothing new: ~15 bytes spent
+    return dbGet('/marchland/'+gameCode).then(function(remote){
+      pulling=false;
+      myRev=rev;
+      if(applyRemote(remote)){
+        render();
+        setSync('board updated '+new Date().toLocaleTimeString());
+      }
     });
-    if(!mine && remote.players[ME]) G.players[ME]=remote.players[ME];
-    Object.keys(G.players).forEach(function(pid){
-      if(pid!==ME && !remote.players[pid]) delete G.players[pid];
-    });
-    if(JSON.stringify(G.cells)!==before){
-      render();
-      setSync('board updated '+new Date().toLocaleTimeString());
-    }
   }).catch(function(){ pulling=false; setSync('offline'); });
 }
 function setSync(t){ var e=document.getElementById('syncstate'); if(e) e.textContent = online? t : 'local only'; }
@@ -864,7 +893,7 @@ function joinOrCreate(code,creating){
   ME=pidFor(name);
   gameCode=code;
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; myRev=remote.rev||0; }
     else if(creating||!online){ G=blankGame(gameCode); }
     else { document.getElementById('join-hint').textContent='No march with that code yet. Check the spelling, or start a new one.'; return; }
     if(!G.players[ME]) seedPlayer(ME,name); else G.players[ME].name=name;
@@ -923,9 +952,12 @@ if(!online){
   document.getElementById('setup-panel').classList.add('hide');
   document.getElementById('subline').textContent='Shared board · no accounts needed';
 }
-setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); } } },30000);
-setInterval(function(){ if(G&&online) pull(); },4000);
-setInterval(function(){ if(G&&me()) render(); },20000);
+setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); } } },60000);
+setInterval(function(){ if(G&&online) pull(); },20000);          // a walk-paced game needs no more
+setInterval(function(){ if(G&&me()) render(); },30000);
+// coming back to the tab should feel instant, so check once on focus
+document.addEventListener('visibilitychange',function(){ if(!document.hidden && G && online) pull(); });
+window.addEventListener('focus',function(){ if(G&&online) pull(); });
 window.addEventListener('resize',function(){ if(G){ layout(); draw(); } });
 window.addEventListener('beforeunload',function(){ if(dirty) push(); });
 })();
