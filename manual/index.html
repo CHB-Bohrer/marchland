@@ -1,0 +1,1005 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
+<meta property="og:title" content="Marchland Field Manual">
+<meta property="og:description" content="Eight chapters on how Marchland works, with narration.">
+<meta property="og:type" content="website">
+<style>
+  html,body{margin:0;padding:0}
+  :root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+  body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#E5E8E2}
+  img{max-width:100%}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<title>Marchland Field Manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Fraunces:opsz,wght@9..144,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --paper:#E5E8E2; --surface:#F2F4EE; --sink:#DCE0D8;
+  --ink:#16242A; --ink-2:#54666A; --rule:#C2C9BE;
+  --p0:#1C6B57; --p1:#B23F2E; --brass:#8F6F1C; --steel:#3E5E86;
+  --display:"Fraunces","Iowan Old Style",Georgia,serif;
+  --body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1619; --surface:#162226; --sink:#0A1114;
+    --ink:#DDE5DF; --ink-2:#8DA1A2; --rule:#2B3B3F;
+    --p0:#41BC97; --p1:#E2705B; --brass:#D2A544; --steel:#7FA5CE;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1619; --surface:#162226; --sink:#0A1114;
+  --ink:#DDE5DF; --ink-2:#8DA1A2; --rule:#2B3B3F;
+  --p0:#41BC97; --p1:#E2705B; --brass:#D2A544; --steel:#7FA5CE;
+}
+
+*{ box-sizing:border-box; }
+body{ background:var(--paper); color:var(--ink); font-family:var(--body); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+.wrap{ max-width:880px; margin:0 auto; padding-inline:16px; padding-block:28px 56px; }
+
+header{ border-bottom:1px solid var(--rule); padding-bottom:16px; margin-bottom:20px; }
+h1{ font-family:var(--display); font-weight:700; font-size:clamp(32px,7.5vw,52px); line-height:1.02; letter-spacing:-.025em; margin:0 0 6px; text-wrap:balance; }
+.eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-2); margin:0; }
+.standfirst{ margin:10px 0 0; max-width:62ch; color:var(--ink-2); font-size:15px; }
+
+/* chapter rail */
+.rail{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+.rail button{
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase;
+  color:var(--ink-2); background:transparent; border:1px solid var(--rule);
+  padding:6px 9px; border-radius:2px; cursor:pointer; display:flex; align-items:baseline; gap:6px;
+}
+.rail button:hover{ border-color:var(--ink-2); color:var(--ink); }
+.rail button[aria-current="true"]{ background:var(--ink); border-color:var(--ink); color:var(--paper); }
+.rail .n{ font-variant-numeric:tabular-nums; opacity:.6; }
+.rail button[aria-current="true"] .n{ opacity:.75; }
+
+/* stage */
+.stage{ border:1px solid var(--rule); background:var(--surface); }
+canvas{ display:block; width:100%; aspect-ratio:760/470; max-width:100%; background:var(--surface); }
+
+.bar{ height:3px; background:var(--sink); position:relative; overflow:hidden; }
+.bar i{ position:absolute; inset:0 auto 0 0; width:0%; background:var(--brass); display:block; }
+
+.hud{
+  display:flex; flex-wrap:wrap; gap:4px 20px; align-items:baseline;
+  padding:9px 14px; border-top:1px solid var(--rule); background:var(--paper);
+  font-family:var(--mono); font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--ink-2);
+  min-height:36px;
+}
+.hud b{ font-weight:500; color:var(--ink); font-variant-numeric:tabular-nums; letter-spacing:.04em; }
+
+/* caption */
+.caption{ padding:16px 18px 18px; border-top:1px solid var(--rule); }
+.caption h2{ font-family:var(--display); font-weight:700; font-size:22px; margin:0 0 7px; letter-spacing:-.015em; }
+.caption p{ margin:0; max-width:64ch; }
+.caption .note{ margin-top:9px; font-family:var(--mono); font-size:12px; line-height:1.55; color:var(--brass); letter-spacing:.02em; min-height:1.55em; }
+
+/* controls */
+.controls{ display:flex; gap:8px; align-items:center; padding:12px 14px; border-top:1px solid var(--rule); background:var(--paper); flex-wrap:wrap; }
+.controls button{
+  font-family:var(--body); font-size:13px; font-weight:500; color:var(--ink); background:var(--surface);
+  border:1px solid var(--rule); padding:8px 13px; border-radius:2px; cursor:pointer;
+}
+.controls button:hover:not(:disabled){ border-color:var(--ink-2); }
+.controls button:disabled{ opacity:.38; cursor:not-allowed; }
+.controls button.primary{ border-color:var(--p0); color:var(--p0); font-weight:600; min-width:92px; }
+.controls button.primary:hover{ background:var(--p0); color:var(--paper); }
+.controls #voice[aria-pressed="true"]{ border-color:var(--brass); color:var(--brass); font-weight:600; }
+.controls .vsel{ font-family:var(--mono); font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-2); display:flex; align-items:center; gap:6px; }
+.controls select{ font-family:var(--body); font-size:13px; text-transform:none; letter-spacing:0; color:var(--ink); background:var(--surface); border:1px solid var(--rule); border-radius:2px; padding:7px 8px; }
+.controls .spacer{ flex:1 1 auto; }
+.controls .count{ font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); font-variant-numeric:tabular-nums; }
+button:focus-visible, a:focus-visible{ outline:2px solid var(--brass); outline-offset:2px; }
+
+/* reference */
+.ref{ margin-top:26px; }
+.ref h3{ font-family:var(--mono); font-size:11px; letter-spacing:.15em; text-transform:uppercase; color:var(--ink-2); font-weight:500; margin:0 0 10px; }
+dl{ margin:0; display:grid; grid-template-columns:auto 1fr; gap:0; border-top:1px solid var(--rule); }
+dt{ font-family:var(--mono); font-size:11.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-2); padding:9px 18px 9px 0; border-bottom:1px solid var(--rule); white-space:nowrap; }
+dd{ margin:0; padding:9px 0; border-bottom:1px solid var(--rule); font-size:14.5px; font-variant-numeric:tabular-nums; }
+@media (max-width:520px){
+  dl{ grid-template-columns:1fr; }
+  dt{ border-bottom:0; padding-bottom:0; }
+  dd{ padding-top:2px; }
+}
+
+footer{ margin-top:26px; padding-top:16px; border-top:1px solid var(--rule); font-size:14px; color:var(--ink-2); }
+footer a{ color:var(--p0); text-decoration:none; border-bottom:1px solid currentColor; }
+footer a:hover{ color:var(--ink); }
+
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">Marchland · rules of play</p>
+  <h1>Marchland Field Manual</h1>
+  <p class="standfirst">Eight chapters, about two minutes. Walking is the only currency in this game — everything below follows from that one rule. Press <b>Turn on narration</b> to have it read aloud, in British or American.</p>
+</header>
+
+<nav class="rail" id="rail" aria-label="Chapters"></nav>
+
+<div class="stage">
+  <canvas id="stage" width="760" height="470" role="img" aria-label="Animated diagram of the current rule"></canvas>
+  <div class="bar"><i id="bar"></i></div>
+  <div class="hud" id="hud"></div>
+  <div class="caption">
+    <h2 id="cap-title">The seat</h2>
+    <p id="cap-body"></p>
+    <p class="note" id="cap-note"></p>
+  </div>
+  <div class="controls">
+    <button id="play" class="primary">Pause</button>
+    <button id="prev">Back</button>
+    <button id="next">Next</button>
+    <button id="voice" aria-pressed="false" hidden>Turn on narration</button>
+    <label class="vsel" for="vpick">Voice
+      <select id="vpick">
+        <option value="uk">British</option>
+        <option value="us">American</option>
+      </select>
+    </label>
+    <span class="spacer"></span>
+    <span class="count" id="count">1 / 8</span>
+  </div>
+</div>
+
+<section class="ref">
+  <h3>The numbers, for reference</h3>
+  <dl>
+    <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
+    <dt>Step bank</dt><dd>Holds 4 days; 30,000 steps a day counts at most</dd>
+    <dt>Collecting</dt><dd>Twice in any rolling 24 hours</dd>
+    <dt>Empty cell</dt><dd>1 march</dd>
+    <dt>Occupied cell</dt><dd>2 marches, plus a soldier per wall course and per gun covering it</dd>
+    <dt>Wall</dt><dd>30 stone a course, three courses</dd>
+    <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level</dd>
+    <dt>Soldier</dt><dd>25 iron + 40 grain to muster, and he eats every tick thereafter</dd>
+    <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
+    <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
+  </dl>
+</section>
+
+<footer>
+  Play at <a href="https://chb-bohrer.github.io/marchland/">chb-bohrer.github.io/marchland</a> — open the link, type a name, and you're in. No account, no app.
+</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ── tokens ─────────────────────────────────────────────────────────── */
+var T={};
+function readTokens(){
+  var cs=getComputedStyle(document.documentElement);
+  ['paper','surface','sink','ink','ink-2','rule','p0','p1','brass','steel'].forEach(function(n){
+    T[n]=cs.getPropertyValue('--'+n).trim()||'#888';
+  });
+}
+readTokens();
+if(window.matchMedia){
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  if(mq.addEventListener) mq.addEventListener('change',function(){ setTimeout(readTokens,30); });
+}
+function rgba(hex,a){
+  var h=hex.replace('#','');
+  if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var n=parseInt(h,16);
+  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
+var REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ── canvas ─────────────────────────────────────────────────────────── */
+var W=760, H=470;
+var cv=document.getElementById('stage'), ctx=cv.getContext('2d'), K=1;
+function fit(){
+  var cssW=cv.clientWidth||W, dpr=Math.min(window.devicePixelRatio||1,2);
+  K=cssW/W;
+  cv.width=Math.round(cssW*dpr);
+  cv.height=Math.round(cssW*(H/W)*dpr);
+  ctx.setTransform(dpr*K,0,0,dpr*K,0,0);
+}
+window.addEventListener('resize',function(){ fit(); draw(); });
+
+/* ── hex geometry ───────────────────────────────────────────────────── */
+var S=40, OX=W*0.34, OY=H*0.50;
+var AX=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
+/* pixel-space bearing of each axial direction, for drawing shared edges */
+var EDGE_ANGLE=[0,-60,-120,180,120,60];
+function key(q,r){ return q+'_'+r; }
+function hx(q,r){ return OX + S*Math.sqrt(3)*(q + r/2); }
+function hy(q,r){ return OY + S*1.5*r; }
+function hexPath(x,y,s){
+  ctx.beginPath();
+  for(var i=0;i<6;i++){
+    var a=Math.PI/180*(60*i-30), px=x+s*Math.cos(a), py=y+s*Math.sin(a);
+    if(i) ctx.lineTo(px,py); else ctx.moveTo(px,py);
+  }
+  ctx.closePath();
+}
+function hexDist(aq,ar,bq,br){ var dq=aq-bq, dr=ar-br; return (Math.abs(dq)+Math.abs(dq+dr)+Math.abs(dr))/2; }
+
+/* terrain ids */
+var PLAIN=0, FOREST=1, QUARRY=2, VEIN=3, FIELD=4;
+/* hand-placed so the board reads clearly rather than randomly */
+var TERRAIN={
+  '0_-1':FIELD, '1_-1':FOREST, '-1_0':QUARRY, '1_0':FIELD, '0_1':FOREST,
+  '2_-1':FOREST, '2_0':QUARRY, '2_1':FIELD, '3_-1':VEIN, '3_0':FOREST,
+  '-2_1':FOREST, '-1_2':FIELD, '-2_-1':FIELD, '-1_-2':QUARRY, '0_-3':FOREST,
+  '4_0':FIELD, '4_-1':FOREST, '5_1':QUARRY, '5_-1':FIELD, '6_0':FOREST,
+  '1_2':VEIN, '3_2':FOREST, '-3_2':FIELD, '2_-3':FIELD, '4_1':VEIN,
+  '-2_3':FOREST, '1_-3':FOREST, '6_-1':QUARRY, '5_0':FIELD, '-3_0':FOREST
+};
+var BOARD=[], ONBOARD={};
+(function buildBoard(){
+  for(var r=-4;r<=4;r++) for(var q=-8;q<=10;q++){
+    var x=hx(q,r), y=hy(q,r);
+    if(x<S*0.95 || x>W-S*0.95 || y<S*1.0 || y>H-S*1.0) continue;
+    BOARD.push([q,r]); ONBOARD[key(q,r)]=1;
+  }
+})();
+function terrainOf(q,r){ var t=TERRAIN[key(q,r)]; return t===undefined?PLAIN:t; }
+
+/* ── cell drawing ───────────────────────────────────────────────────── */
+function glyph(t,x,y,col,scale){
+  var s=(scale||1)*S;
+  ctx.save();
+  ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1.6; ctx.lineCap='round';
+  if(t===FOREST){
+    [[-0.19,0.04],[0.13,-0.05]].forEach(function(o,i){
+      var cx=x+o[0]*s, cy=y+o[1]*s, h=(i?0.26:0.32)*s;
+      ctx.beginPath(); ctx.moveTo(cx,cy-h/2); ctx.lineTo(cx+h*0.36,cy+h/2); ctx.lineTo(cx-h*0.36,cy+h/2); ctx.closePath(); ctx.fill();
+    });
+  } else if(t===QUARRY){
+    ctx.beginPath();
+    ctx.moveTo(x-0.26*s,y+0.15*s); ctx.lineTo(x-0.10*s,y-0.16*s);
+    ctx.lineTo(x+0.16*s,y-0.16*s); ctx.lineTo(x+0.28*s,y+0.15*s); ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-0.10*s,y-0.16*s); ctx.lineTo(x-0.02*s,y+0.15*s); ctx.stroke();
+  } else if(t===VEIN){
+    ctx.beginPath();
+    ctx.moveTo(x,y-0.24*s); ctx.lineTo(x+0.19*s,y); ctx.lineTo(x,y+0.24*s); ctx.lineTo(x-0.19*s,y); ctx.closePath();
+    ctx.fill();
+  } else if(t===FIELD){
+    for(var i=-1;i<=1;i++){
+      var cx=x+i*0.17*s;
+      ctx.beginPath(); ctx.moveTo(cx,y+0.19*s); ctx.lineTo(cx,y-0.14*s); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx,y-0.14*s); ctx.lineTo(cx+0.10*s,y-0.24*s); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+function keepGlyph(x,y,col,kind,scale){
+  var s=(scale||1)*S;
+  ctx.save(); ctx.fillStyle=col; ctx.strokeStyle=col; ctx.lineWidth=2;
+  if(kind==='tower'){
+    ctx.fillRect(x-0.11*s, y-0.20*s, 0.22*s, 0.44*s);
+    ctx.fillRect(x-0.17*s, y-0.28*s, 0.34*s, 0.10*s);
+  } else {
+    ctx.fillRect(x-0.26*s, y-0.10*s, 0.52*s, 0.34*s);
+    for(var i=0;i<3;i++) ctx.fillRect(x+(-0.26+i*0.20)*s, y-0.26*s, 0.13*s, 0.18*s);
+  }
+  ctx.restore();
+}
+function hatch(x,y,s,col){
+  ctx.save(); hexPath(x,y,s*0.97); ctx.clip();
+  ctx.strokeStyle=col; ctx.lineWidth=1;
+  for(var i=-2;i<=2;i++){
+    ctx.beginPath();
+    ctx.moveTo(x-s+i*s*0.42, y-s); ctx.lineTo(x+s+i*s*0.42, y+s);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* draw one cell from state */
+function drawCell(q,r,c,now){
+  var x=hx(q,r), y=hy(q,r);
+  var own = c && c.o;
+  var col = own==='you' ? T.p0 : own==='rival' ? T.p1 : null;
+
+  /* pop animation when recently changed */
+  var pop=1;
+  if(c && c.at!=null){
+    var age=now-c.at;
+    if(age<0) return;
+    if(age<0.45){ var k=age/0.45; pop=0.72+0.28*(1-Math.pow(1-k,3)); }
+  }
+  var s=S*0.92*pop;
+
+  hexPath(x,y,s);
+  ctx.fillStyle = col ? rgba(col, c.dark?0.07:0.17) : T.sink;
+  ctx.fill();
+
+  if(c && c.dark) hatch(x,y,s,rgba(T['ink-2'],0.30));
+
+  ctx.strokeStyle = col ? rgba(col, c.dark?0.35:0.95) : T.rule;
+  ctx.lineWidth = col ? 2 : 1;
+  hexPath(x,y,s); ctx.stroke();
+
+  var t=terrainOf(q,r);
+  if(t!==PLAIN) glyph(t,x,y, col? rgba(col,c.dark?0.35:0.8) : rgba(T['ink-2'],0.55), pop);
+
+  if(c && c.w) {
+    ctx.save();
+    ctx.strokeStyle=T.brass; ctx.lineWidth=1+1.6*c.w;
+    hexPath(x,y,s*0.99); ctx.stroke();
+    ctx.restore();
+  }
+  if(c && c.k){ keepGlyph(x,y, col||T.brass, c.k, pop); }
+}
+
+/* candidate (dashed) ring */
+function drawCandidates(list,now,col){
+  ctx.save();
+  ctx.setLineDash([5,5]);
+  ctx.lineDashOffset = -now*14;
+  ctx.strokeStyle=rgba(col,0.75); ctx.lineWidth=1.6;
+  list.forEach(function(p){ hexPath(hx(p[0],p[1]),hy(p[0],p[1]),S*0.92); ctx.stroke(); });
+  ctx.restore();
+}
+
+/* ── scene state ────────────────────────────────────────────────────── */
+var M=null;                /* live model for the running scene */
+function blank(){ return { cells:{}, hud:[], note:'' }; }
+function put(q,r,props,now){
+  var k=key(q,r), c=M.cells[k]||(M.cells[k]={});
+  for(var p in props) c[p]=props[p];
+  c.at = now==null ? -99 : now;
+  return c;
+}
+function held(owner){
+  var out=[];
+  for(var k in M.cells){ if(M.cells[k].o===owner){ var p=k.split('_'); out.push([+p[0],+p[1]]); } }
+  return out;
+}
+function frontier(owner){
+  var seen={}, out=[];
+  held(owner).forEach(function(p){
+    for(var i=0;i<6;i++){
+      var q=p[0]+AX[i][0], r=p[1]+AX[i][1], k=key(q,r);
+      if(seen[k]) continue; seen[k]=1;
+      var c=M.cells[k];
+      if(c && c.o===owner) continue;
+      if(!ONBOARD[k]) continue;
+      out.push([q,r]);
+    }
+  });
+  return out;
+}
+/* which of owner's cells can trace a path home to a castle */
+function supplied(owner){
+  var ok={}, queue=[];
+  for(var k in M.cells){ var c=M.cells[k]; if(c.o===owner && c.k==='castle'){ ok[k]=1; queue.push(k); } }
+  while(queue.length){
+    var p=queue.pop().split('_'), q=+p[0], r=+p[1];
+    for(var i=0;i<6;i++){
+      var nq=q+AX[i][0], nr=r+AX[i][1], nk=key(nq,nr), c=M.cells[nk];
+      if(c && c.o===owner && !ok[nk]){ ok[nk]=1; queue.push(nk); }
+    }
+  }
+  return ok;
+}
+function markSupply(owner){
+  var ok=supplied(owner);
+  for(var k in M.cells){ var c=M.cells[k]; if(c.o===owner) c.dark = !ok[k]; }
+}
+
+/* ── the board backdrop ─────────────────────────────────────────────── */
+function drawBoard(now){
+  BOARD.forEach(function(p){
+    var c=M.cells[key(p[0],p[1])];
+    if(!c) drawCell(p[0],p[1],null,now);
+  });
+  BOARD.forEach(function(p){
+    var c=M.cells[key(p[0],p[1])];
+    if(c) drawCell(p[0],p[1],c,now);
+  });
+}
+
+/* ── shared canvas text helper (large only — small text lives in HTML) ─ */
+function bigText(str,x,y,size,col,align){
+  ctx.save();
+  ctx.font='700 '+size+'px '+'"Fraunces","Iowan Old Style",Georgia,serif';
+  ctx.fillStyle=col; ctx.textAlign=align||'center'; ctx.textBaseline='middle';
+  ctx.fillText(str,x,y); ctx.restore();
+}
+function labelText(str,x,y,size,col,align){
+  ctx.save();
+  ctx.font='500 '+size+'px '+'"IBM Plex Mono",ui-monospace,Menlo,monospace';
+  ctx.fillStyle=col; ctx.textAlign=align||'center'; ctx.textBaseline='middle';
+  ctx.fillText(str,x,y); ctx.restore();
+}
+function ease(k){ return k<0?0:k>1?1:1-Math.pow(1-k,3); }
+
+/* ── pips (marches) ─────────────────────────────────────────────────── */
+function pipRow(n,x,y,gap,col,scale,now,bornAt){
+  var s=(scale||9);
+  for(var i=0;i<n;i++){
+    var k=1;
+    if(bornAt && bornAt[i]!=null){ var a=now-bornAt[i]; if(a<0) continue; k=ease(a/0.3); }
+    ctx.save();
+    ctx.globalAlpha=k;
+    hexPath(x+i*gap, y, s*(0.6+0.4*k));
+    ctx.fillStyle=rgba(col,0.9); ctx.fill();
+    ctx.restore();
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   SCENES
+   ══════════════════════════════════════════════════════════════════════ */
+var SCENES=[];
+function scene(o){ SCENES.push(o); }
+
+/* 1 ── the seat */
+scene({
+  tag:'The seat', title:'You start with a keep',
+  body:'Every player is given one castle and the ground immediately around it. The map is shared but abstract — it is not real geography. Your keep sits at its own seat, at least eighteen cells from anyone else, so distance on the map has nothing to do with distance in the world.',
+  dur:11,
+  init:function(){
+    M=blank();
+    M.hud=[['Marches','12'],['Ground','1 cell']];
+  },
+  beats:[
+    [0.8,function(n){ put(0,0,{o:'you',k:'castle'},n); M.note='Your keep. Everything you own must connect back to it.'; M.hud=[['Marches','12'],['Ground','1 cell']]; }],
+    [2.2,function(n){
+      for(var i=0;i<6;i++) put(AX[i][0],AX[i][1],{o:'you'}, n+i*0.12);
+      M.hud=[['Marches','12'],['Ground','7 cells']];
+    }],
+    [4.6,function(n){ M.note='The land around it carries terrain — forest, quarry, iron vein, field.'; }],
+    [7.4,function(n){ M.note='Nobody else is nearby. You have to march to find them.'; }]
+  ],
+  draw:function(now){ drawBoard(now); }
+});
+
+/* 2 ── steps into marches */
+scene({
+  tag:'Marches', title:'Steps become marches',
+  body:'Read your step count off the Health app and collect it. Steps convert to marches on a square-root curve: five times the square root of your distance in kilometres. That curve is the whole reason a father and a son can play the same game.',
+  dur:13,
+  init:function(){ M=blank(); M.a=0; M.b=0; M.pipsA=[]; M.pipsB=[]; M.hud=[['Formula','5 × √km']]; },
+  beats:[
+    [0.6,function(){ M.note='Two players collect on the same evening.'; }],
+    [4.6,function(n){
+      M.note='One walked five times as far as the other.';
+      M.hud=[['Walker A','4,000 steps · 3.0 km'],['Walker B','20,000 steps · 14.8 km']];
+    }],
+    [6.4,function(n){ for(var i=0;i<9;i++) M.pipsA.push(n+i*0.075); }],
+    [7.6,function(n){ for(var i=0;i<19;i++) M.pipsB.push(n+i*0.055); }],
+    [9.6,function(){
+      M.note='Five times the walking, barely twice the marches. The small walker stays in the game.';
+      M.hud=[['Walker A','9 marches'],['Walker B','19 marches'],['Ratio','2.1 ×, not 5 ×']];
+    }]
+  ],
+  draw:function(now){
+    var laneY=[176,336], maxW=420, x0=170;
+    var kA=ease((now-1.0)/2.6), kB=ease((now-1.6)/3.0);
+    var vals=[4000,20000], ks=[kA,kB], cols=[T.steel,T.steel];
+    for(var i=0;i<2;i++){
+      var w=maxW*(vals[i]/30000)*ks[i];
+      ctx.save();
+      ctx.fillStyle=rgba(cols[i],0.20); ctx.fillRect(x0,laneY[i]-52,w,36);
+      ctx.strokeStyle=rgba(cols[i],0.85); ctx.lineWidth=1.5; ctx.strokeRect(x0+0.75,laneY[i]-51.25,Math.max(w-1.5,0),34.5);
+      ctx.restore();
+      labelText(i===0?'WALKER A':'WALKER B', x0, laneY[i]-68, 15, T['ink-2'],'left');
+      bigText(Math.round(vals[i]*ks[i]).toLocaleString()+' steps', x0+w+14, laneY[i]-34, 24, T.ink,'left');
+    }
+    labelText('MARCHES EARNED', x0, laneY[0]-2, 15, T['ink-2'],'left');
+    pipRow(M.pipsA.length, x0+10, laneY[0]+26, 22, T.p0, 10, now, M.pipsA);
+    labelText('MARCHES EARNED', x0, laneY[1]-2, 15, T['ink-2'],'left');
+    pipRow(M.pipsB.length, x0+10, laneY[1]+26, 22, T.p0, 10, now, M.pipsB);
+  }
+});
+
+/* 3 ── spending a march */
+scene({
+  tag:'Claiming', title:'One march, one cell',
+  body:'A march buys any single cell touching ground you already hold. Borders creep outward — you cannot leap across the map to somewhere better. Choosing which way to grow is most of the game.',
+  dur:12,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    for(var i=0;i<6;i++) put(AX[i][0],AX[i][1],{o:'you'});
+    M.marches=9; M.cand=true;
+    M.hud=[['Marches','9'],['Ground','7 cells']];
+  },
+  beats:[
+    [1.0,function(){ M.note='Every dashed cell is one march away.'; }],
+    [3.0,function(n){ M.take=[[2,-1,n+0.0],[2,0,n+0.8],[1,1,n+1.6],[2,1,n+2.4],[3,-1,n+3.2],[3,0,n+4.0]]; }],
+    [8.0,function(){ M.note='Six marches spent, six cells of new border — and a quarry and a vein now inside it.'; }]
+  ],
+  draw:function(now){
+    if(M.take){
+      var spent=0;
+      M.take.forEach(function(e){
+        if(now>=e[2]){
+          var c=M.cells[key(e[0],e[1])];
+          if(!c || c.o!=='you') put(e[0],e[1],{o:'you'}, e[2]);
+          spent++;
+        }
+      });
+      M.marches=9-spent;
+      M.hud=[['Marches',String(M.marches)],['Ground',(7+spent)+' cells']];
+    }
+    drawBoard(now);
+    if(M.cand && now<8.3) drawCandidates(frontier('you'),now,T.p0);
+  }
+});
+
+/* 4 ── someone else's ground */
+scene({
+  tag:'Contact', title:'Someone else\'s ground costs two',
+  body:'When your border meets another player\'s, their cells are still takeable — they simply cost double. Taking ground is how the game is won, and it is also how you lose it: every border you push is a border they can push back.',
+  dur:12,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],[2,1],[3,-1],[3,0]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    [[6,0],[5,0],[5,1],[6,-1],[4,0],[4,1],[5,-1],[4,-1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    put(6,0,{o:'rival',k:'castle'});
+    M.marches=8;
+    M.hud=[['Marches','8'],['Empty cell','1 march'],['Their cell','2 marches']];
+  },
+  beats:[
+    [1.2,function(){ M.note='Red holds the east. Your border has reached theirs.'; }],
+    [3.4,function(n){ M.take=[[4,-1,n+0.2],[4,0,n+2.0]]; }],
+    [8.0,function(){ M.note='Two cells taken, four marches gone. Doubling the price is what stops a border from collapsing in one evening.'; }],
+    [9.6,function(){ M.note='A keep or a tower can never be taken outright — it has to be starved out by cutting the ground around it.'; }]
+  ],
+  draw:function(now){
+    if(M.take){
+      var spent=0;
+      M.take.forEach(function(e){
+        var k=key(e[0],e[1]);
+        if(now>=e[2]){ if(M.cells[k].o!=='you') put(e[0],e[1],{o:'you'},e[2]); spent+=2; }
+      });
+      M.marches=8-spent;
+      M.hud=[['Marches',String(M.marches)],['Empty cell','1 march'],['Their cell','2 marches']];
+    }
+    drawBoard(now);
+    if(now>1.2 && now<8.0) drawCandidates([[4,-1],[4,0],[4,1]],now,T.p1);
+  }
+});
+
+/* 5 ── walls and guns */
+scene({
+  tag:'Defence', title:'Walls cost them soldiers',
+  body:'Stone builds walls, three courses deep. Towers and castles shoot at anything claimed within range. Neither stops an attack outright — both make it cost soldiers, and soldiers are expensive to raise and eat grain forever after.',
+  dur:13,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],[2,1],[3,-1],[3,0],[4,-1],[4,0]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    [[6,0],[5,0],[5,1],[6,-1],[4,1],[5,-1],[6,1],[7,0]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    put(6,0,{o:'rival',k:'castle'});
+    M.hud=[['Your soldiers','4'],['Stone','120']];
+  },
+  beats:[
+    [1.2,function(n){ put(5,0,{o:'rival',w:2},n); M.note='Red raises two courses of wall on the cell you want. 30 stone a course.'; }],
+    [4.0,function(n){ put(5,-1,{o:'rival',k:'tower'},n); M.note='And a tower beside it, which covers every cell next to it.'; }],
+    [6.6,function(){ M.note='Taking that walled cell now costs 2 marches — plus 2 soldiers for the wall and 1 for the tower\'s guns.'; M.hud=[['Cost to take','2 marches + 3 soldiers'],['Your soldiers','4']]; }],
+    [9.2,function(n){ put(5,0,{o:'you',w:0},n); M.hud=[['Your soldiers','1'],['Stone','120']]; M.note='Taken — and three of your four soldiers are gone with it.'; }],
+    [11.0,function(){ M.note='A tower must be manned at every level, and an undermanned one decays until it collapses.'; }]
+  ],
+  draw:function(now){
+    drawBoard(now);
+    if(now>4.0 && now<9.2){
+      ctx.save();
+      ctx.strokeStyle=rgba(T.p1,0.45); ctx.lineWidth=1.5; ctx.setLineDash([3,4]);
+      ctx.lineDashOffset=-now*10;
+      for(var i=0;i<6;i++){
+        var q=5+AX[i][0], r=-1+AX[i][1];
+        hexPath(hx(q,r),hy(q,r),S*0.92); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+});
+
+/* 6 ── supply */
+scene({
+  tag:'Supply', title:'Only connected land pays',
+  body:'Terrain yields nothing on its own. A cell produces only if you can trace an unbroken path of your own ground from it back to one of your castles. This is the sharpest rule in the game: a single cell taken in the right place can switch off a whole province.',
+  dur:15,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    /* a compact heartland, one cell of neck at (3,0), then an eastern cluster */
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],
+     [3,0],[4,0],[4,-1],[4,1],[5,0]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    [[6,0],[6,-1],[7,0],[6,1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    put(6,0,{o:'rival',k:'castle'});
+    markSupply('you');
+    M.hud=[['Supplied','15 of 15'],['Harvest','every 4 hours']];
+  },
+  beats:[
+    [1.4,function(){ M.note='Every cell you hold traces home. The pulses are the harvest coming in.'; }],
+    [5.6,function(n){ put(3,0,{o:'rival'},n); M.note='Red takes one cell — the neck of your eastern arm.'; }],
+    [6.4,function(){
+      markSupply('you');
+      var dark=0, mine=0;
+      for(var k in M.cells){ if(M.cells[k].o==='you'){ mine++; if(M.cells[k].dark) dark++; } }
+      M.hud=[['Supplied',(mine-dark)+' of '+mine],['Cut off',dark+' cells']];
+      M.note='Four cells still belong to you. They are simply no longer connected, and they now yield nothing.';
+    }],
+    [10.4,function(){ M.note='You did not lose the ground. You lost the road to it — which in practice is the same thing.'; }],
+    [12.4,function(){ M.note='Cutting a supply line is almost always cheaper than taking the land it feeds.'; }]
+  ],
+  draw:function(now){
+    drawBoard(now);
+    /* harvest pulses travelling toward the keep */
+    if(now>1.2){
+      var sources=[];
+      for(var k in M.cells){
+        var c=M.cells[k];
+        if(c.o==='you' && !c.dark && !c.k && terrainOf.apply(null,k.split('_').map(Number))!==PLAIN){
+          var p=k.split('_'); sources.push([+p[0],+p[1]]);
+        }
+      }
+      ctx.save();
+      sources.forEach(function(p,i){
+        var phase=((now*0.55)+i*0.17)%1;
+        var x=hx(p[0],p[1]), y=hy(p[0],p[1]);
+        var px=x+(hx(0,0)-x)*phase, py=y+(hy(0,0)-y)*phase;
+        ctx.globalAlpha=Math.sin(phase*Math.PI)*0.85;
+        ctx.beginPath(); ctx.arc(px,py,3.2,0,Math.PI*2);
+        ctx.fillStyle=T.brass; ctx.fill();
+      });
+      ctx.restore();
+    }
+  }
+});
+
+/* 7 ── castles */
+scene({
+  tag:'Castles', title:'Castles are meant to be rare',
+  body:'A second castle is a campaign, not a purchase. Each one costs more than the last, and no two of yours may stand within seven cells of each other — so a new keep means pushing the border a long way out first. Since supply is measured only from castles, where you put one shapes everything after.',
+  dur:13,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],[2,1],[3,-1],[3,0],[4,-1],[4,0],[4,1],[3,2],[5,0],[5,-1],[2,-2],[3,-2]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    markSupply('you');
+    M.hud=[['Castles','1'],['Next castle','more timber, stone and iron than the first']];
+  },
+  beats:[
+    [1.4,function(){ M.ring=true; M.note='No second keep may stand inside seven cells of the first.'; }],
+    [5.2,function(n){ put(5,0,{o:'you',k:'castle'},n); markSupply('you'); M.ring=false;
+      M.hud=[['Castles','2'],['Third castle','dearer again']];
+      M.note='Seven cells out, at the far edge of your ground — the first spot that qualifies.'; }],
+    [8.0,function(){ M.note='Now the eastern arm draws supply from the new keep instead of the old one. Cutting you in half has become much harder.'; }],
+    [10.6,function(){ M.note='Each castle after this costs more than the last, so most games are decided with two or three.'; }]
+  ],
+  draw:function(now){
+    drawBoard(now);
+    if(M.ring){
+      ctx.save();
+      ctx.strokeStyle=rgba(T.brass,0.55); ctx.lineWidth=1.6; ctx.setLineDash([4,5]);
+      ctx.lineDashOffset=-now*9;
+      BOARD.forEach(function(p){
+        if(hexDist(p[0],p[1],0,0)<7 && hexDist(p[0],p[1],0,0)>0){
+          /* draw only the outer edge of the exclusion zone */
+          for(var i=0;i<6;i++){
+            var nq=p[0]+AX[i][0], nr=p[1]+AX[i][1];
+            if(hexDist(nq,nr,0,0)>=7){
+              var x=hx(p[0],p[1]), y=hy(p[0],p[1]);
+              var th=EDGE_ANGLE[i];
+              var a1=Math.PI/180*(th-30), a2=Math.PI/180*(th+30);
+              ctx.beginPath();
+              ctx.moveTo(x+S*0.92*Math.cos(a1), y+S*0.92*Math.sin(a1));
+              ctx.lineTo(x+S*0.92*Math.cos(a2), y+S*0.92*Math.sin(a2));
+              ctx.stroke();
+            }
+          }
+        }
+      });
+      ctx.restore();
+    }
+  }
+});
+
+/* 8 ── the bank */
+scene({
+  tag:'The bank', title:'Four days, twice a day',
+  body:'Your steps keep accumulating whether the game is open or not, but the store only holds four days — anything older spoils. You may collect twice in any rolling twenty-four hours, which is enough to bank a morning walk and an evening one without the game asking you to check it all day.',
+  dur:13,
+  init:function(){ M=blank(); M.days=0; M.collects=0; M.hud=[['Bank','0.0 of 4 days'],['Collections today','0 of 2']]; },
+  beats:[
+    [0.8,function(){ M.note='You walk. The bank fills on its own.'; }],
+    [5.6,function(){ M.note='Four days is the ceiling. Day five does not fit, and day one is gone.'; }],
+    [8.0,function(){ M.collects=1; M.note='Collect in the morning…'; }],
+    [9.4,function(){ M.collects=2; M.note='…and again in the evening. That is the limit for the day.'; }],
+    [11.0,function(){ M.note='Walk as much as you like in between. It all keeps counting.'; }]
+  ],
+  draw:function(now){
+    var x0=140, y0=190, w=480, h=54;
+    var fill=Math.min(5.2, now*0.62);
+    M.days=Math.min(4,fill);
+    M.hud=[['Bank',M.days.toFixed(1)+' of 4 days'],['Collections today',M.collects+' of 2'],['Daily ceiling','30,000 steps']];
+
+    /* store outline */
+    ctx.save();
+    ctx.fillStyle=T.sink; ctx.fillRect(x0,y0,w,h);
+    for(var d=0; d<4; d++){
+      var seg=w/4, f=Math.max(0,Math.min(1,fill-d));
+      ctx.fillStyle=rgba(T.p0,0.28); ctx.fillRect(x0+d*seg, y0, seg*f, h);
+      ctx.strokeStyle=T.rule; ctx.lineWidth=1; ctx.strokeRect(x0+d*seg+0.5, y0+0.5, seg-1, h-1);
+    }
+    ctx.strokeStyle=T.ink; ctx.lineWidth=1.5; ctx.strokeRect(x0+0.75,y0+0.75,w-1.5,h-1.5);
+    ctx.restore();
+
+    for(var d2=0; d2<4; d2++) labelText('DAY '+(d2+1), x0+(d2+0.5)*(w/4), y0+h+20, 14, T['ink-2']);
+    labelText('THE STORE', x0, y0-22, 15, T['ink-2'],'left');
+
+    /* spillage past four days */
+    if(fill>4){
+      var over=Math.min(1,(fill-4)/1.2);
+      ctx.save();
+      ctx.globalAlpha=0.30+0.35*Math.abs(Math.sin(now*2.2));
+      for(var i=0;i<7;i++){
+        var px=x0+w+8+i*11, py=y0+h*0.5+Math.sin(now*3+i)*9;
+        ctx.beginPath(); ctx.arc(px,py,3.0*over,0,Math.PI*2);
+        ctx.fillStyle=T.p1; ctx.fill();
+      }
+      ctx.restore();
+      bigText('spoils', x0+w+50, y0+h*0.5-26, 19, rgba(T.p1,0.95),'left');
+    }
+
+    /* collection tokens */
+    labelText('COLLECTIONS TODAY', x0, y0+h+62, 15, T['ink-2'],'left');
+    for(var i=0;i<2;i++){
+      var cx=x0+16+i*40, cy=y0+h+94, used=i<M.collects;
+      hexPath(cx,cy,13);
+      ctx.fillStyle= used ? rgba(T['ink-2'],0.18) : rgba(T.brass,0.30); ctx.fill();
+      ctx.strokeStyle= used ? T['ink-2'] : T.brass; ctx.lineWidth=1.8; ctx.stroke();
+      if(used){
+        ctx.save(); ctx.strokeStyle=T['ink-2']; ctx.lineWidth=1.8;
+        ctx.beginPath(); ctx.moveTo(cx-6,cy-6); ctx.lineTo(cx+6,cy+6); ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════
+   NARRATION — a recorded track, rendered once with a neural voice and
+   shipped with the page, so every listener hears the same thing rather than
+   whatever synthesiser their device happens to have. Each entry is
+   [cue seconds, audio file, length, the words] — the words are kept only as
+   a fallback for a browser that cannot play the file.
+   ══════════════════════════════════════════════════════════════════════ */
+var NARRATION=[
+ [[0.8,'n1_1',2.58,'You start with one keep, and the ground around it.'],[4.6,'n1_2',3.75,"The map is shared, but abstract. It isn't real geography."],[8.75,'n1_3',4.05,"Your seat sits far from everyone else's. You have to march to find them."]],
+ [[0.6,'n2_1',1.58,'Steps become marches.'],[4.6,'n2_2',4.07,'One player walked four thousand steps. The other walked twenty thousand.'],[9.07,'n2_3',1.98,'Nine marches against nineteen.'],[11.46,'n2_4',5.55,"Five times the walking, barely twice the reward. That's what keeps the smaller walker in the game."]],
+ [[1.0,'n3_1',3.03,'A march buys one cell touching ground you already hold.'],[4.43,'n3_2',2.99,"Borders creep outward. You can't leap across the map."],[8.1,'n3_3',4.48,'Six marches spent, and a quarry and an iron vein are now inside your border.']],
+ [[1.2,'n4_1',2.5,'Their cells still fall. They just cost double.'],[4.1,'n4_2',2.45,'Two cells taken. Four marches gone.'],[8.1,'n4_3',3.54,'Double price is what stops a border collapsing in one evening.'],[12.04,'n4_4',3.69,"And a keep can't be taken outright. It has to be starved out."]],
+ [[1.2,'n5_1',2.35,'Stone builds walls, three courses deep.'],[4.0,'n5_2',2.26,'A tower covers every cell beside it.'],[6.7,'n5_3',3.2,'Neither stops an attack. Both make it cost soldiers.'],[10.3,'n5_4',3.09,'The cell falls, and three of your four soldiers fall with it.'],[13.79,'n5_5',3.2,'Towers must be manned. Soldiers eat grain forever.']],
+ [[1.4,'n6_1',1.92,'Terrain yields nothing on its own.'],[3.72,'n6_2',3.39,'A cell only pays if you can trace a path back to a castle.'],[7.51,'n6_3',2.92,'Red takes one cell: the neck of your eastern arm.'],[10.83,'n6_4',4.33,"Four cells are still yours. They're just not connected, so they yield nothing."],[15.57,'n6_5',2.71,"You didn't lose the ground. You lost the road to it."],[18.67,'n6_6',2.86,'Cutting a supply line beats taking the land it feeds.']],
+ [[1.4,'n7_1',2.86,'A second castle is a campaign, not a purchase.'],[4.66,'n7_2',2.58,'No two keeps may stand within seven cells.'],[7.64,'n7_3',2.71,'So a new castle means pushing the border out first.'],[10.75,'n7_4',2.88,'Now the eastern arm draws supply from the new keep.'],[14.03,'n7_5',2.18,'And each castle costs more than the last.']],
+ [[0.8,'n8_1',3.05,'Your steps keep counting whether the game is open or not.'],[5.7,'n8_2',3.18,'But the store holds four days. Anything older spoils.'],[9.28,'n8_3',2.56,'You can collect twice in any twenty-four hours.'],[12.24,'n8_4',3.5,'Walk as much as you like in between. It all keeps counting.']]
+];
+NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
+
+/* ── the voice ──────────────────────────────────────────────────────── */
+var SPEECH = ('speechSynthesis' in window) && ('SpeechSynthesisUtterance' in window);
+var voiceOn=false, clips={}, nowPlaying=null, useFiles=true;
+var VOICE='uk';
+try{ var st=localStorage.getItem('marchland-voice'); if(st==='uk'||st==='us') VOICE=st; }catch(e){}
+
+/* Safari wants AAC, Firefox wants Opus — ship both and ask the browser */
+var EXT=(function(){
+  try{
+    var probe=document.createElement('audio');
+    if(probe.canPlayType('audio/mp4; codecs="mp4a.40.2"')) return '.mp4';
+    if(probe.canPlayType('audio/ogg; codecs="opus"')) return '.ogg';
+  }catch(e){}
+  return '.mp4';
+})();
+function clipFor(id){
+  var src='audio/'+VOICE+'_'+id+EXT;
+  var a=clips[src];
+  if(!a){
+    a=new Audio(src); a.preload='auto';
+    a.addEventListener('error',function(){ useFiles=false; });
+    clips[src]=a;
+  }
+  return a;
+}
+function preloadChapter(i){
+  var ns=(SCENES[i]&&SCENES[i].narr)||[];
+  for(var j=0;j<ns.length;j++) clipFor(ns[j][1]);
+}
+function hush(){
+  if(nowPlaying){ try{ nowPlaying.pause(); nowPlaying.currentTime=0; }catch(e){} nowPlaying=null; }
+  if(SPEECH){ try{ window.speechSynthesis.cancel(); }catch(e){} }
+}
+/* only reached if the recorded clips will not play on this browser */
+function synth(text){
+  if(!SPEECH||!text) return;
+  try{
+    window.speechSynthesis.cancel();
+    var u=new SpeechSynthesisUtterance(text);
+    u.rate=0.97; u.pitch=1; u.lang='en-US';
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+function say(entry){
+  if(!voiceOn||!entry) return;
+  hush();
+  if(!useFiles){ synth(entry[3]); return; }
+  var a=clipFor(entry[1]);
+  nowPlaying=a;
+  try{ a.currentTime=0; }catch(e){}
+  var pr=a.play();
+  if(pr&&pr.catch) pr.catch(function(){ useFiles=false; synth(entry[3]); });
+}
+function stillTalking(){
+  if(!voiceOn) return false;
+  if(nowPlaying && !nowPlaying.paused && !nowPlaying.ended) return true;
+  try{ return SPEECH && window.speechSynthesis.speaking; }catch(e){ return false; }
+}
+/* with the voice on, a chapter runs at least as long as its last line */
+function chapterDur(i){
+  var sc=SCENES[i], d=sc.dur;
+  if(voiceOn && sc.narr && sc.narr.length){
+    var last=sc.narr[sc.narr.length-1];
+    d=Math.max(d, last[0]+last[2]+0.9);
+  }
+  return d;
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   PLAYER
+   ══════════════════════════════════════════════════════════════════════ */
+var cur=0, t=0, playing=!REDUCED, applied=0, lastTs=0, said=0, holdT=0;
+var elRail=document.getElementById('rail'), elBar=document.getElementById('bar'),
+    elHud=document.getElementById('hud'), elTitle=document.getElementById('cap-title'),
+    elBody=document.getElementById('cap-body'), elNote=document.getElementById('cap-note'),
+    elPlay=document.getElementById('play'), elPrev=document.getElementById('prev'),
+    elNext=document.getElementById('next'), elCount=document.getElementById('count'),
+    elVoice=document.getElementById('voice');
+
+SCENES.forEach(function(s,i){
+  var b=document.createElement('button');
+  b.innerHTML='<span class="n">'+(i+1)+'</span>'+s.tag;
+  b.addEventListener('click',function(){ go(i); });
+  elRail.appendChild(b);
+});
+
+function load(i,atEnd){
+  cur=i; applied=0; t=0; said=0; holdT=0;
+  hush();
+  if(voiceOn){ preloadChapter(i); preloadChapter(i+1); }
+  SCENES[i].init();
+  elTitle.textContent=SCENES[i].title;
+  elBody.textContent=SCENES[i].body;
+  elCount.textContent=(i+1)+' / '+SCENES.length;
+  [].forEach.call(elRail.children,function(b,j){ b.setAttribute('aria-current', j===i?'true':'false'); });
+  elPrev.disabled = i===0;
+  if(atEnd) runTo(SCENES[i].dur-0.01);
+  syncHud(); draw();
+}
+function runTo(target){
+  var bs=SCENES[cur].beats||[], ns=SCENES[cur].narr||[];
+  while(applied<bs.length && bs[applied][0]<=target){ bs[applied][1](bs[applied][0]); applied++; }
+  while(said<ns.length && ns[said][0]<=target){ said++; }   /* skipped ahead — don't speak the backlog */
+  t=target;
+}
+function go(i){
+  if(i<0||i>=SCENES.length) return;
+  load(i, REDUCED);
+  if(!REDUCED){ playing=true; elPlay.textContent='Pause'; }
+  elNext.disabled=false;
+}
+
+var lastHud='', lastNote='';
+function syncHud(){
+  var html=(M.hud||[]).map(function(p){ return '<span>'+p[0]+' <b>'+p[1]+'</b></span>'; }).join('');
+  if(html!==lastHud){ elHud.innerHTML=html; lastHud=html; }
+  var note=M.note||'';
+  if(note!==lastNote){ elNote.textContent=note; lastNote=note; }
+}
+
+function draw(){
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle=T.surface; ctx.fillRect(0,0,W,H);
+  SCENES[cur].draw(t);
+  syncHud();
+  elBar.style.width=Math.min(100,(t/chapterDur(cur))*100)+'%';
+}
+
+function frame(ts){
+  requestAnimationFrame(frame);
+  var dt=(ts-lastTs)/1000; lastTs=ts;
+  if(!isFinite(dt)||dt>0.4) dt=0.016;
+  if(playing){
+    var nt=t+dt, bs=SCENES[cur].beats||[], ns=SCENES[cur].narr||[];
+    while(applied<bs.length && bs[applied][0]<=nt){ bs[applied][1](bs[applied][0]); applied++; }
+    while(said<ns.length && ns[said][0]<=nt){ say(ns[said]); said++; }
+    t=nt;
+    if(t>=chapterDur(cur)){
+      /* let a sentence finish before the chapter turns, but never stall for long */
+      if(stillTalking() && holdT<8){ holdT+=dt; t=chapterDur(cur); }
+      else if(cur<SCENES.length-1){ load(cur+1); }
+      else { t=chapterDur(cur); playing=false; hush(); elPlay.textContent='Replay'; elNext.disabled=true; }
+    }
+  }
+  draw();
+}
+
+elPlay.addEventListener('click',function(){
+  if(!playing && cur===SCENES.length-1 && t>=chapterDur(cur)){ go(0); return; }
+  playing=!playing;
+  if(!playing) hush();
+  elPlay.textContent=playing?'Pause':'Play';
+});
+
+elVoice.hidden=false;
+elVoice.addEventListener('click',function(){
+  voiceOn=!voiceOn;
+  elVoice.setAttribute('aria-pressed', voiceOn?'true':'false');
+  elVoice.textContent = voiceOn ? 'Narration on' : 'Turn on narration';
+  if(!voiceOn){ hush(); return; }
+  preloadChapter(cur); preloadChapter(cur+1);
+  /* this click is the gesture a browser needs before it will play anything */
+  var ns=SCENES[cur].narr||[], entry=null;
+  for(var i=0;i<ns.length;i++) if(ns[i][0]<=t) entry=ns[i];
+  if(entry) say(entry); else if(ns.length && ns[0][0]-t<1.2) { say(ns[0]); said=1; }
+});
+var elPick=document.getElementById('vpick');
+elPick.value=VOICE;
+elPick.addEventListener('change',function(){
+  VOICE=elPick.value;
+  try{ localStorage.setItem('marchland-voice',VOICE); }catch(e){}
+  clips={}; hush();
+  if(voiceOn){
+    preloadChapter(cur);
+    var ns=SCENES[cur].narr||[], entry=null;
+    for(var i=0;i<ns.length;i++) if(ns[i][0]<=t) entry=ns[i];
+    if(entry) say(entry);
+  }
+});
+document.addEventListener('visibilitychange',function(){ if(document.hidden) hush(); });
+window.addEventListener('pagehide',hush);
+elPrev.addEventListener('click',function(){ go(cur-1); });
+elNext.addEventListener('click',function(){
+  if(cur<SCENES.length-1) go(cur+1);
+  else { runTo(chapterDur(cur)-0.01); draw(); }
+});
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT') return;
+  if(e.key==='ArrowRight'){ elNext.click(); e.preventDefault(); }
+  if(e.key==='ArrowLeft'){ elPrev.click(); e.preventDefault(); }
+  if(e.key===' '){ elPlay.click(); e.preventDefault(); }
+});
+
+if(REDUCED){ elPlay.textContent='Play'; }
+fit();
+load(0, REDUCED);
+requestAnimationFrame(frame);
+
+/* keep state across republishes where the platform supports it */
+try{
+  if(window.claude && window.claude.hot && window.claude.hot.snapshot){
+    window.claude.hot.snapshot(function(){ return {scene:cur}; });
+  }
+}catch(e){}
+
+})();
+</script>
+
+</body>
+</html>
