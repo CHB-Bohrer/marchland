@@ -506,13 +506,21 @@ function say(h){ document.getElementById('status').innerHTML='<span>'+h+'</span>
 
 var MAX_COLLECTS=2;                                  // per rolling 24 hours
 function recentCollects(pl){ return (pl.collects||[]).filter(function(t){ return Date.now()-t<864e5; }); }
+/* Not "since midnight" — a rolling 24h window measured back from each collect.
+   Two collections late one evening can still block a collect at roughly the
+   same time the next evening, before anything has been collected that day. */
+function nextCollectWait(pl){
+  var recent=recentCollects(pl);
+  if(recent.length<MAX_COLLECTS) return null;
+  var next=Math.min.apply(null,recent)+864e5, h=(next-Date.now())/36e5;
+  return h<1?Math.round(h*60)+' minutes':h.toFixed(1)+' hours';
+}
 function collect(){
   var pl=me(); if(!pl) return;
   var input=document.getElementById('stepsin');
   var recent=recentCollects(pl);
   if(recent.length>=MAX_COLLECTS){
-    var next=Math.min.apply(null,recent)+864e5, h=(next-Date.now())/36e5;
-    return say('<span class="bad">Twice a day is the limit.</span> Next collection in <b>'+(h<1?Math.round(h*60)+' minutes':h.toFixed(1)+' hours')+'</b> — the steps keep counting in the meantime.');
+    return say('<span class="bad">Two per rolling 24 hours is the limit.</span> Next collection opens in <b>'+nextCollectWait(pl)+'</b> — the steps keep counting in the meantime.');
   }
   var steps=parseFloat(input.value);
   if(!isFinite(steps)||steps<=0) return say('Type the number of steps your phone recorded since you last collected.');
@@ -757,10 +765,10 @@ function render(){
   document.getElementById('s-gar').classList.toggle('warn',R.gar[0]<R.gar[1]);
   var days=Math.min(CAP_DAYS,(Date.now()-pl.lastCollect)/864e5);
   var raw=(Date.now()-pl.lastCollect)/864e5;
-  var used=recentCollects(pl).length;
+  var used=recentCollects(pl).length, wait=nextCollectWait(pl);
   document.getElementById('bankinfo').textContent =
     'bank: '+days.toFixed(1)+' of '+CAP_DAYS+' days'+(raw>CAP_DAYS?' — '+(raw-CAP_DAYS).toFixed(1)+'d expired':'')
-    +' · '+used+'/'+MAX_COLLECTS+' collections today'
+    +' · '+used+'/'+MAX_COLLECTS+' in the last 24h'+(wait?' (next in '+wait+')':'')
     +' · '+R.sup+'/'+R.own+' cells supplied';
   document.getElementById('collect').disabled = used>=MAX_COLLECTS;
   var rows=Object.keys(G.players).map(function(pid){
