@@ -907,7 +907,7 @@ NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
    in a robot voice. */
 var voiceOn=true, clips={}, nowPlaying=null, voiceBroken=false;
 function clipFor(id){
-  var src='audio/'+id+'.mp3';
+  var src='marchland-deploy/audio/'+id+'.mp3';
   var a=clips[src];
   if(!a){
     a=new Audio(src); a.preload='auto';
