@@ -97,29 +97,62 @@ td.n{ font-family:var(--mono); font-variant-numeric:tabular-nums; }
 ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; }
 .copybox{ display:flex; gap:8px; align-items:center; margin-top:8px; }
 .copybox input{ flex:1 1 auto; font-family:var(--mono); font-size:12px; }
+
+/* claims: every collection is public and open to challenge */
+.pick{ font-size:13px; color:var(--ink-2); border:1px dashed var(--rule); padding:7px 11px; border-radius:2px; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.pick:hover{ border-color:var(--ink-2); color:var(--ink); }
+.pick.on{ border-style:solid; border-color:var(--ink-2); color:var(--ink); }
+.notice{ padding:10px 12px; border-bottom:1px solid var(--rule); font-size:13.5px; background:var(--surface); display:flex; flex-direction:column; gap:6px; }
+.notice button{ padding:4px 9px; font-size:12px; vertical-align:1px; }
+.claims-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; padding:14px 18px 4px; }
+.claims-head h2{ margin:0; }
+.chart{ padding:6px 18px 12px; }
+.axisnote{ font-family:var(--mono); font-size:10px; color:var(--ink-2); margin-bottom:6px; }
+.crow{ display:grid; grid-template-columns:110px minmax(0,440px) 92px; gap:12px; align-items:end; padding:4px 0; }
+.crow .who{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.crow svg{ width:100%; height:30px; display:block; overflow:visible; }
+.crow .tot{ font-family:var(--mono); font-size:11px; color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums; }
+.crow rect.hit{ fill:transparent; }
+.crow rect.hit:hover{ fill:var(--rule); fill-opacity:.35; }
+.log{ border-top:1px solid var(--rule); }
+.claim{ display:grid; grid-template-columns:minmax(0,1.1fr) minmax(0,1.3fr) auto; gap:4px 14px; align-items:center; padding:9px 18px; border-bottom:1px solid var(--rule); font-size:14px; }
+.claim .amt{ font-family:var(--mono); font-size:13px; font-variant-numeric:tabular-nums; }
+.claim .meta{ font-family:var(--mono); font-size:11px; color:var(--ink-2); }
+.claim .acts{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+.claim .acts button{ padding:5px 9px; font-size:12px; }
+.claim.void .amt{ text-decoration:line-through; color:var(--ink-2); }
+.claim .shot{ grid-column:1/-1; padding-top:6px; }
+.claim .shot img{ max-width:min(100%,360px); max-height:560px; border:1px solid var(--rule); display:block; }
+.chip{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--rule); padding:1px 6px; border-radius:2px; color:var(--ink-2); white-space:nowrap; }
+.chip.disputed{ border-color:var(--ink); color:var(--ink); }
+.empty{ padding:14px 18px; }
+@media (max-width:560px){
+  .claim{ grid-template-columns:minmax(0,1fr); gap:3px; padding:10px 16px; }
+  .claim .acts{ justify-content:flex-start; }
+  .claim .acts:empty{ display:none; }
+  .crow{ grid-template-columns:78px minmax(0,1fr) 62px; gap:8px; }
+  .chart, .claims-head{ padding-left:16px; padding-right:16px; }
+}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <h1>Marchland</h1>
-  <p class="sub" id="subline">Two players · shared board</p>
+  <p class="sub"><span id="subline">Shared board</span> · <a href="manual/" style="color:inherit">How to play</a></p>
 
   <div id="offline-note" class="banner hide"></div>
 
   <!-- ── join / create ─────────────────────────────────────────────── -->
   <div class="panel" id="join-panel">
     <div class="pad">
-      <h2>Join a march</h2>
-      <p class="muted">Pick a name your opponent will recognise, then either start a new march or type the code they sent you.</p>
+      <h2>Enter the march</h2>
+      <p class="muted">There is one shared board. Type the name the others know you by — the same name on any phone or computer brings back your own ground.</p>
       <div class="steps" style="margin-top:12px">
-        <div class="field"><label for="handle">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:150px"></div>
-        <div class="field"><label for="code">March code</label><input id="code" maxlength="10" placeholder="e.g. OTTER" style="width:130px;text-transform:uppercase"></div>
-        <button id="join" class="go">Join that march</button>
-        <button id="create">Start a new one</button>
-        <button id="test">Test connection</button>
+        <div class="field"><label for="handle">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:170px" autocomplete="nickname"></div>
+        <button id="join" class="go">Enter</button>
       </div>
-      <p class="muted" style="margin-top:12px" id="join-hint">Your name is stored only in this browser. No sign-up, no email, no password.</p>
+      <p class="muted" style="margin-top:12px" id="join-hint">Your name is remembered in this browser. No sign-up, no email, no password.</p>
     </div>
   </div>
 
@@ -129,15 +162,14 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
     <div class="panel">
       <div class="pad" style="padding-bottom:12px">
         <div class="row">
-          <div><span class="muted">March</span> <b class="mono" id="gamecode">—</b></div>
           <div><span class="muted">You are</span> <b id="myname">—</b> <span class="dot" id="mydot"></span></div>
           <span class="spacer"></span>
           <span class="muted mono" id="syncstate">·</span>
-          <button id="leave">Leave</button>
+          <button id="leave" title="Sign out on this device, e.g. to let someone else play">Switch player</button>
         </div>
         <div class="copybox">
-          <input id="invite" readonly>
-          <button id="copy">Copy invite</button>
+          <input id="invite" readonly aria-label="Link to the game">
+          <button id="copy">Copy link</button>
         </div>
       </div>
     </div>
@@ -150,16 +182,20 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
         <div class="stat" id="s-grain"><span class="k">Grain</span><span class="v" id="v-grain">0</span><span class="u" id="u-grain">+0 net</span></div>
         <div class="stat"><span class="k">Field</span><span class="v" id="v-field">0</span><span class="u">soldiers</span></div>
         <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
-        <div class="stat"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u">squares</span></div>
+        <div class="stat" id="s-march"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u" id="u-march">squares</span></div>
       </div>
+
+      <div class="notice hide" id="claimnote"></div>
 
       <div class="bar">
         <div class="field"><label for="stepsin">Steps since you last collected</label>
           <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="read it off Health" style="width:180px">
         </div>
+        <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label>
         <button id="collect" class="go">Collect</button>
         <span class="muted mono" id="bankinfo">—</span>
       </div>
+      <input type="file" accept="image/*" id="shotlate" class="hide">
 
       <div class="canvas-pad">
         <canvas id="board"></canvas>
@@ -197,6 +233,16 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
         <tbody id="standings"></tbody>
       </table>
     </div>
+
+    <div class="panel" id="claims-panel">
+      <div class="claims-head">
+        <h2>Claim log</h2>
+        <span class="muted">Anyone can dispute a collection for 12 hours. A dispute freezes those marches while the other players vote for up to 24 hours; a majority of them can void it.</span>
+      </div>
+      <div class="chart" id="claims-chart"></div>
+      <div class="log" id="claims-log"></div>
+      <div class="pad hide" id="claims-more-wrap" style="padding-top:10px;padding-bottom:12px"><button id="claims-more">Show older claims</button></div>
+    </div>
   </div>
 
   <!-- ── setup ─────────────────────────────────────────────────────── -->
@@ -211,7 +257,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
         <li>Open this file in a text editor, find the line near the top that reads <code>var DB_URL = "";</code> and paste the URL between the quotes. Save.</li>
         <li>Put the file online so your opponent can reach it — a free GitHub Pages repo, Netlify or Cloudflare Pages all work. Send them the link.</li>
       </ol>
-      <p class="muted" style="margin-top:12px"><b>Two things worth knowing.</b> Test mode leaves the database open to anyone who has the URL, which is fine for a game between people who trust each other and wrong for anything else — Firebase will email you in 30 days to say the rules are about to expire, and you can set them to <code>{"rules":{"marchland":{".read":true,".write":true}}}</code> to keep it as is. And because the board lives in your database, a determined player could edit their own step count. Between family that is a social problem, not a technical one; the notes on real anti-cheat are in the design document.</p>
+      <p class="muted" style="margin-top:12px"><b>Two things worth knowing.</b> Test mode leaves the database open to anyone who has the URL, which is fine for a game between people who trust each other and wrong for anything else — Firebase will email you in 30 days to say the rules are about to expire, and you can set them to <code>{"rules":{"marchland":{".read":true,".write":true},"marchland_shots":{".read":true,".write":true}}}</code> to keep it as is. And because the board lives in your database, a determined player could edit their own step count. Between family that is a social problem, not a technical one; the notes on real anti-cheat are in the design document.</p>
     </div>
   </div>
 
@@ -290,8 +336,10 @@ function dbGet(path){
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',{cache:'no-store'})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
+var lastWrite=0;                                    // a pull that started before this is stale
 function dbPut(path,val){
   if(!online){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(val)); }catch(e){} return Promise.resolve(val); }
+  lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
     {method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json'}})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
@@ -313,12 +361,15 @@ try{ myName=localStorage.getItem('marchland.name')||''; }catch(e){}
 
 /* ═══ game state ═══════════════════════════════════════════════════════
    G = { v, code, created, players:{pid:{name,seat,q,r,res,field,squares,
-         lastCollect,collected,lastTick,seen}}, cells:{ "q_r": {o,w,k,l,g,d} } }   */
+         lastCollect,collected,lastTick,seen,voids}}, cells:{ "q_r": {o,w,k,l,g,d} },
+         claims:{ id:{pid,steps,got,t,voters:{pid:1},shot,votes:{pid:{v,t}},final} } }
+   Screenshots live outside the board, at /marchland_shots/<code>/<id>, so the
+   board download that every change triggers never drags images along.     */
 var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
 var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
-  return { v:1, code:code, created:Date.now(), players:{}, cells:{} };
+  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{} };
 }
 function cellOf(q,r){
   var c=G.cells[key(q,r)];
@@ -467,11 +518,18 @@ function pushCell(q,r){
 function ok(){ dirty=false; setSync('saved '+new Date().toLocaleTimeString()); }
 function fail(){ dirty=true; setSync('could not save — retrying'); }
 function push(){ return pushMe(); }
+/* one small write under the board, e.g. a single claim or a single vote */
+function putPath(sub,val){
+  if(!online) return pushAll();
+  return dbPut('/marchland/'+gameCode+sub,val).then(bumpRev).then(ok,fail);
+}
 
+function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify(G.cells);
+  var before=JSON.stringify([G.cells,G.claims||{},othersOf(G.players)]);
   G.cells=remote.cells||{};
+  G.claims=remote.claims||{};
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -481,16 +539,24 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify(G.cells)!==before;
+  return JSON.stringify([G.cells,G.claims,othersOf(G.players)])!==before;
 }
+var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
   if(!G||pulling||dirty) return;
   if(typeof document!=='undefined' && document.hidden) return;   // a hidden tab costs nothing
   pulling=true;
+  var started=Date.now();
   dbGet('/marchland/'+gameCode+'/rev').then(function(rev){
-    if(!rev || rev<=myRev){ pulling=false; return; }              // nothing new: ~15 bytes spent
+    // "different", not "newer": revisions are stamped by each device's own clock,
+    // and a phone running a second slow would otherwise have its writes ignored
+    if(!rev || (rev===myRev && !refetch)){ pulling=false; return; } // nothing new: ~15 bytes spent
     return dbGet('/marchland/'+gameCode).then(function(remote){
       pulling=false;
+      // I wrote something while this was in flight, so the copy that came back
+      // may be missing it. Drop it and fetch again on the next poll.
+      if(lastWrite>=started){ refetch=true; return; }
+      refetch=false;
       myRev=rev;
       if(applyRemote(remote)){
         render();
@@ -515,6 +581,124 @@ function nextCollectWait(pl){
   var next=Math.min.apply(null,recent)+864e5, h=(next-Date.now())/36e5;
   return h<1?Math.round(h*60)+' minutes':h.toFixed(1)+' hours';
 }
+/* ═══ claims ═══════════════════════════════════════════════════════════
+   Every collection becomes a public claim. Its marches can be spent at once;
+   for CHALLENGE_MS anyone else may dispute it. A dispute freezes those marches
+   and opens a vote among the players who were in the game when it was made.
+   A strict majority of them voids it; otherwise it stands when everyone has
+   voted or VOTE_MS runs out. The claimant's own tab applies a void to its own
+   record, because only that tab ever writes it. */
+var CHALLENGE_MS=12*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5;
+function claimState(c,now){
+  now=now||Date.now();
+  var voters=Object.keys(c.voters||{}), n=voters.length, close=c.t+CHALLENGE_MS;
+  var votes=c.votes||{}, firstNo=Infinity;
+  voters.forEach(function(p){ var v=votes[p]; if(v&&v.v==='no'&&v.t<=close&&v.t<firstNo) firstNo=v.t; });
+  var disputed=firstNo<Infinity, deadline=disputed?firstNo+VOTE_MS:close;
+  var no=0, ok=0, noBy=[];
+  voters.forEach(function(p){
+    var v=votes[p]; if(!v||v.t>deadline) return;          // too late to count
+    if(v.v==='no'){ no++; noBy.push(p); } else if(v.v==='ok') ok++;
+  });
+  var out={n:n,no:no,ok:ok,noBy:noBy,until:deadline,disputed:disputed};
+  if(c.final){ out.s=c.final; return out; }
+  if(!n){ out.s='stands'; return out; }
+  if(!disputed){ out.s=(ok>=n||now>=close)?'stands':'open'; return out; }
+  if(no*2>n){ out.s='void'; return out; }
+  out.s=(ok*2>=n||no+ok>=n||now>=deadline)?'stands':'disputed';
+  return out;
+}
+/* marches from my claims that I can't touch right now */
+function heldFor(pid){
+  var pl=G.players[pid], held=0, voids=(pl&&pl.voids)||{};
+  for(var id in (G.claims||{})){
+    var c=G.claims[id]; if(c.pid!==pid) continue;
+    var s=claimState(c).s;
+    if(s==='disputed' || (s==='void'&&!voids[id])) held+=c.got||0;
+  }
+  return held;
+}
+function avail(){ var pl=me(); return pl?pl.squares-heldFor(ME):0; }
+function hoursLeft(ts){
+  var h=(ts-Date.now())/36e5;
+  return h<1 ? Math.max(1,Math.round(h*60))+'m' : Math.round(h)+'h';
+}
+function nameOf(pid){ var p=G.players[pid]; return p?p.name:'someone who left'; }
+function namesOf(pids){ return pids.map(function(p){ return esc(nameOf(p)); }).join(' & '); }
+
+/* runs before every render: applies my voided claims, locks decided votes, prunes */
+function settleMine(){
+  if(!G||!me()) return;
+  var pl=me(), now=Date.now(), mine=false, writes=[];
+  pl.voids=pl.voids||{};
+  Object.keys(G.claims||{}).forEach(function(id){
+    var c=G.claims[id]; if(!c||c.pid!==ME) return;
+    var st=claimState(c,now);
+    if(st.s==='void' && !pl.voids[id]){
+      pl.squares-=(c.got||0);
+      pl.collected=Math.max(0,(pl.collected||0)-(c.steps||0));
+      pl.voids[id]=now; mine=true;
+    }
+    // once votes have decided it, write the outcome down so late votes can't reopen it
+    if((st.s==='void'||st.s==='stands') && !c.final && c.votes){
+      c.final=st.s; writes.push(['/claims/'+id+'/final',st.s]);
+    }
+    if(c.t<now-KEEP_MS && (st.s==='void'||st.s==='stands')){
+      delete G.claims[id]; writes.push(['/claims/'+id,null]);
+      if(c.shot && online) dbPut('/marchland_shots/'+gameCode+'/'+id,null).catch(function(){});
+    }
+  });
+  for(var v in pl.voids) if(now-pl.voids[v]>KEEP_MS+10*864e5){ delete pl.voids[v]; mine=true; }
+  var chain=mine?pushMe():Promise.resolve();
+  if(writes.length){
+    chain.then(function(){
+      if(!online) return pushAll();
+      return Promise.all(writes.map(function(w){ return dbPut('/marchland/'+gameCode+w[0],w[1]); }))
+        .then(bumpRev).then(ok,fail);
+    });
+  }
+}
+
+/* screenshots: shrunk to a JPEG of a few dozen KB before they leave the phone */
+var pendingShot=null, shotCache={}, openShots={};
+function shrink(file){
+  return new Promise(function(res,rej){
+    var url=URL.createObjectURL(file), img=new Image();
+    img.onload=function(){
+      function enc(side,qual){
+        var k=Math.min(1,side/Math.max(img.width,img.height));
+        var cv=document.createElement('canvas');
+        cv.width=Math.round(img.width*k); cv.height=Math.round(img.height*k);
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        return cv.toDataURL('image/jpeg',qual);
+      }
+      var d=enc(1200,0.62);
+      if(d.length>350000) d=enc(900,0.5);
+      URL.revokeObjectURL(url); res(d);
+    };
+    img.onerror=function(){ URL.revokeObjectURL(url); rej(new Error('That file is not an image this browser can read.')); };
+    img.src=url;
+  });
+}
+function attachShot(id,file){
+  if(!online){ say('Screenshots need the shared database — this board is local only.'); return; }
+  say('Attaching the screenshot…');
+  shrink(file).then(function(data){
+    shotCache[id]=data;
+    return dbPut('/marchland_shots/'+gameCode+'/'+id,data).then(function(){
+      if(G.claims[id]) G.claims[id].shot=true;
+      return putPath('/claims/'+id+'/shot',true);
+    });
+  }).then(function(){ render(); say('Screenshot attached — anyone checking the claim can open it from the claim log.'); },
+          function(e){ say('<span class="bad">Could not attach the screenshot</span> ('+esc(e.message)+'). The claim itself is saved.'); });
+}
+function resetShotPick(){
+  pendingShot=null;
+  document.getElementById('shotin').value='';
+  document.getElementById('shotlbl').textContent='+ Health screenshot';
+  document.getElementById('shotpick').classList.remove('on');
+}
+
 function collect(){
   var pl=me(); if(!pl) return;
   var input=document.getElementById('stepsin');
@@ -528,14 +712,46 @@ function collect(){
   var ceiling=Math.round(days*MAX_STEPS_DAY);
   var capped=false;
   if(steps>ceiling){ steps=ceiling; capped=true; }
-  var km=steps/STEPS_PER_KM, got=squaresFor(km);
-  pl.squares+=got; pl.collected=(pl.collected||0)+steps; pl.lastCollect=Date.now();
-  recent.push(Date.now()); pl.collects=recent;
+  steps=Math.round(steps);
+  var km=steps/STEPS_PER_KM, got=squaresFor(km), now=Date.now();
+  var owed=pl.squares<0?-pl.squares:0;
+  var id=ME+'-'+now.toString(36), voters={};
+  Object.keys(G.players).forEach(function(p){ if(p!==ME) voters[p]=1; });
+  G.claims=G.claims||{};
+  G.claims[id]={pid:ME,steps:steps,got:got,t:now,voters:voters,shot:false};
+  pl.squares+=got; pl.collected=(pl.collected||0)+steps; pl.lastCollect=now;
+  recent.push(now); pl.collects=recent;
   input.value='';
-  render(); push();
-  var m='Banked <b>'+Math.round(steps).toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+got+' marches</span>.';
+  var file=pendingShot; resetShotPick();
+  render();
+  pushMe().then(function(){ return putPath('/claims/'+id,G.claims[id]); })
+          .then(function(){ if(file) attachShot(id,file); });
+  var m='Banked <b>'+steps.toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+got+' marches</span>, yours to spend now.';
+  if(owed) m+=' '+Math.min(owed,got)+' of them paid back what a voided claim took.';
+  if(Object.keys(voters).length) m+=' The others have 12 hours to dispute it.';
   if(capped) m+=' <span class="bad">Trimmed to '+CAP_DAYS+' days&rsquo; worth</span> — the store only holds '+CAP_DAYS+' days.';
   say(m);
+}
+
+var armed=null;                                     // dispute needs a second tap to confirm
+function vote(id,v){
+  var c=G.claims[id]; if(!c||!(c.voters&&c.voters[ME])) return;
+  var st=claimState(c);
+  if(st.s==='stands'||st.s==='void') return say('That claim is already settled.');
+  if(st.s==='open' && v==='no' && !(armed&&armed.id===id&&armed.until>Date.now())){
+    armed={id:id,until:Date.now()+5000}; renderClaims();
+    setTimeout(function(){ if(armed&&armed.id===id){ armed=null; renderClaims(); } },5100);
+    return;
+  }
+  armed=null;
+  c.votes=c.votes||{}; c.votes[ME]={v:v,t:Date.now()};
+  render();
+  putPath('/claims/'+id+'/votes/'+ME,c.votes[ME]);
+  var after=claimState(c), who=esc(nameOf(c.pid));
+  if(after.s==='void') say('Voided — '+who+' loses those '+c.got+' marches.');
+  else if(st.s==='open') say('Disputed. '+who+'&rsquo;s '+c.got+' marches are frozen while the others vote — the vote closes in '+hoursLeft(after.until)+'.');
+  else if(after.s==='stands') say('Settled — '+who+'&rsquo;s claim stands.');
+  else say('Vote recorded. You can change it until the vote closes.');
 }
 
 function spendMarch(q,r){
@@ -544,8 +760,12 @@ function spendMarch(q,r){
   if(c.o===ME) return say('You already hold that ground.');
   if(!adjacentTo(q,r,ME)) return say('Marches extend a border — pick a cell touching your own ground.');
   if(c.k) return say('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
-  var cost=c.o?2:1;
-  if(pl.squares<cost) return say('Not enough marches — that cell costs '+cost+'. Collect your steps.');
+  var cost=c.o?2:1, held=heldFor(ME);
+  if(pl.squares-held<cost){
+    if(held) return say('Not enough marches — that cell costs '+cost+', and <b>'+held+'</b> of yours are frozen by a dispute. See the claim log.');
+    if(pl.squares<0) return say('A voided claim left you <b>'+(-pl.squares)+'</b> marches in the red. Your next collection pays that back first.');
+    return say('Not enough marches — that cell costs '+cost+'. Collect your steps.');
+  }
   var guns=c.o?coverOn(q,r,ME):0, need=guns+(c.w||0);
   if(need>pl.field) return say('<span class="bad">That cell needs '+need+' soldier'+(need>1?'s':'')+'</span> — '+(guns?guns+' to cross the guns':'')+(guns&&c.w?' and ':'')+(c.w?c.w+' to break the wall':'')+'. You have '+pl.field+'.');
   pl.squares-=cost; pl.field-=need; c.w=0; c.o=ME;
@@ -553,7 +773,7 @@ function spendMarch(q,r){
   render(); pushCell(q,r); pushMe();
   var m='Cell taken for <b>'+cost+'</b> march'+(cost>1?'es':'')+'.';
   if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost.</span>';
-  say(m+' <b>'+pl.squares+'</b> left.');
+  say(m+' <b>'+avail()+'</b> left.');
 }
 
 /* Castles are meant to be rare: each one costs more than the last, and they
@@ -675,7 +895,7 @@ function draw(){
   ctx.clearRect(0,0,W,H);
   ctx.fillStyle=T['--sink']; ctx.fillRect(0,0,W,H);
   var sup=me()?supplied(ME):{};
-  var haveMarch=me()&&me().squares>0;
+  var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
   var guns=[], walls=[], builds=[];
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
@@ -751,13 +971,18 @@ function draw(){
 /* ═══ render ═══════════════════════════════════════════════════════════ */
 function render(){
   if(!G||!me()) return;
+  G.claims=G.claims||{};
+  settleMine();
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
   document.getElementById('v-timber').textContent=Math.round(pl.res.timber);
   document.getElementById('v-iron').textContent=Math.round(pl.res.iron);
   document.getElementById('v-grain').textContent=Math.round(pl.res.grain);
   document.getElementById('v-field').textContent=pl.field;
-  document.getElementById('v-march').textContent=pl.squares;
+  var held=heldFor(ME), spendable=pl.squares-held;
+  document.getElementById('v-march').textContent=spendable;
+  document.getElementById('u-march').textContent= held ? held+' frozen' : (spendable<0 ? 'owed' : 'squares');
+  document.getElementById('s-march').classList.toggle('warn',held>0||spendable<0);
   document.getElementById('u-grain').textContent=(R.net>=0?'+':'')+R.net+' / tick';
   document.getElementById('s-grain').classList.toggle('warn',R.net<0);
   document.getElementById('v-gar').textContent=R.gar[0]+'/'+R.gar[1];
@@ -788,7 +1013,118 @@ function render(){
   var ccLabel=document.querySelector('#m-castle .cost');
   if(ccLabel) ccLabel.textContent=cc.timber+' tm · '+cc.stone+' st · '+cc.iron+' ir';
   document.getElementById('m-troop').disabled=!(pl.res.iron>=25&&pl.res.grain>=40);
+  renderClaims();
   draw();
+}
+
+/* ═══ claim log ════════════════════════════════════════════════════════ */
+var showAllClaims=false, LOG_SHORT=12;
+var CHIP={open:'◷ open', disputed:'⚑ disputed', stands:'✓ stands', void:'✕ voided'};
+function dayStart(t){ var d=new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
+function fmtK(n){ return n>=10000 ? Math.round(n/1000)+'k' : n>=1000 ? (n/1000).toFixed(1).replace(/\.0$/,'')+'k' : String(n); }
+
+function renderClaims(){
+  var list=Object.keys(G.claims||{}).map(function(id){ var c=G.claims[id]; return {id:id,c:c,st:claimState(c)}; })
+    .sort(function(a,b){ return b.c.t-a.c.t; });
+  renderNotice(list);
+  renderChart(list);
+
+  var log=document.getElementById('claims-log');
+  if(!list.length){
+    log.innerHTML='<p class="muted empty">No claims yet. Every collection from now on shows up here.</p>';
+    document.getElementById('claims-more-wrap').classList.add('hide');
+    return;
+  }
+  var shown=showAllClaims?list:list.slice(0,LOG_SHORT);
+  log.innerHTML=shown.map(function(e){
+    var c=e.c, st=e.st, p=G.players[c.pid], col=p?'var('+seatColor(p.seat)+')':'var(--ink-2)';
+    var meta=[since(c.t)];
+    if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
+    if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
+    if(st.s==='void') meta.push('voided by '+namesOf(st.noBy));
+    if(st.s==='stands' && st.disputed) meta.push('survived a dispute');
+    var acts=[];
+    if(c.shot) acts.push('<button data-act="photo" data-id="'+e.id+'" aria-expanded="'+!!openShots[e.id]+'">'+(openShots[e.id]?'Hide':'Screenshot')+'</button>');
+    if(c.pid===ME && !c.shot && (st.s==='open'||st.s==='disputed') && online)
+      acts.push('<button data-act="addshot" data-id="'+e.id+'">+ Screenshot</button>');
+    var canVote=c.voters&&c.voters[ME];
+    if(canVote && st.s==='open'){
+      var hot=armed&&armed.id===e.id;
+      acts.push('<button data-act="no" data-id="'+e.id+'"'+(hot?' aria-pressed="true"':'')+'>'+(hot?'Tap again to dispute':'Dispute')+'</button>');
+    }
+    if(canVote && st.s==='disputed'){
+      var mine=c.votes&&c.votes[ME]&&c.votes[ME].v;
+      acts.push('<button data-act="ok" data-id="'+e.id+'" aria-pressed="'+(mine==='ok')+'">Let it stand</button>');
+      acts.push('<button data-act="no" data-id="'+e.id+'" aria-pressed="'+(mine==='no')+'">Void it</button>');
+    }
+    var shot='';
+    if(openShots[e.id]){
+      shot='<div class="shot">'+(shotCache[e.id]
+        ? '<img alt="'+esc(nameOf(c.pid))+'&rsquo;s Health screenshot for this claim" src="'+shotCache[e.id]+'">'
+        : '<span class="muted">Loading…</span>')+'</div>';
+    }
+    return '<div class="claim '+st.s+'">'
+      +'<div><span class="dot" style="background:'+col+'"></span>'+esc(nameOf(c.pid))+(c.pid===ME?' <span class="muted">— you</span>':'')
+      +'<div class="meta">'+meta.join(' · ')+'</div></div>'
+      +'<div><span class="amt">'+(c.steps||0).toLocaleString()+' steps → '+c.got+' marches</span> <span class="chip '+st.s+'">'+CHIP[st.s]+'</span></div>'
+      +'<div class="acts">'+acts.join('')+'</div>'+shot+'</div>';
+  }).join('');
+  var wrap=document.getElementById('claims-more-wrap');
+  wrap.classList.toggle('hide',list.length<=LOG_SHORT);
+  document.getElementById('claims-more').textContent=showAllClaims?'Show fewer':'Show all '+list.length+' claims (last 30 days)';
+}
+
+function renderNotice(list){
+  var lines=[], pl=me();
+  list.forEach(function(e){
+    var c=e.c, st=e.st;
+    if(c.pid===ME && st.s==='disputed'){
+      lines.push('<span><b>'+namesOf(st.noBy)+'</b> disputed your claim of '+c.steps.toLocaleString()+' steps. Its <b>'+c.got+' marches</b> are frozen until the vote closes in '+hoursLeft(st.until)+'.'
+        +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">+ Add a Health screenshot</button>')+'</span>');
+    }
+    if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
+      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was voided by '+namesOf(st.noBy)+' — '+c.got+' marches were taken back.</span>');
+    }
+    if(c.pid!==ME && st.s==='disputed' && c.voters && c.voters[ME] && !(c.votes&&c.votes[ME])){
+      lines.push('<span><b>'+esc(nameOf(c.pid))+'</b>&rsquo;s claim of '+c.steps.toLocaleString()+' steps is disputed and needs your vote — it&rsquo;s in the claim log below.</span>');
+    }
+  });
+  var n=document.getElementById('claimnote');
+  n.innerHTML=lines.join('');
+  n.classList.toggle('hide',!lines.length);
+}
+
+/* one row per player, same scale for everyone, last 14 days, today at the right */
+function renderChart(list){
+  var DAYS=14, today=dayStart(Date.now()), first=today-(DAYS-1)*864e5;
+  var pids=Object.keys(G.players).sort(function(a,b){ return G.players[a].seat-G.players[b].seat; });
+  var sums={}; pids.forEach(function(p){ sums[p]=new Array(DAYS).fill(0); });
+  list.forEach(function(e){
+    if(e.st.s==='void'||!sums[e.c.pid]) return;
+    var i=Math.round((dayStart(e.c.t)-first)/864e5);
+    if(i>=0&&i<DAYS) sums[e.c.pid][i]+=e.c.steps||0;
+  });
+  var max=0; pids.forEach(function(p){ sums[p].forEach(function(v){ if(v>max) max=v; }); });
+  var el=document.getElementById('claims-chart');
+  if(!max){ el.innerHTML=''; return; }
+  var BW=10, GAP=2, VH=28, VW=DAYS*(BW+GAP)-GAP;
+  var dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  el.innerHTML='<div class="axisnote">Steps claimed per day · last 14 days, today at the right · one scale for everyone (tallest bar '+max.toLocaleString()+') · voided claims left out</div>'
+    +pids.map(function(pid){
+      var p=G.players[pid], col='var('+seatColor(p.seat)+')', tot=0, bars='';
+      sums[pid].forEach(function(v,i){
+        tot+=v;
+        var x=i*(BW+GAP), h=v?Math.max(2,Math.round(v/max*VH)):0, d=new Date(first+i*864e5);
+        var label=dayName[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)+' · '+v.toLocaleString()+' steps';
+        if(h) bars+='<rect x="'+x+'" y="'+(VH-h)+'" width="'+BW+'" height="'+h+'" style="fill:'+col+'" pointer-events="none"/>';
+        bars+='<rect class="hit" x="'+(x-1)+'" y="0" width="'+(BW+GAP)+'" height="'+VH+'"><title>'+esc(p.name)+' · '+label+'</title></rect>';
+      });
+      return '<div class="crow"><div class="who"><span class="dot" style="background:'+col+'"></span>'+esc(p.name)+'</div>'
+        +'<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none" role="img" aria-label="'+esc(p.name)+': '+tot.toLocaleString()+' steps claimed in the last 14 days">'
+        +'<line x1="0" y1="'+(VH-.5)+'" x2="'+VW+'" y2="'+(VH-.5)+'" style="stroke:var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/>'
+        +bars+'</svg>'
+        +'<div class="tot">'+fmtK(tot)+' / 14d</div></div>';
+    }).join('');
 }
 
 /* ═══ interaction ══════════════════════════════════════════════════════ */
@@ -879,78 +1215,93 @@ document.getElementById('rival').addEventListener('click',function(){
 });
 document.getElementById('collect').addEventListener('click',collect);
 document.getElementById('stepsin').addEventListener('keydown',function(e){ if(e.key==='Enter') collect(); });
+document.getElementById('shotin').addEventListener('change',function(){
+  var f=this.files&&this.files[0];
+  if(!f){ resetShotPick(); return; }
+  if(!online){ resetShotPick(); return say('Screenshots need the shared database — this board is local only.'); }
+  pendingShot=f;
+  document.getElementById('shotlbl').textContent='✓ screenshot ready';
+  document.getElementById('shotpick').classList.add('on');
+  say('Screenshot ready. It goes up with your next collection so anyone checking the claim can see it.');
+});
+var lateFor=null;
+document.getElementById('shotlate').addEventListener('change',function(){
+  var f=this.files&&this.files[0], id=lateFor; this.value=''; lateFor=null;
+  if(f&&id&&G.claims[id]) attachShot(id,f);
+});
+function onClaimClick(ev){
+  var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
+  var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+  if(act==='no'||act==='ok') return vote(id,act);
+  if(act==='addshot'){ lateFor=id; document.getElementById('shotlate').click(); return; }
+  if(act==='photo'){
+    openShots[id]=!openShots[id];
+    if(openShots[id] && !shotCache[id] && online){
+      dbGet('/marchland_shots/'+gameCode+'/'+id).then(function(d){
+        shotCache[id]=d||''; if(!d) say('That screenshot could not be found.');
+        renderClaims();
+      }).catch(function(){ say('Could not load the screenshot — check your connection.'); });
+    }
+    renderClaims();
+  }
+}
+document.getElementById('claims-log').addEventListener('click',onClaimClick);
+document.getElementById('claimnote').addEventListener('click',onClaimClick);
+document.getElementById('claims-more').addEventListener('click',function(){ showAllClaims=!showAllClaims; renderClaims(); });
 
-/* ═══ join / create ════════════════════════════════════════════════════ */
-function enterGame(){
+/* ═══ join ═════════════════════════════════════════════════════════════
+   One board for everybody, for now. Earlier builds let anyone start a fresh
+   march under a new code; the family plays on this one. */
+var GAME_CODE='SPINE33';
+function enterGame(isNew){
   document.getElementById('join-panel').classList.add('hide');
   document.getElementById('setup-panel').classList.add('hide');
   document.getElementById('game').classList.remove('hide');
-  document.getElementById('gamecode').textContent=gameCode;
   document.getElementById('myname').textContent=me()?me().name:'—';
   document.getElementById('mydot').style.background='var('+seatColor(me()?me().seat:0)+')';
-  var url=location.href.split('#')[0]+'#'+gameCode;
-  document.getElementById('invite').value=url;
+  document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render();
-  say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then collect your steps when you have walked some.');
+  if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then collect your steps when you have walked some.');
+  else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
 }
-function joinOrCreate(code,creating){
+function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
-  if(!name) { document.getElementById('join-hint').textContent='Type a name first — it is how your opponent knows which border is yours.'; return; }
+  if(!name) { document.getElementById('join-hint').textContent='Type a name first — it is how the others know which border is yours.'; return; }
   myName=name; try{ localStorage.setItem('marchland.name',name); }catch(e){}
   ME=pidFor(name);
-  gameCode=code;
+  gameCode=GAME_CODE;
+  document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; myRev=remote.rev||0; }
-    else if(creating||!online){ G=blankGame(gameCode); }
-    else { document.getElementById('join-hint').textContent='No march with that code yet. Check the spelling, or start a new one.'; return; }
-    if(!G.players[ME]) seedPlayer(ME,name); else G.players[ME].name=name;
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; myRev=remote.rev||0; }
+    else G=blankGame(gameCode);
+    var isNew=!G.players[ME];
+    if(isNew) seedPlayer(ME,name); else G.players[ME].name=name;
     catchUp(ME);
-    enterGame(); pushAll();
-    location.hash=gameCode;
+    enterGame(isNew);
+    // a newcomer writes the ground they were seeded with; anyone else writes
+    // only their own record, so rejoining can never overwrite a vote or claim
+    if(isNew) pushAll(); else pushMe();
+    if(location.hash) history.replaceState(null,'',location.pathname+location.search);
   }).catch(function(e){
-    document.getElementById('join-hint').textContent='Could not reach the database ('+e.message+'). Check the URL in the settings at the top of this file.';
+    document.getElementById('join-hint').textContent='Could not reach the database ('+e.message+'). Check your connection and try again.';
   });
 }
-document.getElementById('create').addEventListener('click',function(){
-  var words=['OTTER','HEATH','MARCH','KEEP','BRIAR','FLINT','GORSE','WREN','ALDER','SPINE'];
-  var c=words[Math.floor(Math.random()*words.length)]+Math.floor(10+Math.random()*89);
-  document.getElementById('code').value=c;
-  joinOrCreate(c,true);
-});
-document.getElementById('join').addEventListener('click',function(){
-  var c=(document.getElementById('code').value||'').trim().toUpperCase();
-  if(!c) { document.getElementById('join-hint').textContent='Enter the code your opponent sent you, or start a new march.'; return; }
-  joinOrCreate(c,false);
-});
-document.getElementById('test').addEventListener('click',function(){
-  var hint=document.getElementById('join-hint');
-  if(!online){ hint.innerHTML='<b>No database URL set.</b> Paste your Firebase URL into line 18 of this file — the panel at the bottom of the page walks through it.'; return; }
-  hint.textContent='Testing…';
-  var stamp=Date.now();
-  dbPut('/marchland/_test',{at:stamp})
-    .then(function(){ return dbGet('/marchland/_test'); })
-    .then(function(back){
-      if(back && back.at===stamp) hint.innerHTML='<b style="color:var(--p0)">Connected.</b> Wrote to the database and read it straight back — you and anyone you invite will share a board.';
-      else hint.innerHTML='<b style="color:var(--p1)">Half working.</b> The write went through but came back wrong. Check that the database rules allow writes.';
-    })
-    .catch(function(e){
-      hint.innerHTML='<b style="color:var(--p1)">Could not reach the database</b> ('+esc(e.message)+'). Three things to check: the URL on line 18 is exactly what Firebase showed you, the database was created in <i>test mode</i>, and — if you opened this file straight off your desktop — try putting it online instead, since some browsers block requests from local files.';
-    });
-});
+document.getElementById('join').addEventListener('click',join);
+document.getElementById('handle').addEventListener('keydown',function(e){ if(e.key==='Enter') join(); });
 document.getElementById('copy').addEventListener('click',function(){
   var i=document.getElementById('invite');
   i.select();
-  try{ document.execCommand('copy'); this.textContent='Copied'; var b=this; setTimeout(function(){ b.textContent='Copy invite'; },1500); }catch(e){}
+  try{ document.execCommand('copy'); this.textContent='Copied'; var b=this; setTimeout(function(){ b.textContent='Copy link'; },1500); }catch(e){}
 });
 document.getElementById('leave').addEventListener('click',function(){
-  push().then(function(){ location.hash=''; location.reload(); });
+  // forget the name on this device so the next person can type theirs
+  push().then(function(){ try{ localStorage.removeItem('marchland.name'); }catch(e){} location.reload(); });
 });
 
 /* ═══ boot ═════════════════════════════════════════════════════════════ */
 readTokens();
 if(myName) document.getElementById('handle').value=myName;
-if(location.hash.length>1) document.getElementById('code').value=location.hash.slice(1).toUpperCase();
 if(!online){
   var n=document.getElementById('offline-note');
   n.classList.remove('hide');
@@ -960,6 +1311,8 @@ if(!online){
   document.getElementById('setup-panel').classList.add('hide');
   document.getElementById('subline').textContent='Shared board · no accounts needed';
 }
+// a returning player on this device goes straight to the board
+if(myName && online) join();
 setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); } } },60000);
 setInterval(function(){ if(G&&online) pull(); },20000);          // a walk-paced game needs no more
 setInterval(function(){ if(G&&me()) render(); },30000);
