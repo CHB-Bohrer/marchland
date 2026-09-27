@@ -5,12 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
 <meta property="og:title" content="Marchland Field Manual">
-<meta property="og:description" content="Eight chapters on how Marchland works, with narration.">
+<meta property="og:description" content="Nine chapters on how Marchland works, with narration.">
 <meta property="og:type" content="website">
 <style>
   html,body{margin:0;padding:0}
   :root{color-scheme:light dark;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
   body{font:16px/1.5 system-ui,-apple-system,"Segoe UI",Arial,sans-serif;background:#E5E8E2}
+  @media (prefers-color-scheme: dark){ body{background:#0E1619} }
   img{max-width:100%}
   [hidden]{display:none!important}
 </style>
@@ -125,7 +126,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">Eight chapters, about two minutes. Walking is the only currency in this game — everything below follows from that one rule. Press <b>Turn on narration</b> to have it read aloud, in British or American.</p>
+  <p class="standfirst">Nine chapters, about two and a half minutes. Walking is the only currency in this game — everything below follows from that one rule. Press <b>Turn on narration</b> to have it read aloud.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -144,14 +145,8 @@ footer a:hover{ color:var(--ink); }
     <button id="prev">Back</button>
     <button id="next">Next</button>
     <button id="voice" aria-pressed="false" hidden>Turn on narration</button>
-    <label class="vsel" for="vpick">Voice
-      <select id="vpick">
-        <option value="uk">British</option>
-        <option value="us">American</option>
-      </select>
-    </label>
     <span class="spacer"></span>
-    <span class="count" id="count">1 / 8</span>
+    <span class="count" id="count">1 / 9</span>
   </div>
 </div>
 
@@ -160,7 +155,9 @@ footer a:hover{ color:var(--ink); }
   <dl>
     <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
     <dt>Step bank</dt><dd>Holds 4 days; 30,000 steps a day counts at most</dd>
-    <dt>Collecting</dt><dd>Twice in any rolling 24 hours</dd>
+    <dt>Collecting</dt><dd>Twice in any rolling 24 hours; every collection is posted to the claim log</dd>
+    <dt>Disputes</dt><dd>Anyone else can dispute a claim for 12 hours; the disputed marches freeze while the other players vote, for up to 24 hours</dd>
+    <dt>Voiding</dt><dd>Needs a majority of the other players. A voided claim's marches are taken back, even if already spent — your next collection pays off the difference</dd>
     <dt>Empty cell</dt><dd>1 march</dd>
     <dt>Occupied cell</dt><dd>2 marches, plus a soldier per wall course and per gun covering it</dd>
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
@@ -774,49 +771,167 @@ scene({
   }
 });
 
+/* 9 ── claims and disputes */
+scene({
+  tag:'Claims', title:'Every claim can be challenged',
+  body:'Each collection goes up on a public claim log. Its marches can be spent straight away, but for twelve hours anyone else may dispute it. A dispute freezes those marches while the other players vote, for up to a day. Voiding needs a majority of them; anything less and the claim stands. A voided claim takes its marches back even if they are already spent — so attach a Health screenshot when you collect.',
+  dur:27,
+  init:function(){
+    M=blank(); M.status=''; M.card=null; M.clock=null; M.freeze=null; M.thaw=null; M.votes={}; M.pips=[];
+    M.hud=[['Dispute window','12 hours'],['Vote','up to 24 hours'],['To void','a majority of the others']];
+  },
+  beats:[
+    [0.6,function(n){
+      M.card=n; M.status='open';
+      for(var i=0;i<15;i++) M.pips.push(n+0.6+i*0.05);
+      M.note='Kit collects 12,000 steps. The claim goes up where everyone can see it.';
+      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','open']];
+    }],
+    [3.7,function(n){ M.clock=n; M.note='The fifteen marches are spendable at once. Meanwhile the dispute window runs for twelve hours.'; }],
+    [9.8,function(n){
+      M.status='disputed'; M.freeze=n;
+      M.note='Theodore disputes it. Kit’s fifteen marches freeze while the other two players vote.';
+      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','disputed'],['Frozen','15 marches']];
+    }],
+    [12.2,function(n){ M.votes.theo={v:'void',at:n}; }],
+    [13.8,function(n){ M.votes.chris={v:'stand',at:n}; M.note='One vote to void, one to let it stand. Voiding needs a majority, so the claim stands.'; }],
+    [15.6,function(n){
+      M.status='stands'; M.thaw=n;
+      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','stands'],['Frozen','none']];
+    }],
+    [19.8,function(){ M.note='Had both voted to void it, the fifteen marches would be taken back — even if Kit had already spent them.'; }],
+    [25.2,function(){ M.note='Attach a screenshot of the Health app when you collect. It settles most arguments before they start.'; }]
+  ],
+  draw:function(now){
+    var steel=T.steel, x0=56, cw=392;
+    /* the claim card */
+    if(M.card!=null){
+      var k=ease((now-M.card)/0.5), y=58+(1-k)*14;
+      ctx.save(); ctx.globalAlpha=k;
+      ctx.fillStyle=T.paper; ctx.fillRect(x0,y,cw,128);
+      ctx.strokeStyle=T.rule; ctx.lineWidth=1.2; ctx.strokeRect(x0+0.5,y+0.5,cw-1,127);
+      ctx.beginPath(); ctx.arc(x0+26,y+30,6,0,Math.PI*2); ctx.fillStyle=steel; ctx.fill();
+      labelText('KIT', x0+40, y+31, 15, T['ink-2'],'left');
+      bigText('12,000 steps', x0+20, y+72, 32, T.ink,'left');
+      labelText('→ 15 MARCHES', x0+22, y+106, 15, T['ink-2'],'left');
+      /* status chip */
+      var chip={open:['OPEN',T['ink-2']],disputed:['⚑ DISPUTED',T.p1],stands:['✓ STANDS',T.p0]}[M.status];
+      if(chip){
+        ctx.font='500 13px "IBM Plex Mono",ui-monospace,Menlo,monospace';
+        var tw=ctx.measureText(chip[0]).width+18, cx=x0+cw-18-tw, cy=y+18;
+        ctx.strokeStyle=chip[1]; ctx.lineWidth=1.4; ctx.strokeRect(cx+0.5,cy+0.5,tw,24);
+        labelText(chip[0], cx+tw/2, cy+13, 13, chip[1]);
+      }
+      ctx.restore();
+    }
+    /* the window, then the vote */
+    if(M.clock!=null){
+      var by=236, bw=cw, frac;
+      var label, right;
+      if(M.status==='open'){
+        var hrs=Math.max(0,12-(now-M.clock)*0.95);
+        frac=hrs/12; label='DISPUTE WINDOW'; right=Math.ceil(hrs)+'H LEFT';
+      } else if(M.status==='disputed'){
+        frac=Math.max(0,1-(now-M.freeze)*0.07); label='VOTE OPEN · UP TO 24H'; right='';
+      } else { frac=0; label='SETTLED'; right=''; }
+      labelText(label, x0, by-14, 14, T['ink-2'],'left');
+      if(right) labelText(right, x0+bw, by-14, 14, T.ink,'right');
+      ctx.fillStyle=T.sink; ctx.fillRect(x0,by,bw,12);
+      ctx.fillStyle=M.status==='disputed'?rgba(T.p1,0.55):T.brass; ctx.fillRect(x0,by,bw*frac,12);
+    }
+    /* voters */
+    if(M.freeze!=null){
+      var vy=318, voters=[['THEODORE',T.p1,'theo'],['CHRIS',T.p0,'chris']];
+      labelText('TO VOID: A MAJORITY OF THE OTHERS — 2 OF 2', x0, 282, 14, T['ink-2'],'left');
+      voters.forEach(function(v,i){
+        var vx=x0+i*200, vote=M.votes[v[2]];
+        var a=ease((now-M.freeze)/0.4);
+        ctx.save(); ctx.globalAlpha=a;
+        hexPath(vx+18,vy+18,16); ctx.fillStyle=rgba(v[1],0.25); ctx.fill(); ctx.strokeStyle=v[1]; ctx.lineWidth=1.6; ctx.stroke();
+        labelText(v[0], vx+44, vy+10, 14, T.ink,'left');
+        if(vote){
+          var vk=ease((now-vote.at)/0.35);
+          ctx.globalAlpha=a*vk;
+          bigText(vote.v==='void'?'Void it':'Let it stand', vx+44, vy+36, 21, vote.v==='void'?T.p1:T.p0,'left');
+        } else {
+          labelText('voting…', vx+44, vy+34, 14, T['ink-2'],'left');
+        }
+        ctx.restore();
+      });
+    }
+    /* Kit's marches: live, then frozen, then live again */
+    if(M.pips.length){
+      var px=516, py=86, gap=30;
+      labelText('KIT’S MARCHES', px-12, 58, 14, T['ink-2'],'left');
+      var frozenK=0;
+      if(M.freeze!=null) frozenK=ease((now-M.freeze)/0.5);
+      if(M.thaw!=null) frozenK=1-ease((now-M.thaw)/0.6);
+      for(var i=0;i<15;i++){
+        var b=M.pips[i]; if(now<b) continue;
+        var kk=ease((now-b)/0.3), col=i%5, row=Math.floor(i/5);
+        var x=px+col*gap, yy=py+row*gap;
+        ctx.save();
+        hexPath(x,yy,11*(0.6+0.4*kk));
+        ctx.globalAlpha=kk;
+        ctx.fillStyle= frozenK>0.5 ? rgba(T['ink-2'],0.18) : rgba(steel,0.9);
+        ctx.fill();
+        if(frozenK>0.5){ ctx.setLineDash([2,3]); ctx.strokeStyle=T['ink-2']; ctx.lineWidth=1.2; ctx.stroke(); }
+        ctx.restore();
+      }
+      if(frozenK>0.05){
+        ctx.save(); ctx.globalAlpha=frozenK;
+        bigText('frozen', px+2*gap, py+3*gap+14, 22, T.p1);
+        ctx.restore();
+      } else if(M.thaw!=null){
+        ctx.save(); ctx.globalAlpha=ease((now-M.thaw)/0.6);
+        bigText('spendable', px+2*gap, py+3*gap+14, 22, T.p0);
+        ctx.restore();
+      }
+    }
+  }
+});
+
 /* ══════════════════════════════════════════════════════════════════════
    NARRATION — a recorded track, rendered once with a neural voice and
    shipped with the page, so every listener hears the same thing rather than
    whatever synthesiser their device happens to have. Each entry is
-   [cue seconds, audio file, length, the words] — the words are kept only as
-   a fallback for a browser that cannot play the file.
+   [cue seconds, audio file, length, the words] — the words are kept so the
+   script can be read and re-recorded; they are never spoken by the device.
    ══════════════════════════════════════════════════════════════════════ */
 var NARRATION=[
- [[0.8,'n1_1',2.58,'You start with one keep, and the ground around it.'],[4.6,'n1_2',3.75,"The map is shared, but abstract. It isn't real geography."],[8.75,'n1_3',4.05,"Your seat sits far from everyone else's. You have to march to find them."]],
- [[0.6,'n2_1',1.58,'Steps become marches.'],[4.6,'n2_2',4.07,'One player walked four thousand steps. The other walked twenty thousand.'],[9.07,'n2_3',1.98,'Nine marches against nineteen.'],[11.46,'n2_4',5.55,"Five times the walking, barely twice the reward. That's what keeps the smaller walker in the game."]],
- [[1.0,'n3_1',3.03,'A march buys one cell touching ground you already hold.'],[4.43,'n3_2',2.99,"Borders creep outward. You can't leap across the map."],[8.1,'n3_3',4.48,'Six marches spent, and a quarry and an iron vein are now inside your border.']],
- [[1.2,'n4_1',2.5,'Their cells still fall. They just cost double.'],[4.1,'n4_2',2.45,'Two cells taken. Four marches gone.'],[8.1,'n4_3',3.54,'Double price is what stops a border collapsing in one evening.'],[12.04,'n4_4',3.69,"And a keep can't be taken outright. It has to be starved out."]],
- [[1.2,'n5_1',2.35,'Stone builds walls, three courses deep.'],[4.0,'n5_2',2.26,'A tower covers every cell beside it.'],[6.7,'n5_3',3.2,'Neither stops an attack. Both make it cost soldiers.'],[10.3,'n5_4',3.09,'The cell falls, and three of your four soldiers fall with it.'],[13.79,'n5_5',3.2,'Towers must be manned. Soldiers eat grain forever.']],
- [[1.4,'n6_1',1.92,'Terrain yields nothing on its own.'],[3.72,'n6_2',3.39,'A cell only pays if you can trace a path back to a castle.'],[7.51,'n6_3',2.92,'Red takes one cell: the neck of your eastern arm.'],[10.83,'n6_4',4.33,"Four cells are still yours. They're just not connected, so they yield nothing."],[15.57,'n6_5',2.71,"You didn't lose the ground. You lost the road to it."],[18.67,'n6_6',2.86,'Cutting a supply line beats taking the land it feeds.']],
- [[1.4,'n7_1',2.86,'A second castle is a campaign, not a purchase.'],[4.66,'n7_2',2.58,'No two keeps may stand within seven cells.'],[7.64,'n7_3',2.71,'So a new castle means pushing the border out first.'],[10.75,'n7_4',2.88,'Now the eastern arm draws supply from the new keep.'],[14.03,'n7_5',2.18,'And each castle costs more than the last.']],
- [[0.8,'n8_1',3.05,'Your steps keep counting whether the game is open or not.'],[5.7,'n8_2',3.18,'But the store holds four days. Anything older spoils.'],[9.28,'n8_3',2.56,'You can collect twice in any twenty-four hours.'],[12.24,'n8_4',3.5,'Walk as much as you like in between. It all keeps counting.']]
+ [[0.8, "n1_1", 2.76, "You start with one keep, and a little ground around it."], [4.6, "n1_2", 2.78, "The map is shared, but it isn't real geography."], [7.83, "n1_3", 3.89, "Everyone starts far apart, so you'll have to march to find each other."]],
+ [[0.6, "n2_1", 1.68, "Your steps become marches."], [4.6, "n2_2", 4.08, "Say one of you walks four thousand steps, and the other walks twenty thousand."], [9.13, "n2_3", 2.28, "That's nine marches, against nineteen."], [11.86, "n2_4", 6.1, "Five times the walking, but only about twice the reward. That's what keeps a lighter walker in the game."]],
+ [[1.0, "n3_1", 3.5, "Each march buys one cell, touching ground you already hold."], [4.95, "n3_2", 3.26, "So your border creeps outward. You can't jump across the map."], [8.66, "n3_3", 4.22, "Six marches later, there's a quarry and an iron vein inside your border."]],
+ [[1.2, "n4_1", 4.25, "When you reach someone else's land, you can still take it. It just costs double."], [5.9, "n4_2", 2.35, "Two cells taken, four marches gone."], [8.7, "n4_3", 3.86, "The double price is what stops a border collapsing in a single evening."], [13.01, "n4_4", 3.79, "And a keep can never be taken outright. It has to be starved out."]],
+ [[1.2, "n5_1", 2.74, "Stone builds walls, up to three courses deep."], [4.39, "n5_2", 2.16, "A tower covers every cell around it."], [7.0, "n5_3", 3.48, "Neither one stops an attack. They just make it cost soldiers."], [10.93, "n5_4", 3.07, "The cell falls, and three of your four soldiers fall with it."], [14.45, "n5_5", 3.65, "Towers need men inside them, and soldiers eat grain, forever."]],
+ [[1.4, "n6_1", 2.18, "Land doesn't produce anything on its own."], [4.03, "n6_2", 4.49, "A cell only pays if there's an unbroken path from it, back to one of your castles."], [8.97, "n6_3", 3.36, "Now red takes a single cell, the neck of your eastern arm."], [12.78, "n6_4", 4.32, "Those four cells are still yours. But they're cut off, so they yield nothing."], [17.55, "n6_5", 2.66, "You didn't lose the ground. You lost the road to it."], [20.66, "n6_6", 4.2, "Cutting a supply line is usually cheaper than taking the land it feeds."]],
+ [[1.4, "n7_1", 2.93, "A second castle is a campaign, not a purchase."], [4.78, "n7_2", 3.31, "No two of your keeps can stand within seven cells of each other."], [8.54, "n7_3", 2.71, "So building one means pushing your border out first."], [11.7, "n7_4", 3.29, "Now the eastern arm draws its supply from the new keep."], [15.44, "n7_5", 2.54, "And every castle costs more than the one before."]],
+ [[0.8, "n8_1", 3.29, "Your steps keep counting, whether the game is open or not."], [5.7, "n8_2", 3.5, "But the store only holds four days. Anything older spoils."], [9.65, "n8_3", 2.57, "You can collect twice in any twenty-four hours."], [12.67, "n8_4", 3.05, "Walk as much as you like in between. It all counts."]],
+ [[0.6, "n9_1", 2.66, "Every collection goes up on a public claim log."], [3.71, "n9_2", 5.66, "The marches are yours to spend right away. But for twelve hours, anyone else can dispute the claim."], [9.82, "n9_3", 3.53, "A dispute freezes those marches, while the other players vote."], [13.8, "n9_4", 5.59, "It takes a majority of them to void a claim. One vote each way isn't enough, so this one stands."], [19.84, "n9_5", 4.94, "If it had been voided, the marches would be taken back, even if they'd already been spent."], [25.23, "n9_6", 4.18, "A screenshot from the Health app is the easiest way to settle an argument."]]
 ];
 NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
 
-/* ── the voice ──────────────────────────────────────────────────────── */
-var SPEECH = ('speechSynthesis' in window) && ('SpeechSynthesisUtterance' in window);
-var voiceOn=false, clips={}, nowPlaying=null, useFiles=true;
-var VOICE='uk';
-try{ var st=localStorage.getItem('marchland-voice'); if(st==='uk'||st==='us') VOICE=st; }catch(e){}
-
-/* Safari wants AAC, Firefox wants Opus — ship both and ask the browser */
-var EXT=(function(){
-  try{
-    var probe=document.createElement('audio');
-    if(probe.canPlayType('audio/mp4; codecs="mp4a.40.2"')) return '.mp4';
-    if(probe.canPlayType('audio/ogg; codecs="opus"')) return '.ogg';
-  }catch(e){}
-  return '.mp4';
-})();
+/* ── the voice ──────────────────────────────────────────────────────────
+   Recorded clips only. There is deliberately no fallback to the device's
+   built-in speech synthesiser: if the clips can't load, the narration button
+   says so and the manual carries on silently, rather than reading the script
+   in a robot voice. */
+var voiceOn=false, clips={}, nowPlaying=null, voiceBroken=false;
 function clipFor(id){
-  var src='audio/'+VOICE+'_'+id+EXT;
+  var src='audio/'+id+'.mp3';
   var a=clips[src];
   if(!a){
     a=new Audio(src); a.preload='auto';
-    a.addEventListener('error',function(){ useFiles=false; });
+    a.addEventListener('error',function(){ narrationFailed(); });
     clips[src]=a;
   }
   return a;
+}
+function narrationFailed(){
+  if(voiceBroken) return;
+  voiceBroken=true; voiceOn=false; hush();
+  var b=document.getElementById('voice');
+  if(b){ b.textContent='Narration unavailable'; b.disabled=true; b.setAttribute('aria-pressed','false'); }
 }
 function preloadChapter(i){
   var ns=(SCENES[i]&&SCENES[i].narr)||[];
@@ -824,32 +939,23 @@ function preloadChapter(i){
 }
 function hush(){
   if(nowPlaying){ try{ nowPlaying.pause(); nowPlaying.currentTime=0; }catch(e){} nowPlaying=null; }
-  if(SPEECH){ try{ window.speechSynthesis.cancel(); }catch(e){} }
-}
-/* only reached if the recorded clips will not play on this browser */
-function synth(text){
-  if(!SPEECH||!text) return;
-  try{
-    window.speechSynthesis.cancel();
-    var u=new SpeechSynthesisUtterance(text);
-    u.rate=0.97; u.pitch=1; u.lang='en-US';
-    window.speechSynthesis.speak(u);
-  }catch(e){}
 }
 function say(entry){
-  if(!voiceOn||!entry) return;
+  if(!voiceOn||!entry||voiceBroken) return;
   hush();
-  if(!useFiles){ synth(entry[3]); return; }
   var a=clipFor(entry[1]);
   nowPlaying=a;
   try{ a.currentTime=0; }catch(e){}
   var pr=a.play();
-  if(pr&&pr.catch) pr.catch(function(){ useFiles=false; synth(entry[3]); });
+  if(pr&&pr.catch) pr.catch(function(err){
+    // Only an unplayable file counts as broken. A line cut short by a chapter
+    // change (AbortError) or blocked autoplay (NotAllowedError) is normal.
+    // A missing file is caught by the clip's own 'error' listener.
+    if(err && err.name==='NotSupportedError') narrationFailed();
+  });
 }
 function stillTalking(){
-  if(!voiceOn) return false;
-  if(nowPlaying && !nowPlaying.paused && !nowPlaying.ended) return true;
-  try{ return SPEECH && window.speechSynthesis.speaking; }catch(e){ return false; }
+  return !!(voiceOn && nowPlaying && !nowPlaying.paused && !nowPlaying.ended);
 }
 /* with the voice on, a chapter runs at least as long as its last line */
 function chapterDur(i){
@@ -958,19 +1064,6 @@ elVoice.addEventListener('click',function(){
   var ns=SCENES[cur].narr||[], entry=null;
   for(var i=0;i<ns.length;i++) if(ns[i][0]<=t) entry=ns[i];
   if(entry) say(entry); else if(ns.length && ns[0][0]-t<1.2) { say(ns[0]); said=1; }
-});
-var elPick=document.getElementById('vpick');
-elPick.value=VOICE;
-elPick.addEventListener('change',function(){
-  VOICE=elPick.value;
-  try{ localStorage.setItem('marchland-voice',VOICE); }catch(e){}
-  clips={}; hush();
-  if(voiceOn){
-    preloadChapter(cur);
-    var ns=SCENES[cur].narr||[], entry=null;
-    for(var i=0;i<ns.length;i++) if(ns[i][0]<=t) entry=ns[i];
-    if(entry) say(entry);
-  }
 });
 document.addEventListener('visibilitychange',function(){ if(document.hidden) hush(); });
 window.addEventListener('pagehide',hush);
