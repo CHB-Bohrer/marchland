@@ -69,6 +69,13 @@ h1{ font-family:var(--display); font-weight:700; font-size:clamp(32px,7.5vw,52px
 .stage{ border:1px solid var(--rule); background:var(--surface); }
 canvas{ display:block; width:100%; aspect-ratio:760/470; max-width:100%; background:var(--surface); }
 
+.stagewrap{ position:relative; }
+.start{ position:absolute; inset:0; margin:auto; width:max-content; height:max-content; font-family:var(--display); font-weight:700; font-size:clamp(18px,4vw,26px);
+  color:var(--paper); background:var(--p0); border:0; border-radius:3px; padding:14px 26px; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:4px;
+  box-shadow:0 6px 24px rgba(0,0,0,.18); }
+.start span{ font-family:var(--mono); font-weight:500; font-size:11px; letter-spacing:.1em; text-transform:uppercase; opacity:.85; }
+.start:hover{ filter:brightness(1.08); }
+.start[hidden]{ display:none; }
 .bar{ height:3px; background:var(--sink); position:relative; overflow:hidden; }
 .bar i{ position:absolute; inset:0 auto 0 0; width:0%; background:var(--brass); display:block; }
 
@@ -126,13 +133,16 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">Nine chapters, about two and a half minutes. Walking is the only currency in this game — everything below follows from that one rule. Press <b>Turn on narration</b> to have it read aloud.</p>
+  <p class="standfirst">Nine chapters, about three minutes, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
 
 <div class="stage">
-  <canvas id="stage" width="760" height="470" role="img" aria-label="Animated diagram of the current rule"></canvas>
+  <div class="stagewrap">
+    <canvas id="stage" width="760" height="470" role="img" aria-label="Animated diagram of the current rule"></canvas>
+    <button id="start" class="start">&#9654;&ensp;Start the tour <span>narrated &middot; about 3 minutes</span></button>
+  </div>
   <div class="bar"><i id="bar"></i></div>
   <div class="hud" id="hud"></div>
   <div class="caption">
@@ -144,7 +154,7 @@ footer a:hover{ color:var(--ink); }
     <button id="play" class="primary">Pause</button>
     <button id="prev">Back</button>
     <button id="next">Next</button>
-    <button id="voice" aria-pressed="false" hidden>Turn on narration</button>
+    <span class="count" id="vnote"></span>
     <span class="spacer"></span>
     <span class="count" id="count">1 / 9</span>
   </div>
@@ -154,10 +164,9 @@ footer a:hover{ color:var(--ink); }
   <h3>The numbers, for reference</h3>
   <dl>
     <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
-    <dt>Step bank</dt><dd>Holds 4 days; 30,000 steps a day counts at most</dd>
-    <dt>Collecting</dt><dd>Twice in any rolling 24 hours; every collection is posted to the claim log</dd>
-    <dt>Disputes</dt><dd>Anyone else can dispute a claim for 12 hours; the disputed marches freeze while the other players vote, for up to 24 hours</dd>
-    <dt>Voiding</dt><dd>Needs a majority of the other players. A voided claim's marches are taken back, even if already spent — your next collection pays off the difference</dd>
+    <dt>Claiming</dt><dd>Once a day, for that day&rsquo;s steps from the Health app, up to 30,000; unclaimed days are lost; every claim is posted to the claim log</dd>
+    <dt>Disputes</dt><dd>Anyone else can dispute a claim for 12 hours; the other players then vote for up to 24 hours; nothing is frozen meanwhile</dd>
+    <dt>Voiding</dt><dd>Needs a majority of the other players. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
     <dt>Empty cell</dt><dd>1 march</dd>
     <dt>Occupied cell</dt><dd>2 marches, plus a soldier per wall course and per gun covering it</dd>
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
@@ -465,7 +474,7 @@ scene({
 /* 2 ── steps into marches */
 scene({
   tag:'Marches', title:'Steps become marches',
-  body:'Read your step count off the Health app and collect it. Steps convert to marches on a square-root curve: five times the square root of your distance in kilometres. That curve is the whole reason a father and a son can play the same game.',
+  body:'Read your step count off the Health app and claim it. Steps convert to marches on a square-root curve: five times the square root of your distance in kilometres. That curve is the whole reason a father and a son can play the same game.',
   dur:13,
   init:function(){ M=blank(); M.a=0; M.b=0; M.pipsA=[]; M.pipsB=[]; M.hud=[['Formula','5 × √km']]; },
   beats:[
@@ -708,185 +717,165 @@ scene({
   }
 });
 
-/* 8 ── the bank */
+/* 8 ── one claim a day */
 scene({
-  tag:'The bank', title:'Four days, twice a day',
-  body:'Your steps keep accumulating whether the game is open or not, but the store only holds four days — anything older spoils. You may collect twice in any rolling twenty-four hours, which is enough to bank a morning walk and an evening one without the game asking you to check it all day.',
-  dur:13,
-  init:function(){ M=blank(); M.days=0; M.collects=0; M.hud=[['Bank','0.0 of 4 days'],['Collections today','0 of 2']]; },
+  tag:'One a day', title:'One claim a day, for that day',
+  body:'Once a day, read that day’s step total off the Health app and claim it. Steps only count on the day they were walked: a day you don’t claim is gone, and nothing carries over to the next. A single day counts for 30,000 steps at most.',
+  dur:16,
+  init:function(){ M=blank(); M.shown=0; M.hud=[['Claims','one a day'],['Daily ceiling','30,000 steps']]; },
   beats:[
-    [0.8,function(){ M.note='You walk. The bank fills on its own.'; }],
-    [5.6,function(){ M.note='Four days is the ceiling. Day five does not fit, and day one is gone.'; }],
-    [8.0,function(){ M.collects=1; M.note='Collect in the morning…'; }],
-    [9.4,function(){ M.collects=2; M.note='…and again in the evening. That is the limit for the day.'; }],
-    [11.0,function(){ M.note='Walk as much as you like in between. It all keeps counting.'; }]
+    [0.8,function(){ M.note='Each day’s total is claimed on that day.'; }],
+    [4.4,function(){ M.note='Read it off the Health app and claim it before midnight.'; }],
+    [8.6,function(){ M.note='Wednesday was never claimed. Those steps are gone — they don’t roll into Thursday.'; }],
+    [12.4,function(){ M.note='Thursday was a long day, but one day counts for 30,000 steps at most.'; }]
   ],
   draw:function(now){
-    var x0=140, y0=190, w=480, h=54;
-    var fill=Math.min(5.2, now*0.62);
-    M.days=Math.min(4,fill);
-    M.hud=[['Bank',M.days.toFixed(1)+' of 4 days'],['Collections today',M.collects+' of 2'],['Daily ceiling','30,000 steps']];
-
-    /* store outline */
-    ctx.save();
-    ctx.fillStyle=T.sink; ctx.fillRect(x0,y0,w,h);
-    for(var d=0; d<4; d++){
-      var seg=w/4, f=Math.max(0,Math.min(1,fill-d));
-      ctx.fillStyle=rgba(T.p0,0.28); ctx.fillRect(x0+d*seg, y0, seg*f, h);
-      ctx.strokeStyle=T.rule; ctx.lineWidth=1; ctx.strokeRect(x0+d*seg+0.5, y0+0.5, seg-1, h-1);
-    }
-    ctx.strokeStyle=T.ink; ctx.lineWidth=1.5; ctx.strokeRect(x0+0.75,y0+0.75,w-1.5,h-1.5);
-    ctx.restore();
-
-    for(var d2=0; d2<4; d2++) labelText('DAY '+(d2+1), x0+(d2+0.5)*(w/4), y0+h+20, 14, T['ink-2']);
-    labelText('THE STORE', x0, y0-22, 15, T['ink-2'],'left');
-
-    /* spillage past four days */
-    if(fill>4){
-      var over=Math.min(1,(fill-4)/1.2);
+    var DAYS=[['MON',8200,'claim'],['TUE',12500,'claim'],['WED',6000,'miss'],['THU',34000,'cap'],['FRI',9800,'claim'],['SAT',15400,'claim'],['SUN',7300,'claim']];
+    var x0=86, base=330, colW=84, maxH=190, cap=30000, top=40000;
+    /* the ceiling line */
+    var capY=base-maxH*cap/top;
+    ctx.save(); ctx.setLineDash([4,5]); ctx.strokeStyle=rgba(T.p1,0.6); ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(x0-14,capY); ctx.lineTo(x0+colW*7-10,capY); ctx.stroke(); ctx.restore();
+    labelText('30,000 A DAY, AT MOST', x0+colW*7-10, capY-14, 13, T.p1,'right');
+    ctx.strokeStyle=T.rule; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x0-14,base+0.5); ctx.lineTo(x0+colW*7-10,base+0.5); ctx.stroke();
+    DAYS.forEach(function(d,i){
+      var born=0.8+i*1.6, k=ease((now-born)/0.7); if(k<=0) return;
+      var x=x0+i*colW, w=colW-26, v=d[1], counted=Math.min(v,cap);
+      var h=maxH*counted/top*k, over=maxH*(v-counted)/top*k;
+      var col = d[2]==='miss' ? T['ink-2'] : T.p0;
       ctx.save();
-      ctx.globalAlpha=0.30+0.35*Math.abs(Math.sin(now*2.2));
-      for(var i=0;i<7;i++){
-        var px=x0+w+8+i*11, py=y0+h*0.5+Math.sin(now*3+i)*9;
-        ctx.beginPath(); ctx.arc(px,py,3.0*over,0,Math.PI*2);
-        ctx.fillStyle=T.p1; ctx.fill();
-      }
+      ctx.fillStyle=rgba(col, d[2]==='miss'?0.14:0.30); ctx.fillRect(x,base-h,w,h);
+      ctx.strokeStyle=rgba(col,0.9); ctx.lineWidth=1.4; ctx.strokeRect(x+0.7,base-h+0.7,w-1.4,Math.max(h-1.4,0));
+      if(over>0){ ctx.setLineDash([3,3]); ctx.strokeStyle=rgba(T.p1,0.7); ctx.strokeRect(x+0.7,base-h-over,w-1.4,over); }
       ctx.restore();
-      bigText('spoils', x0+w+50, y0+h*0.5-26, 19, rgba(T.p1,0.95),'left');
-    }
-
-    /* collection tokens */
-    labelText('COLLECTIONS TODAY', x0, y0+h+62, 15, T['ink-2'],'left');
-    for(var i=0;i<2;i++){
-      var cx=x0+16+i*40, cy=y0+h+94, used=i<M.collects;
-      hexPath(cx,cy,13);
-      ctx.fillStyle= used ? rgba(T['ink-2'],0.18) : rgba(T.brass,0.30); ctx.fill();
-      ctx.strokeStyle= used ? T['ink-2'] : T.brass; ctx.lineWidth=1.8; ctx.stroke();
-      if(used){
-        ctx.save(); ctx.strokeStyle=T['ink-2']; ctx.lineWidth=1.8;
-        ctx.beginPath(); ctx.moveTo(cx-6,cy-6); ctx.lineTo(cx+6,cy+6); ctx.stroke();
+      labelText(d[0], x+w/2, base+20, 14, T['ink-2']);
+      labelText((v/1000).toFixed(1)+'k', x+w/2, base-h-over-14, 13, T.ink);
+      if(now>born+0.8){
+        var mark = d[2]==='miss' ? 'lost' : d[2]==='cap' ? 'capped' : 'claimed';
+        var mc = d[2]==='miss' ? T.p1 : d[2]==='cap' ? T.brass : T.p0;
+        ctx.save(); ctx.globalAlpha=ease((now-born-0.8)/0.4);
+        labelText((d[2]==='miss'?'✕ ':'✓ ')+mark.toUpperCase(), x+w/2, base+44, 12, mc);
         ctx.restore();
       }
-    }
+    });
   }
 });
 
 /* 9 ── claims and disputes */
 scene({
   tag:'Claims', title:'Every claim can be challenged',
-  body:'Each collection goes up on a public claim log. Its marches can be spent straight away, but for twelve hours anyone else may dispute it. A dispute freezes those marches while the other players vote, for up to a day. Voiding needs a majority of them; anything less and the claim stands. A voided claim takes its marches back even if they are already spent — so attach a Health screenshot when you collect.',
-  dur:27,
+  body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For twelve hours anyone else may dispute it, and the other players then vote for up to a day. Voiding needs a majority of them. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
+  dur:30,
   init:function(){
-    M=blank(); M.status=''; M.card=null; M.clock=null; M.freeze=null; M.thaw=null; M.votes={}; M.pips=[];
+    M=blank(); M.status=''; M.card=null; M.clock=null; M.dispute=null; M.votes={}; M.pips=[]; M.debt=null; M.next=null;
     M.hud=[['Dispute window','12 hours'],['Vote','up to 24 hours'],['To void','a majority of the others']];
   },
   beats:[
     [0.6,function(n){
       M.card=n; M.status='open';
       for(var i=0;i<15;i++) M.pips.push(n+0.6+i*0.05);
-      M.note='Kit collects 12,000 steps. The claim goes up where everyone can see it.';
+      M.note='Kit claims 12,000 steps. The claim goes up where everyone can see it, and the marches are his at once.';
       M.hud=[['Claim','12,000 steps → 15 marches'],['Status','open']];
     }],
-    [3.7,function(n){ M.clock=n; M.note='The fifteen marches are spendable at once. Meanwhile the dispute window runs for twelve hours.'; }],
-    [9.8,function(n){
-      M.status='disputed'; M.freeze=n;
-      M.note='Theodore disputes it. Kit’s fifteen marches freeze while the other two players vote.';
-      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','disputed'],['Frozen','15 marches']];
+    [5.4,function(n){ M.clock=n; M.note='For twelve hours, anyone else can dispute it.'; }],
+    [8.2,function(n){
+      M.status='disputed'; M.dispute=n;
+      M.note='Theodore disputes it. Kit’s marches are not frozen — the other two players just vote.';
+      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','disputed']];
     }],
-    [12.2,function(n){ M.votes.theo={v:'void',at:n}; }],
-    [13.8,function(n){ M.votes.chris={v:'stand',at:n}; M.note='One vote to void, one to let it stand. Voiding needs a majority, so the claim stands.'; }],
-    [15.6,function(n){
-      M.status='stands'; M.thaw=n;
-      M.hud=[['Claim','12,000 steps → 15 marches'],['Status','stands'],['Frozen','none']];
+    [11.4,function(n){ M.votes.theo={v:'void',at:n}; }],
+    [12.8,function(n){ M.votes.chris={v:'void',at:n}; M.note='Both vote to void it — a majority. (One vote each way would let it stand.)'; }],
+    [14.9,function(n){
+      M.status='void'; M.debt=n;
+      M.note='Kit keeps the marches he has. The fifteen are owed instead, and come off his next claim.';
+      M.hud=[['Claim','voided'],['Owed','15 marches, from the next claim']];
     }],
-    [19.8,function(){ M.note='Had both voted to void it, the fifteen marches would be taken back — even if Kit had already spent them.'; }],
-    [25.2,function(){ M.note='Attach a screenshot of the Health app when you collect. It settles most arguments before they start.'; }]
+    [19.4,function(n){
+      M.next=n;
+      M.note='Next day: 21,600 steps earn 20 marches. Fifteen pay off the debt; five are his to spend.';
+      M.hud=[['Next claim','21,600 steps → 20 marches'],['To the debt','15'],['To spend','5']];
+    }],
+    [24.7,function(){ M.note='Attach a screenshot of the Health app when you claim. It settles most arguments before they start.'; }]
   ],
   draw:function(now){
     var steel=T.steel, x0=56, cw=392;
-    /* the claim card */
     if(M.card!=null){
-      var k=ease((now-M.card)/0.5), y=58+(1-k)*14;
+      var k=ease((now-M.card)/0.5), y=48+(1-k)*14;
       ctx.save(); ctx.globalAlpha=k;
-      ctx.fillStyle=T.paper; ctx.fillRect(x0,y,cw,128);
-      ctx.strokeStyle=T.rule; ctx.lineWidth=1.2; ctx.strokeRect(x0+0.5,y+0.5,cw-1,127);
-      ctx.beginPath(); ctx.arc(x0+26,y+30,6,0,Math.PI*2); ctx.fillStyle=steel; ctx.fill();
-      labelText('KIT', x0+40, y+31, 15, T['ink-2'],'left');
-      bigText('12,000 steps', x0+20, y+72, 32, T.ink,'left');
-      labelText('→ 15 MARCHES', x0+22, y+106, 15, T['ink-2'],'left');
-      /* status chip */
-      var chip={open:['OPEN',T['ink-2']],disputed:['⚑ DISPUTED',T.p1],stands:['✓ STANDS',T.p0]}[M.status];
+      ctx.fillStyle=T.paper; ctx.fillRect(x0,y,cw,118);
+      ctx.strokeStyle=T.rule; ctx.lineWidth=1.2; ctx.strokeRect(x0+0.5,y+0.5,cw-1,117);
+      ctx.beginPath(); ctx.arc(x0+26,y+28,6,0,Math.PI*2); ctx.fillStyle=steel; ctx.fill();
+      labelText('KIT', x0+40, y+29, 15, T['ink-2'],'left');
+      bigText('12,000 steps', x0+20, y+66, 30, M.status==='void'?T['ink-2']:T.ink,'left');
+      if(M.status==='void'){ ctx.strokeStyle=T['ink-2']; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x0+18,y+66); ctx.lineTo(x0+200,y+66); ctx.stroke(); }
+      labelText('→ 15 MARCHES', x0+22, y+98, 15, T['ink-2'],'left');
+      var chip={open:['OPEN',T['ink-2']],disputed:['⚑ DISPUTED',T.p1],void:['✕ VOIDED',T.p1]}[M.status];
       if(chip){
         ctx.font='500 13px "IBM Plex Mono",ui-monospace,Menlo,monospace';
-        var tw=ctx.measureText(chip[0]).width+18, cx=x0+cw-18-tw, cy=y+18;
+        var tw=ctx.measureText(chip[0]).width+18, cx=x0+cw-18-tw, cy=y+16;
         ctx.strokeStyle=chip[1]; ctx.lineWidth=1.4; ctx.strokeRect(cx+0.5,cy+0.5,tw,24);
         labelText(chip[0], cx+tw/2, cy+13, 13, chip[1]);
       }
       ctx.restore();
     }
-    /* the window, then the vote */
     if(M.clock!=null){
-      var by=236, bw=cw, frac;
-      var label, right;
-      if(M.status==='open'){
-        var hrs=Math.max(0,12-(now-M.clock)*0.95);
-        frac=hrs/12; label='DISPUTE WINDOW'; right=Math.ceil(hrs)+'H LEFT';
-      } else if(M.status==='disputed'){
-        frac=Math.max(0,1-(now-M.freeze)*0.07); label='VOTE OPEN · UP TO 24H'; right='';
-      } else { frac=0; label='SETTLED'; right=''; }
+      var by=206, frac, label, right='';
+      if(M.status==='open'){ var hrs=Math.max(0,12-(now-M.clock)*1.6); frac=hrs/12; label='DISPUTE WINDOW'; right=Math.ceil(hrs)+'H LEFT'; }
+      else if(M.status==='disputed'){ frac=Math.max(0,1-(now-M.dispute)*0.12); label='VOTE OPEN · UP TO 24H'; }
+      else { frac=0; label='SETTLED'; }
       labelText(label, x0, by-14, 14, T['ink-2'],'left');
-      if(right) labelText(right, x0+bw, by-14, 14, T.ink,'right');
-      ctx.fillStyle=T.sink; ctx.fillRect(x0,by,bw,12);
-      ctx.fillStyle=M.status==='disputed'?rgba(T.p1,0.55):T.brass; ctx.fillRect(x0,by,bw*frac,12);
+      if(right) labelText(right, x0+cw, by-14, 14, T.ink,'right');
+      ctx.fillStyle=T.sink; ctx.fillRect(x0,by,cw,12);
+      ctx.fillStyle=M.status==='disputed'?rgba(T.p1,0.55):T.brass; ctx.fillRect(x0,by,cw*frac,12);
     }
-    /* voters */
-    if(M.freeze!=null){
-      var vy=318, voters=[['THEODORE',T.p1,'theo'],['CHRIS',T.p0,'chris']];
-      labelText('TO VOID: A MAJORITY OF THE OTHERS — 2 OF 2', x0, 282, 14, T['ink-2'],'left');
+    if(M.dispute!=null){
+      var vy=270, voters=[['THEODORE',T.p1,'theo'],['CHRIS',T.p0,'chris']];
+      labelText('TO VOID: A MAJORITY OF THE OTHERS — 2 OF 2', x0, 248, 14, T['ink-2'],'left');
       voters.forEach(function(v,i){
-        var vx=x0+i*200, vote=M.votes[v[2]];
-        var a=ease((now-M.freeze)/0.4);
+        var vx=x0+i*200, vote=M.votes[v[2]], a=ease((now-M.dispute)/0.4);
         ctx.save(); ctx.globalAlpha=a;
         hexPath(vx+18,vy+18,16); ctx.fillStyle=rgba(v[1],0.25); ctx.fill(); ctx.strokeStyle=v[1]; ctx.lineWidth=1.6; ctx.stroke();
         labelText(v[0], vx+44, vy+10, 14, T.ink,'left');
-        if(vote){
-          var vk=ease((now-vote.at)/0.35);
-          ctx.globalAlpha=a*vk;
-          bigText(vote.v==='void'?'Void it':'Let it stand', vx+44, vy+36, 21, vote.v==='void'?T.p1:T.p0,'left');
-        } else {
-          labelText('voting…', vx+44, vy+34, 14, T['ink-2'],'left');
-        }
+        if(vote){ ctx.globalAlpha=a*ease((now-vote.at)/0.35); bigText('Void it', vx+44, vy+36, 21, T.p1,'left'); }
+        else labelText('voting…', vx+44, vy+34, 14, T['ink-2'],'left');
         ctx.restore();
       });
     }
-    /* Kit's marches: live, then frozen, then live again */
+    /* Kit's marches: always spendable */
     if(M.pips.length){
-      var px=516, py=86, gap=30;
-      labelText('KIT’S MARCHES', px-12, 58, 14, T['ink-2'],'left');
-      var frozenK=0;
-      if(M.freeze!=null) frozenK=ease((now-M.freeze)/0.5);
-      if(M.thaw!=null) frozenK=1-ease((now-M.thaw)/0.6);
+      var px=516, py=74, gap=30;
+      labelText('KIT’S MARCHES', px-12, 46, 14, T['ink-2'],'left');
       for(var i=0;i<15;i++){
         var b=M.pips[i]; if(now<b) continue;
-        var kk=ease((now-b)/0.3), col=i%5, row=Math.floor(i/5);
-        var x=px+col*gap, yy=py+row*gap;
-        ctx.save();
-        hexPath(x,yy,11*(0.6+0.4*kk));
-        ctx.globalAlpha=kk;
-        ctx.fillStyle= frozenK>0.5 ? rgba(T['ink-2'],0.18) : rgba(steel,0.9);
-        ctx.fill();
-        if(frozenK>0.5){ ctx.setLineDash([2,3]); ctx.strokeStyle=T['ink-2']; ctx.lineWidth=1.2; ctx.stroke(); }
-        ctx.restore();
+        var kk=ease((now-b)/0.3), x=px+(i%5)*gap, yy=py+Math.floor(i/5)*gap;
+        ctx.save(); ctx.globalAlpha=kk; hexPath(x,yy,11*(0.6+0.4*kk)); ctx.fillStyle=rgba(steel,0.9); ctx.fill(); ctx.restore();
       }
-      if(frozenK>0.05){
-        ctx.save(); ctx.globalAlpha=frozenK;
-        bigText('frozen', px+2*gap, py+3*gap+14, 22, T.p1);
-        ctx.restore();
-      } else if(M.thaw!=null){
-        ctx.save(); ctx.globalAlpha=ease((now-M.thaw)/0.6);
-        bigText('spendable', px+2*gap, py+3*gap+14, 22, T.p0);
-        ctx.restore();
+      if(M.dispute!=null){
+        ctx.save(); ctx.globalAlpha=ease((now-M.dispute)/0.5);
+        labelText('STILL SPENDABLE', px-12, py+3*gap+2, 13, T.p0,'left'); ctx.restore();
       }
+      if(M.debt!=null){
+        ctx.save(); ctx.globalAlpha=ease((now-M.debt)/0.5);
+        bigText('owes 15', px-12, py+3*gap+30, 22, T.p1,'left'); ctx.restore();
+      }
+    }
+    /* the next claim pays the debt first */
+    if(M.next!=null){
+      var nx=x0, ny=356, k2=ease((now-M.next)/0.5);
+      ctx.save(); ctx.globalAlpha=k2;
+      labelText('NEXT DAY · 21,600 STEPS → 20 MARCHES', nx, ny, 14, T.ink,'left');
+      for(var j=0;j<20;j++){
+        var bj=M.next+0.5+j*0.12; if(now<bj) continue;
+        var kj=ease((now-bj)/0.25), xj=nx+10+j*31, yj=ny+34;
+        hexPath(xj,yj,11*(0.6+0.4*kj));
+        if(j<15){ ctx.setLineDash([2,3]); ctx.strokeStyle=T.p1; ctx.lineWidth=1.3; ctx.stroke(); ctx.setLineDash([]); }
+        else { ctx.fillStyle=rgba(steel,0.9); ctx.fill(); }
+      }
+      if(now>M.next+3.0){
+        labelText('15 PAY OFF THE DEBT', nx, ny+66, 13, T.p1,'left');
+        labelText('5 TO SPEND', nx+15*31, ny+66, 13, T.p0,'left');
+      }
+      ctx.restore();
     }
   }
 });
@@ -906,8 +895,8 @@ var NARRATION=[
  [[1.2, "n5_1", 2.74, "Stone builds walls, up to three courses deep."], [4.39, "n5_2", 2.16, "A tower covers every cell around it."], [7.0, "n5_3", 3.48, "Neither one stops an attack. They just make it cost soldiers."], [10.93, "n5_4", 3.07, "The cell falls, and three of your four soldiers fall with it."], [14.45, "n5_5", 3.65, "Towers need men inside them, and soldiers eat grain, forever."]],
  [[1.4, "n6_1", 2.18, "Land doesn't produce anything on its own."], [4.03, "n6_2", 4.49, "A cell only pays if there's an unbroken path from it, back to one of your castles."], [8.97, "n6_3", 3.36, "Now red takes a single cell, the neck of your eastern arm."], [12.78, "n6_4", 4.32, "Those four cells are still yours. But they're cut off, so they yield nothing."], [17.55, "n6_5", 2.66, "You didn't lose the ground. You lost the road to it."], [20.66, "n6_6", 4.2, "Cutting a supply line is usually cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 2.93, "A second castle is a campaign, not a purchase."], [4.78, "n7_2", 3.31, "No two of your keeps can stand within seven cells of each other."], [8.54, "n7_3", 2.71, "So building one means pushing your border out first."], [11.7, "n7_4", 3.29, "Now the eastern arm draws its supply from the new keep."], [15.44, "n7_5", 2.54, "And every castle costs more than the one before."]],
- [[0.8, "n8_1", 3.29, "Your steps keep counting, whether the game is open or not."], [5.7, "n8_2", 3.5, "But the store only holds four days. Anything older spoils."], [9.65, "n8_3", 2.57, "You can collect twice in any twenty-four hours."], [12.67, "n8_4", 3.05, "Walk as much as you like in between. It all counts."]],
- [[0.6, "n9_1", 2.66, "Every collection goes up on a public claim log."], [3.71, "n9_2", 5.66, "The marches are yours to spend right away. But for twelve hours, anyone else can dispute the claim."], [9.82, "n9_3", 3.53, "A dispute freezes those marches, while the other players vote."], [13.8, "n9_4", 5.59, "It takes a majority of them to void a claim. One vote each way isn't enough, so this one stands."], [19.84, "n9_5", 4.94, "If it had been voided, the marches would be taken back, even if they'd already been spent."], [25.23, "n9_6", 4.18, "A screenshot from the Health app is the easiest way to settle an argument."]]
+ [[0.8, "n8_1", 2.52, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.34, "Read the total off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.22, "Miss a day, and those steps are gone. They don't carry over."], [12.4, "n8_4", 3.05, "And one day counts for thirty thousand steps, at most."]],
+ [[0.6, "n9_1", 4.39, "Every claim goes up on a public log, and its marches can be spent straight away."], [5.44, "n9_2", 4.06, "For twelve hours, anyone else can dispute it. Then the other players vote."], [9.95, "n9_3", 4.58, "It takes a majority of them to void a claim. Here, both of them vote to void it."], [14.98, "n9_4", 4.03, "Kit keeps what he has. But the fifteen marches come off his next claim."], [19.46, "n9_5", 4.85, "The next day he earns twenty. Fifteen pay off the debt, and five are his to spend."], [24.76, "n9_6", 4.27, "A screenshot from the Health app is the easiest way to avoid an argument."]]
 ];
 NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
 
@@ -916,7 +905,7 @@ NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
    built-in speech synthesiser: if the clips can't load, the narration button
    says so and the manual carries on silently, rather than reading the script
    in a robot voice. */
-var voiceOn=false, clips={}, nowPlaying=null, voiceBroken=false;
+var voiceOn=true, clips={}, nowPlaying=null, voiceBroken=false;
 function clipFor(id){
   var src='audio/'+id+'.mp3';
   var a=clips[src];
@@ -930,8 +919,7 @@ function clipFor(id){
 function narrationFailed(){
   if(voiceBroken) return;
   voiceBroken=true; voiceOn=false; hush();
-  var b=document.getElementById('voice');
-  if(b){ b.textContent='Narration unavailable'; b.disabled=true; b.setAttribute('aria-pressed','false'); }
+  var n=document.getElementById('vnote'); if(n) n.textContent='narration unavailable';
 }
 function preloadChapter(i){
   var ns=(SCENES[i]&&SCENES[i].narr)||[];
@@ -970,13 +958,12 @@ function chapterDur(i){
 /* ══════════════════════════════════════════════════════════════════════
    PLAYER
    ══════════════════════════════════════════════════════════════════════ */
-var cur=0, t=0, playing=!REDUCED, applied=0, lastTs=0, said=0, holdT=0;
+var cur=0, t=0, playing=false, applied=0, lastTs=0, said=0, holdT=0;
 var elRail=document.getElementById('rail'), elBar=document.getElementById('bar'),
     elHud=document.getElementById('hud'), elTitle=document.getElementById('cap-title'),
     elBody=document.getElementById('cap-body'), elNote=document.getElementById('cap-note'),
     elPlay=document.getElementById('play'), elPrev=document.getElementById('prev'),
-    elNext=document.getElementById('next'), elCount=document.getElementById('count'),
-    elVoice=document.getElementById('voice');
+    elNext=document.getElementById('next'), elCount=document.getElementById('count');
 
 SCENES.forEach(function(s,i){
   var b=document.createElement('button');
@@ -1006,6 +993,7 @@ function runTo(target){
 }
 function go(i){
   if(i<0||i>=SCENES.length) return;
+  if(typeof begin==='function' && elStart) begin();
   load(i, REDUCED);
   if(!REDUCED){ playing=true; elPlay.textContent='Pause'; }
   elNext.disabled=false;
@@ -1047,24 +1035,19 @@ function frame(ts){
 }
 
 elPlay.addEventListener('click',function(){
+  if(!elStart.hidden){ begin(); go(0); return; }
   if(!playing && cur===SCENES.length-1 && t>=chapterDur(cur)){ go(0); return; }
   playing=!playing;
   if(!playing) hush();
   elPlay.textContent=playing?'Pause':'Play';
 });
 
-elVoice.hidden=false;
-elVoice.addEventListener('click',function(){
-  voiceOn=!voiceOn;
-  elVoice.setAttribute('aria-pressed', voiceOn?'true':'false');
-  elVoice.textContent = voiceOn ? 'Narration on' : 'Turn on narration';
-  if(!voiceOn){ hush(); return; }
-  preloadChapter(cur); preloadChapter(cur+1);
-  /* this click is the gesture a browser needs before it will play anything */
-  var ns=SCENES[cur].narr||[], entry=null;
-  for(var i=0;i<ns.length;i++) if(ns[i][0]<=t) entry=ns[i];
-  if(entry) say(entry); else if(ns.length && ns[0][0]-t<1.2) { say(ns[0]); said=1; }
-});
+/* Browsers only allow sound after a tap, so the tour waits for one. */
+var elStart=document.getElementById('start');
+function begin(){
+  if(!elStart.hidden){ elStart.hidden=true; }
+}
+elStart.addEventListener('click',function(){ begin(); go(0); });
 document.addEventListener('visibilitychange',function(){ if(document.hidden) hush(); });
 window.addEventListener('pagehide',hush);
 elPrev.addEventListener('click',function(){ go(cur-1); });
@@ -1079,7 +1062,7 @@ document.addEventListener('keydown',function(e){
   if(e.key===' '){ elPlay.click(); e.preventDefault(); }
 });
 
-if(REDUCED){ elPlay.textContent='Play'; }
+elPlay.textContent='Play';
 fit();
 load(0, REDUCED);
 requestAnimationFrame(frame);
