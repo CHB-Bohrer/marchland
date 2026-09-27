@@ -188,11 +188,11 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
       <div class="notice hide" id="claimnote"></div>
 
       <div class="bar">
-        <div class="field"><label for="stepsin">Steps since you last collected</label>
-          <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="read it off Health" style="width:180px">
+        <div class="field"><label for="stepsin">Today&rsquo;s steps</label>
+          <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="from the Health app" style="width:180px">
         </div>
         <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label>
-        <button id="collect" class="go">Collect</button>
+        <button id="collect" class="go">Claim</button>
         <span class="muted mono" id="bankinfo">—</span>
       </div>
       <input type="file" accept="image/*" id="shotlate" class="hide">
@@ -237,7 +237,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
     <div class="panel" id="claims-panel">
       <div class="claims-head">
         <h2>Claim log</h2>
-        <span class="muted">Anyone can dispute a collection for 12 hours. A dispute freezes those marches while the other players vote for up to 24 hours; a majority of them can void it.</span>
+        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 12 hours, and the other players then vote for up to 24 hours. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
       <div class="log" id="claims-log"></div>
@@ -268,7 +268,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 "use strict";
 
 /* ═══ constants ════════════════════════════════════════════════════════ */
-var CAP_DAYS=4, STEPS_PER_KM=1350, MAX_STEPS_DAY=30000;
+var STEPS_PER_KM=1350, MAX_STEPS_DAY=30000;
 var TICK_MS=4*60*60*1000, MAX_TICKS=18;         // harvest accrues offline: 6 ticks a day, capped at 3 days
 var AX=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
 var PLAIN=0,FOREST=1,QUARRY=2,IRON=3,FARM=4;
@@ -570,24 +570,23 @@ function setSync(t){ var e=document.getElementById('syncstate'); if(e) e.textCon
 /* ═══ actions ══════════════════════════════════════════════════════════ */
 function say(h){ document.getElementById('status').innerHTML='<span>'+h+'</span>'; }
 
-var MAX_COLLECTS=2;                                  // per rolling 24 hours
-function recentCollects(pl){ return (pl.collects||[]).filter(function(t){ return Date.now()-t<864e5; }); }
-/* Not "since midnight" — a rolling 24h window measured back from each collect.
-   Two collections late one evening can still block a collect at roughly the
-   same time the next evening, before anything has been collected that day. */
-function nextCollectWait(pl){
-  var recent=recentCollects(pl);
-  if(recent.length<MAX_COLLECTS) return null;
-  var next=Math.min.apply(null,recent)+864e5, h=(next-Date.now())/36e5;
-  return h<1?Math.round(h*60)+' minutes':h.toFixed(1)+' hours';
+/* One claim a day, for that day's steps. The day is the claimant's own
+   calendar day, midnight to midnight — the same day the Health app shows. */
+function dayKey(t){ var d=new Date(t); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function claimedToday(pl){ return !!(pl&&pl.lastCollect&&dayKey(pl.lastCollect)===dayKey(Date.now())); }
+function untilMidnight(){
+  var d=new Date(); d.setHours(24,0,0,0);
+  var h=(d-Date.now())/36e5;
+  return h<1?Math.max(1,Math.round(h*60))+' minutes':Math.floor(h)+'h '+Math.round((h%1)*60)+'m';
 }
 /* ═══ claims ═══════════════════════════════════════════════════════════
    Every collection becomes a public claim. Its marches can be spent at once;
-   for CHALLENGE_MS anyone else may dispute it. A dispute freezes those marches
-   and opens a vote among the players who were in the game when it was made.
-   A strict majority of them voids it; otherwise it stands when everyone has
-   voted or VOTE_MS runs out. The claimant's own tab applies a void to its own
-   record, because only that tab ever writes it. */
+   for CHALLENGE_MS anyone else may dispute it, which opens a vote among the
+   players who were in the game when it was made. A strict majority of them
+   voids it; otherwise it stands when everyone has voted or VOTE_MS runs out.
+   Nothing is frozen while that happens. A voided claim's marches are owed
+   instead, and come off the claimant's next claim. The claimant's own tab
+   books the debt, because only that tab ever writes its record. */
 var CHALLENGE_MS=12*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5;
 function claimState(c,now){
   now=now||Date.now();
@@ -608,17 +607,8 @@ function claimState(c,now){
   out.s=(ok*2>=n||no+ok>=n||now>=deadline)?'stands':'disputed';
   return out;
 }
-/* marches from my claims that I can't touch right now */
-function heldFor(pid){
-  var pl=G.players[pid], held=0, voids=(pl&&pl.voids)||{};
-  for(var id in (G.claims||{})){
-    var c=G.claims[id]; if(c.pid!==pid) continue;
-    var s=claimState(c).s;
-    if(s==='disputed' || (s==='void'&&!voids[id])) held+=c.got||0;
-  }
-  return held;
-}
-function avail(){ var pl=me(); return pl?pl.squares-heldFor(ME):0; }
+function avail(){ var pl=me(); return pl?pl.squares:0; }
+function owedBy(pl){ return (pl&&pl.owed)||0; }
 function hoursLeft(ts){
   var h=(ts-Date.now())/36e5;
   return h<1 ? Math.max(1,Math.round(h*60))+'m' : Math.round(h)+'h';
@@ -635,7 +625,7 @@ function settleMine(){
     var c=G.claims[id]; if(!c||c.pid!==ME) return;
     var st=claimState(c,now);
     if(st.s==='void' && !pl.voids[id]){
-      pl.squares-=(c.got||0);
+      pl.owed=(pl.owed||0)+(c.got||0);            // taken off the next claim
       pl.collected=Math.max(0,(pl.collected||0)-(c.steps||0));
       pl.voids[id]=now; mine=true;
     }
@@ -702,34 +692,32 @@ function resetShotPick(){
 function collect(){
   var pl=me(); if(!pl) return;
   var input=document.getElementById('stepsin');
-  var recent=recentCollects(pl);
-  if(recent.length>=MAX_COLLECTS){
-    return say('<span class="bad">Two per rolling 24 hours is the limit.</span> Next collection opens in <b>'+nextCollectWait(pl)+'</b> — the steps keep counting in the meantime.');
+  if(claimedToday(pl)){
+    return say('<span class="bad">You have already claimed today.</span> The next claim opens at midnight, in <b>'+untilMidnight()+'</b>.');
   }
   var steps=parseFloat(input.value);
-  if(!isFinite(steps)||steps<=0) return say('Type the number of steps your phone recorded since you last collected.');
-  var days=Math.min(CAP_DAYS,(Date.now()-pl.lastCollect)/864e5);
-  var ceiling=Math.round(days*MAX_STEPS_DAY);
+  if(!isFinite(steps)||steps<=0) return say('Type today&rsquo;s step count from the Health app.');
   var capped=false;
-  if(steps>ceiling){ steps=ceiling; capped=true; }
+  if(steps>MAX_STEPS_DAY){ steps=MAX_STEPS_DAY; capped=true; }
   steps=Math.round(steps);
-  var km=steps/STEPS_PER_KM, got=squaresFor(km), now=Date.now();
-  var owed=pl.squares<0?-pl.squares:0;
+  var km=steps/STEPS_PER_KM, earned=squaresFor(km), now=Date.now();
+  var owed=owedBy(pl), paid=Math.min(owed,earned), got=earned-paid;
   var id=ME+'-'+now.toString(36), voters={};
   Object.keys(G.players).forEach(function(p){ if(p!==ME) voters[p]=1; });
   G.claims=G.claims||{};
-  G.claims[id]={pid:ME,steps:steps,got:got,t:now,voters:voters,shot:false};
-  pl.squares+=got; pl.collected=(pl.collected||0)+steps; pl.lastCollect=now;
-  recent.push(now); pl.collects=recent;
+  G.claims[id]={pid:ME,steps:steps,got:earned,t:now,voters:voters,shot:false};
+  pl.squares+=got; pl.owed=owed-paid;
+  pl.collected=(pl.collected||0)+steps; pl.lastCollect=now;
   input.value='';
   var file=pendingShot; resetShotPick();
   render();
   pushMe().then(function(){ return putPath('/claims/'+id,G.claims[id]); })
           .then(function(){ if(file) attachShot(id,file); });
-  var m='Banked <b>'+steps.toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+got+' marches</span>, yours to spend now.';
-  if(owed) m+=' '+Math.min(owed,got)+' of them paid back what a voided claim took.';
+  var m='Claimed <b>'+steps.toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+earned+' marches</span>.';
+  if(paid) m+=' <span class="bad">'+paid+' of them went to pay off a voided claim</span>, so <b>'+got+'</b> are yours to spend.';
+  else m+=' Yours to spend now.';
   if(Object.keys(voters).length) m+=' The others have 12 hours to dispute it.';
-  if(capped) m+=' <span class="bad">Trimmed to '+CAP_DAYS+' days&rsquo; worth</span> — the store only holds '+CAP_DAYS+' days.';
+  if(capped) m+=' <span class="bad">Trimmed to '+MAX_STEPS_DAY.toLocaleString()+'</span> — that is the most one day can count.';
   say(m);
 }
 
@@ -748,8 +736,8 @@ function vote(id,v){
   render();
   putPath('/claims/'+id+'/votes/'+ME,c.votes[ME]);
   var after=claimState(c), who=esc(nameOf(c.pid));
-  if(after.s==='void') say('Voided — '+who+' loses those '+c.got+' marches.');
-  else if(st.s==='open') say('Disputed. '+who+'&rsquo;s '+c.got+' marches are frozen while the others vote — the vote closes in '+hoursLeft(after.until)+'.');
+  if(after.s==='void') say('Voided — '+c.got+' marches will come off '+who+'&rsquo;s next claim.');
+  else if(st.s==='open') say('Disputed. The others now vote on '+who+'&rsquo;s claim — the vote closes in '+hoursLeft(after.until)+'. If it is voided, '+c.got+' marches come off '+who+'&rsquo;s next claim.');
   else if(after.s==='stands') say('Settled — '+who+'&rsquo;s claim stands.');
   else say('Vote recorded. You can change it until the vote closes.');
 }
@@ -760,12 +748,8 @@ function spendMarch(q,r){
   if(c.o===ME) return say('You already hold that ground.');
   if(!adjacentTo(q,r,ME)) return say('Marches extend a border — pick a cell touching your own ground.');
   if(c.k) return say('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
-  var cost=c.o?2:1, held=heldFor(ME);
-  if(pl.squares-held<cost){
-    if(held) return say('Not enough marches — that cell costs '+cost+', and <b>'+held+'</b> of yours are frozen by a dispute. See the claim log.');
-    if(pl.squares<0) return say('A voided claim left you <b>'+(-pl.squares)+'</b> marches in the red. Your next collection pays that back first.');
-    return say('Not enough marches — that cell costs '+cost+'. Collect your steps.');
-  }
+  var cost=c.o?2:1;
+  if(pl.squares<cost) return say('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
   var guns=c.o?coverOn(q,r,ME):0, need=guns+(c.w||0);
   if(need>pl.field) return say('<span class="bad">That cell needs '+need+' soldier'+(need>1?'s':'')+'</span> — '+(guns?guns+' to cross the guns':'')+(guns&&c.w?' and ':'')+(c.w?c.w+' to break the wall':'')+'. You have '+pl.field+'.');
   pl.squares-=cost; pl.field-=need; c.w=0; c.o=ME;
@@ -979,23 +963,20 @@ function render(){
   document.getElementById('v-iron').textContent=Math.round(pl.res.iron);
   document.getElementById('v-grain').textContent=Math.round(pl.res.grain);
   document.getElementById('v-field').textContent=pl.field;
-  var held=heldFor(ME), spendable=pl.squares-held;
-  document.getElementById('v-march').textContent=spendable;
-  document.getElementById('u-march').textContent= held ? held+' frozen' : (spendable<0 ? 'owed' : 'squares');
-  document.getElementById('s-march').classList.toggle('warn',held>0||spendable<0);
+  var owed=owedBy(pl);
+  document.getElementById('v-march').textContent=pl.squares;
+  document.getElementById('u-march').textContent= owed ? owed+' owed from next claim' : 'squares';
+  document.getElementById('s-march').classList.toggle('warn',owed>0);
   document.getElementById('u-grain').textContent=(R.net>=0?'+':'')+R.net+' / tick';
   document.getElementById('s-grain').classList.toggle('warn',R.net<0);
   document.getElementById('v-gar').textContent=R.gar[0]+'/'+R.gar[1];
   document.getElementById('u-gar').textContent=R.gar[0]<R.gar[1]?(R.gar[1]-R.gar[0])+' short — decaying':'manned';
   document.getElementById('s-gar').classList.toggle('warn',R.gar[0]<R.gar[1]);
-  var days=Math.min(CAP_DAYS,(Date.now()-pl.lastCollect)/864e5);
-  var raw=(Date.now()-pl.lastCollect)/864e5;
-  var used=recentCollects(pl).length, wait=nextCollectWait(pl);
+  var done=claimedToday(pl);
   document.getElementById('bankinfo').textContent =
-    'bank: '+days.toFixed(1)+' of '+CAP_DAYS+' days'+(raw>CAP_DAYS?' — '+(raw-CAP_DAYS).toFixed(1)+'d expired':'')
-    +' · '+used+'/'+MAX_COLLECTS+' in the last 24h'+(wait?' (next in '+wait+')':'')
+    (done ? 'today claimed ✓ · next claim in '+untilMidnight() : 'today not claimed yet · one claim a day')
     +' · '+R.sup+'/'+R.own+' cells supplied';
-  document.getElementById('collect').disabled = used>=MAX_COLLECTS;
+  document.getElementById('collect').disabled = done;
   var rows=Object.keys(G.players).map(function(pid){
     var p=G.players[pid];
     return {pid:pid,name:p.name,cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
@@ -1079,11 +1060,11 @@ function renderNotice(list){
   list.forEach(function(e){
     var c=e.c, st=e.st;
     if(c.pid===ME && st.s==='disputed'){
-      lines.push('<span><b>'+namesOf(st.noBy)+'</b> disputed your claim of '+c.steps.toLocaleString()+' steps. Its <b>'+c.got+' marches</b> are frozen until the vote closes in '+hoursLeft(st.until)+'.'
+      lines.push('<span><b>'+namesOf(st.noBy)+'</b> disputed your claim of '+c.steps.toLocaleString()+' steps. The others vote on it for the next '+hoursLeft(st.until)+'; if it is voided, '+c.got+' marches come off your next claim.'
         +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">+ Add a Health screenshot</button>')+'</span>');
     }
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
-      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was voided by '+namesOf(st.noBy)+' — '+c.got+' marches were taken back.</span>');
+      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was voided by '+namesOf(st.noBy)+' — '+c.got+' marches will come off your next claim.</span>');
     }
     if(c.pid!==ME && st.s==='disputed' && c.voters && c.voters[ME] && !(c.votes&&c.votes[ME])){
       lines.push('<span><b>'+esc(nameOf(c.pid))+'</b>&rsquo;s claim of '+c.steps.toLocaleString()+' steps is disputed and needs your vote — it&rsquo;s in the claim log below.</span>');
@@ -1262,7 +1243,7 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render();
-  if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then collect your steps when you have walked some.');
+  if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.');
   else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
 }
 function join(){
