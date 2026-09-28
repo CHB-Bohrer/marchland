@@ -163,7 +163,7 @@ footer a:hover{ color:var(--ink); }
 <section class="ref">
   <h3>The numbers, for reference</h3>
   <dl>
-    <dt>Marches earned</dt><dd>5 × √km, rounded, where 1,350 steps ≈ 1 km — so 10,000 steps ≈ 7.4 km ≈ 14 marches</dd>
+    <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
     <dt>Claiming</dt><dd>Once a day, for that day&rsquo;s steps from the Health app, up to 30,000; unclaimed days are lost; every claim is posted to the claim log</dd>
     <dt>Disputes</dt><dd>Anyone else can dispute a claim for 12 hours; the other players then vote for up to 24 hours; nothing is frozen meanwhile</dd>
     <dt>Voiding</dt><dd>Needs a majority of the other players. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
@@ -472,42 +472,40 @@ scene({
 });
 
 /* 2 ── steps into marches */
-/* Two movements: first the conversion itself, worked through for one
-   10,000-step day; then two walkers side by side, to show why the curve
-   is a square root. PHASE_B is when the second movement takes over. */
-var PHASE_B=25.0;
+/* Two movements: first one ordinary day claimed from the Health app, then
+   two walkers side by side to show why a big day doesn't swamp a small one.
+   PHASE_B is when the second movement takes over. The exact formula lives in
+   the reference table below the stage, not in the narration. */
+var PHASE_B=10.4;
 scene({
   tag:'Marches', title:'Steps become marches',
-  body:'Once a day, read your step total off the Health app and claim it. The game counts about 1,350 steps to a kilometre, and pays five times the square root of the kilometres, rounded to a whole march — so 10,000 steps ≈ 7.4 km ≈ 14 marches. That square-root curve is the whole reason a father and a son can play the same game.',
-  dur:39,
+  body:'Once a day, read your step total off the Health app and claim it. The more you walk, the more marches you earn — a 10,000-step day earns 14 — but each extra step counts for a little less than the one before. That is the whole reason a father and a son can play the same game.',
+  dur:25,
   init:function(){
-    M=blank(); M.card=null; M.claimed=null; M.km=null; M.root=null; M.kmEx=null; M.rootEx=null; M.pipsEx=[];
+    M=blank(); M.card=null; M.claimed=null; M.example=null; M.pipsEx=[];
     M.phaseB=false; M.pipsA=[]; M.pipsB=[];
-    M.hud=[['Formula','5 × √km'],['1 km','≈ 1,350 steps']];
+    M.hud=[['Claim','once a day']];
   },
   beats:[
     [0.6,function(){ M.note='Steps are the only currency. Here is how they turn into marches.'; }],
-    [2.73,function(n){ M.card=n; M.note='Once a day, read the day’s total off the Health app and claim it.'; }],
+    [2.73,function(n){ M.card=n; M.note='Once a day, read the day’s total off the Health app and claim it.'; M.hud=[['Claim','once a day'],['From','the Health app']]; }],
     [5.2,function(n){ M.claimed=n; }],
-    [6.88,function(n){ M.km=n; M.note='The game counts about 1,350 steps to a kilometre.'; }],
-    [11.07,function(n){ M.root=n; M.note='Your marches are five times the square root of the kilometres, rounded to a whole march.'; }],
-    [14.86,function(n){ M.kmEx=n; M.note='Worked through: 10,000 steps ÷ 1,350 ≈ 7.4 km.'; M.hud=[['10,000 steps','≈ 7.4 km']]; }],
-    [19.05,function(n){ M.rootEx=n; M.note='√7.4 ≈ 2.72, and 5 × 2.72 ≈ 13.6 — which rounds to 14 marches.'; }],
-    [22.4,function(n){ for(var i=0;i<14;i++) M.pipsEx.push(n+i*0.07); M.hud=[['10,000 steps','≈ 7.4 km'],['Marches','14']]; }],
+    [6.88,function(n){ M.example=n; M.note='A 10,000-step day earns 14 marches.'; }],
+    [8.2,function(n){ for(var i=0;i<14;i++) M.pipsEx.push(n+i*0.06); M.hud=[['10,000 steps','14 marches']]; }],
     [PHASE_B,function(){
       M.phaseB=true;
       M.note='Now two players claim on the same evening. One walked five times as far as the other.';
-      M.hud=[['Walker A','4,000 steps · 3.0 km'],['Walker B','20,000 steps · 14.8 km']];
+      M.hud=[['Walker A','4,000 steps'],['Walker B','20,000 steps']];
     }],
-    [30.1,function(n){ for(var i=0;i<9;i++) M.pipsA.push(n+i*0.075); }],
-    [30.9,function(n){ for(var i=0;i<19;i++) M.pipsB.push(n+i*0.055); M.note='4,000 steps earn 9 marches; 20,000 earn 19.'; M.hud=[['Walker A','9 marches'],['Walker B','19 marches']]; }],
-    [32.86,function(){
+    [15.5,function(n){ for(var i=0;i<9;i++) M.pipsA.push(n+i*0.075); }],
+    [16.3,function(n){ for(var i=0;i<19;i++) M.pipsB.push(n+i*0.055); M.note='4,000 steps earn 9 marches; 20,000 earn 19.'; M.hud=[['Walker A','9 marches'],['Walker B','19 marches']]; }],
+    [18.26,function(){
       M.note='Five times the walking, barely twice the marches. The small walker stays in the game.';
-      M.hud=[['Walker A','9 marches'],['Walker B','19 marches'],['Ratio','2.1 ×, not 5 ×']];
+      M.hud=[['Walker A','9 marches'],['Walker B','19 marches'],['Ratio','about 2 ×, not 5 ×']];
     }]
   ],
   draw:function(now){
-    if(!M.phaseB){ drawConversion(now); return; }
+    if(!M.phaseB){ drawClaimDay(now); return; }
     ctx.save(); ctx.globalAlpha=ease((now-PHASE_B)/0.45);
     var laneY=[176,336], maxW=420, x0=170, B=PHASE_B;
     var kA=ease((now-B-0.4)/2.6), kB=ease((now-B-1.0)/3.0);
@@ -529,17 +527,17 @@ scene({
   }
 });
 
-/* chapter 2, first movement: one 10,000-step day, converted line by line */
-function drawConversion(now){
+/* chapter 2, first movement: one day's steps claimed and paid out */
+function drawClaimDay(now){
   var fadeOut=1-ease((now-(PHASE_B-0.35))/0.35);
   ctx.save(); ctx.globalAlpha=fadeOut;
-  var x0=56, xr=402, right=W-56;
+  var x0=170, right=W-56;
   function fade(at,d){ return at==null?0:ease((now-at)/(d||0.5)); }
 
   /* the Health app card, with the day's total and a claim chip */
   var kc=fade(M.card);
   if(kc>0){
-    var cy=38+(1-kc)*12, cw=372, ch=96;
+    var cy=64+(1-kc)*12, cw=372, ch=96;
     ctx.save(); ctx.globalAlpha=fadeOut*kc;
     ctx.fillStyle=T.paper; ctx.fillRect(x0,cy,cw,ch);
     ctx.strokeStyle=T.rule; ctx.lineWidth=1.2; ctx.strokeRect(x0+0.5,cy+0.5,cw-1,ch-1);
@@ -551,41 +549,22 @@ function drawConversion(now){
     ctx.strokeStyle=cc; ctx.lineWidth=1.4; ctx.strokeRect(chx+0.5,cy+12.5,tw,24);
     labelText(chip, chx+tw/2, cy+25, 13, cc);
     labelText('ONCE A DAY', right, cy+24, 13, T.brass,'right');
-    labelText('THAT DAY’S STEPS ONLY', right, cy+46, 13, T.brass,'right');
     ctx.restore();
   }
 
-  /* the ledger: the rule on the left, this day's numbers on the right */
-  var rows=[
-    {y:176, label:'DISTANCE', rule:'1,350 steps ≈ 1 km', ruleAt:M.km, ex:'10,000 ÷ 1,350 ≈ 7.4 km', exAt:M.kmEx},
-    {y:270, label:'MARCHES',  rule:'5 × √km',            ruleAt:M.root, ex:'5 × √7.4 ≈ 5 × 2.72 ≈ 13.6', exAt:M.rootEx}
-  ];
-  rows.forEach(function(r){
-    var kr=fade(r.ruleAt); if(kr<=0) return;
-    ctx.save(); ctx.globalAlpha=fadeOut*kr;
-    ctx.strokeStyle=T.rule; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x0,r.y-22.5); ctx.lineTo(right,r.y-22.5); ctx.stroke();
-    labelText(r.label, x0, r.y-4, 13, T['ink-2'],'left');
-    bigText(r.rule, x0, r.y+32, 28, T.ink,'left');
-    ctx.restore();
-    var ke=fade(r.exAt);
-    if(ke>0){
-      ctx.save(); ctx.globalAlpha=fadeOut*ke;
-      labelText('THIS DAY', xr, r.y-4, 13, T['ink-2'],'left');
-      bigText(r.ex, xr+(1-ke)*10, r.y+32, 24, T.steel,'left');
-      ctx.restore();
-    }
-  });
-
-  /* the result: rounded to whole marches */
-  if(M.pipsEx.length){
-    var ry=364, kk=fade(M.pipsEx[0],0.4);
-    ctx.save(); ctx.globalAlpha=fadeOut*kk;
-    ctx.strokeStyle=T.rule; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x0,ry-22.5); ctx.lineTo(right,ry-22.5); ctx.stroke();
-    labelText('ROUNDED', x0, ry-4, 13, T['ink-2'],'left');
-    bigText('14 marches', x0, ry+32, 28, T.p0,'left');
+  /* what that day is worth */
+  var ke=fade(M.example);
+  if(ke>0){
+    ctx.save(); ctx.globalAlpha=fadeOut*ke;
+    var ax=x0+60, ay0=178, ay1=222;
+    ctx.strokeStyle=T['ink-2']; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(ax,ay0); ctx.lineTo(ax,ay1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax-6,ay1-7); ctx.lineTo(ax,ay1); ctx.lineTo(ax+6,ay1-7); ctx.stroke();
+    labelText('MARCHES EARNED', x0, 252, 15, T['ink-2'],'left');
+    bigText('14 marches', x0, 292, 32, T.p0,'left');
     ctx.restore();
     ctx.save(); ctx.globalAlpha=fadeOut;
-    pipRow(M.pipsEx.length, xr+10, ry+30, 22, T.p0, 10, now, M.pipsEx);
+    pipRow(M.pipsEx.length, x0+10, 344, 22, T.p0, 10, now, M.pipsEx);
     ctx.restore();
   }
   ctx.restore();
@@ -970,7 +949,7 @@ scene({
    ══════════════════════════════════════════════════════════════════════ */
 var NARRATION=[
  [[0.8, "n1_1", 2.76, "You start with one keep, and a little ground around it."], [4.6, "n1_2", 2.78, "The map is shared, but it isn't real geography."], [7.83, "n1_3", 3.89, "Everyone starts far apart, so you'll have to march to find each other."]],
- [[0.6, "n2_1", 1.68, "Your steps become marches."], [2.73, "n2_5", 3.7, "Once a day, you read your step total off the Health app, and claim it."], [6.88, "n2_6", 3.74, "The game counts about thirteen hundred and fifty steps to a kilometre."], [11.07, "n2_7", 3.34, "Your marches are five times the square root of the kilometres."], [14.86, "n2_8", 3.74, "So ten thousand steps is about seven point four kilometres."], [19.05, "n2_9", 5.59, "The square root of that is about two point seven. Times five, that rounds to fourteen marches."], [25.6, "n2_2", 4.08, "Say one of you walks four thousand steps, and the other walks twenty thousand."], [30.13, "n2_3", 2.28, "That's nine marches, against nineteen."], [32.86, "n2_4", 6.1, "Five times the walking, but only about twice the reward. That's what keeps a lighter walker in the game."]],
+ [[0.6, "n2_1", 1.68, "Your steps become marches."], [2.73, "n2_5", 3.7, "Once a day, you read your step total off the Health app, and claim it."], [6.88, "n2_10", 2.93, "A day of ten thousand steps earns fourteen marches."], [11.0, "n2_2", 4.08, "Say one of you walks four thousand steps, and the other walks twenty thousand."], [15.53, "n2_3", 2.28, "That's nine marches, against nineteen."], [18.26, "n2_4", 6.1, "Five times the walking, but only about twice the reward. That's what keeps a lighter walker in the game."]],
  [[1.0, "n3_1", 3.5, "Each march buys one cell, touching ground you already hold."], [4.95, "n3_2", 3.26, "So your border creeps outward. You can't jump across the map."], [8.66, "n3_3", 4.22, "Six marches later, there's a quarry and an iron vein inside your border."]],
  [[1.2, "n4_1", 4.25, "When you reach someone else's land, you can still take it. It just costs double."], [5.9, "n4_2", 2.35, "Two cells taken, four marches gone."], [8.7, "n4_3", 3.86, "The double price is what stops a border collapsing in a single evening."], [13.01, "n4_4", 3.79, "And a keep can never be taken outright. It has to be starved out."]],
  [[1.2, "n5_1", 2.74, "Stone builds walls, up to three courses deep."], [4.39, "n5_2", 2.16, "A tower covers every cell around it."], [7.0, "n5_3", 3.48, "Neither one stops an attack. They just make it cost soldiers."], [10.93, "n5_4", 3.07, "The cell falls, and three of your four soldiers fall with it."], [14.45, "n5_5", 3.65, "Towers need men inside them, and soldiers eat grain, forever."]],
