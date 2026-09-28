@@ -147,9 +147,12 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
   <div class="panel" id="join-panel">
     <div class="pad">
       <h2>Enter the march</h2>
-      <p class="muted">There is one shared board. Type the name the others know you by — the same name on any phone or computer brings back your own ground.</p>
+      <p class="muted">There is one shared board. Already playing? Pick your name from the list. New here? Type the name the others know you by — the same name on any phone or computer brings back your own ground.</p>
+      <div class="steps hide" id="known" style="margin-top:12px">
+        <div class="field"><label for="known-pick">Already playing?</label><select id="known-pick" style="min-width:170px"><option value="">Pick your name</option></select></div>
+      </div>
       <div class="steps" style="margin-top:12px">
-        <div class="field"><label for="handle">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:170px" autocomplete="nickname"></div>
+        <div class="field"><label for="handle" id="handle-label">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:170px" autocomplete="nickname"></div>
         <button id="join" class="go">Enter</button>
       </div>
       <p class="muted" style="margin-top:12px" id="join-hint">Your name is remembered in this browser. No sign-up, no email, no password.</p>
@@ -1268,6 +1271,27 @@ function join(){
     document.getElementById('join-hint').textContent='Could not reach the database ('+e.message+'). Check your connection and try again.';
   });
 }
+/* Names already on the board, so a returning player picks theirs instead of
+   having to remember exactly how they typed it the first time. */
+function loadKnownNames(){
+  if(!online) return;
+  dbGet('/marchland/'+GAME_CODE+'/players').then(function(ps){
+    if(!ps) return;
+    var names=[];
+    for(var pid in ps){ if(ps[pid]&&ps[pid].name) names.push(ps[pid].name); }
+    if(!names.length) return;
+    names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
+    var sel=document.getElementById('known-pick');
+    names.forEach(function(n){ var o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
+    document.getElementById('known').classList.remove('hide');
+    document.getElementById('handle-label').textContent='Or a new name';
+  }).catch(function(){});                           // no list is fine; typing still works
+}
+document.getElementById('known-pick').addEventListener('change',function(){
+  if(!this.value) return;
+  document.getElementById('handle').value=this.value;
+  join();
+});
 document.getElementById('join').addEventListener('click',join);
 document.getElementById('handle').addEventListener('keydown',function(e){ if(e.key==='Enter') join(); });
 document.getElementById('copy').addEventListener('click',function(){
@@ -1294,6 +1318,7 @@ if(!online){
 }
 // a returning player on this device goes straight to the board
 if(myName && online) join();
+else loadKnownNames();
 setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); } } },60000);
 setInterval(function(){ if(G&&online) pull(); },20000);          // a walk-paced game needs no more
 setInterval(function(){ if(G&&me()) render(); },30000);
