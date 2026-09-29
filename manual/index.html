@@ -2131,22 +2131,50 @@ function preloadChapter(i){
 function hush(){
   if(window.__finaleHush) window.__finaleHush();
   if(window.__introHush) window.__introHush();
-  if(nowPlaying){ try{ nowPlaying.pause(); nowPlaying.currentTime=0; }catch(e){} nowPlaying=null; }
+  if(nowPlaying){ try{ nowPlaying.pause(); }catch(e){} nowPlaying=null; }
+}
+/* One voice element, unlocked by the first tap and reused for every line, so
+   browsers that only allow sound after a tap keep allowing it on later chapters. */
+var voiceEl=new Audio(), voiceUnlocked=false, pendingLine=null;
+var SILENCE='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+function unlockVoice(){
+  if(voiceUnlocked) return;
+  voiceUnlocked=true;
+  try{
+    voiceEl.muted=true; voiceEl.src=SILENCE;
+    var p=voiceEl.play();
+    var done=function(){ try{ voiceEl.pause(); }catch(e){} voiceEl.muted=false; };
+    if(p&&p.then) p.then(done,function(){ voiceUnlocked=false; voiceEl.muted=false; }); else done();
+  }catch(e){ voiceUnlocked=false; }
+}
+['pointerdown','touchend','keydown','click'].forEach(function(ev){ document.addEventListener(ev,function(){
+  unlockVoice();
+  if(pendingLine && voiceOn){ var l=pendingLine; pendingLine=null; playLine(l); }
+},true); });
+voiceEl.addEventListener('error',function(){
+  if(voiceEl.src && voiceEl.src.indexOf('data:')===0) return;
+  var c=clips[voiceEl.getAttribute('data-clip')]; if(c) c.__bad=true;
+  badClips++; if(badClips>=6) narrationFailed();
+});
+function playLine(entry){
+  var key='marchland-deploy/audio/'+entry[1]+'.mp3';
+  var a=clipFor(entry[1]);
+  if(a.__bad) return;   /* one missing clip skips that line only */
+  nowPlaying=voiceEl;
+  voiceEl.muted=false;
+  voiceEl.setAttribute('data-clip',key);
+  voiceEl.src=key;
+  var pr=voiceEl.play();
+  if(pr&&pr.catch) pr.catch(function(err){
+    if(err && err.name==='NotSupportedError') narrationFailed();
+    else if(err && err.name==='NotAllowedError'){ voiceUnlocked=false; pendingLine=entry; }   /* replay on the next tap */
+  });
 }
 function say(entry){
   if(!voiceOn||!entry||voiceBroken) return;
   hush();
-  var a=clipFor(entry[1]);
-  if(a.__bad) return;   /* one missing clip skips that line only */
-  nowPlaying=a;
-  try{ a.currentTime=0; }catch(e){}
-  var pr=a.play();
-  if(pr&&pr.catch) pr.catch(function(err){
-    // Only an unplayable file counts as broken. A line cut short by a chapter
-    // change (AbortError) or blocked autoplay (NotAllowedError) is normal.
-    // A missing file is caught by the clip's own 'error' listener.
-    if(err && err.name==='NotSupportedError') narrationFailed();
-  });
+  pendingLine=null;
+  playLine(entry);
 }
 function stillTalking(){
   return !!(voiceOn && nowPlaying && !nowPlaying.paused && !nowPlaying.ended);
