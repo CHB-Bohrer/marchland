@@ -133,7 +133,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">Twelve chapters, about five minutes, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
+  <p class="standfirst">A short opening, then twelve chapters — about five minutes in all,, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -166,7 +166,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
     <dt>Claiming</dt><dd>Once a day, for that day&rsquo;s steps from the Health app, up to 30,000; unclaimed days are lost; every claim is posted to the claim log</dd>
     <dt>Disputes</dt><dd>Anyone else can dispute a claim for 24 hours; the other players then vote for up to 24 hours more; nothing is frozen meanwhile</dd>
-    <dt>Voiding</dt><dd>Needs a majority of the other players. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
+    <dt>Voiding</dt><dd>Needs a majority of the other players who have logged in within the last 24 hours; anyone who hasn&rsquo;t doesn&rsquo;t count. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
     <dt>Empty cell</dt><dd>1 march</dd>
     <dt>Occupied cell</dt><dd>2 marches and a band of yours beside it. The band loses a soldier per wall course, per gun covering the cell and per enemy soldier guarding it, and needs one left over to walk in</dd>
     <dt>Moving a band</dt><dd>1 march per 3 cells, over your own ground only</dd>
@@ -1470,11 +1470,11 @@ scene({
 /* 9 ── claims and disputes */
 scene({
   tag:'Claims', title:'Every claim can be challenged',
-  body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For a full day anyone else may dispute it, and the other players then vote for up to a day more. Voiding needs a majority of them. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
+  body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For a full day anyone else may dispute it, and the other players then vote for up to a day more. Voiding needs a majority of the other players who have logged in within the last 24 hours; anyone who has been away does not count. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
   dur:30,
   init:function(){
     M=blank(); M.status=''; M.card=null; M.clock=null; M.dispute=null; M.votes={}; M.pips=[]; M.debt=null; M.next=null;
-    M.hud=[['Dispute window','24 hours'],['Vote','up to 24 hours more'],['To void','a majority of the others']];
+    M.hud=[['Dispute window','24 hours'],['Vote','up to 24 hours more'],['To void','a majority of active players']];
   },
   beats:[
     [0.6,function(n){
@@ -1536,7 +1536,7 @@ scene({
     }
     if(M.dispute!=null){
       var vy=270, voters=[['THEODORE',T.p1,'theo'],['CHRIS',T.p0,'chris']];
-      labelText('TO VOID: A MAJORITY OF THE OTHERS — 2 OF 2', x0, 248, 14, T['ink-2'],'left');
+      labelText('TO VOID: A MAJORITY OF ACTIVE PLAYERS — 2 OF 2', x0, 248, 14, T['ink-2'],'left');
       voters.forEach(function(v,i){
         var vx=x0+i*200, vote=M.votes[v[2]], a=ease((now-M.dispute)/0.4);
         ctx.save(); ctx.globalAlpha=a;
@@ -1813,6 +1813,272 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
 })();
 
 
+/* 0 ── welcome: the opening sequence */
+(function(){
+  var COLS=['#41BC97','#E2705B','#7FA5CE','#D2A544'];
+  var NIGHT='#070D10', NIGHT2='#13222A', WATER='#1E4A5A', GOLD1='#FFE7A8', GOLD2='#D2A544';
+  function h1(n){ var x=Math.sin(n*127.1+311.7)*43758.5453; return x-Math.floor(x); }
+  function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+  function ease(x){ x=clamp(x,0,1); return 1-Math.pow(1-x,3); }
+  var CX=W*0.5, CY=H*0.5, R=13, DX=Math.sqrt(3)*R, DY=1.5*R;
+  var SEEDS=[[W*0.14,H*0.24],[W*0.86,H*0.24],[W*0.14,H*0.78],[W*0.86,H*0.78]];
+  var T_HIT=2.7, T_RIVER=7.4, T_SNAP=9.6, T_CLASH=12.6, T_TITLE=14.4;
+  var seedT=SEEDS.map(function(s){ return T_HIT+Math.hypot(s[0]-CX,s[1]-CY)/330; });
+  // footprints climb from the bottom edge to the centre
+  var STEPS=[]; for(var i=0;i<9;i++){
+    var u=i/8, x=W*0.5+Math.sin(u*3.1)*46*(1-u*0.4), y=H*0.96-(H*0.96-CY)*u;
+    STEPS.push({x:x+(i%2?9:-9), y:y, t:0.35+i*0.26, a:-Math.PI/2+Math.cos(u*3.1)*0.25});
+  }
+  var cells=null;
+  function riverX(y){ return CX+34*Math.sin(y/62)+8; }
+  function setup(){
+    if(cells) return; cells=[];
+    for(var j=-1;j*DY<H+R;j++) for(var i=-1;i*DX<W+DX;i++){
+      var x=i*DX+(((j%2)+2)%2)*DX/2, y=j*DY, best=0, bd=1e9, sd=1e9;
+      SEEDS.forEach(function(s,k){ var d=Math.hypot(x-s[0],y-s[1])+ (h1(i*7+j*13)-0.5)*18; if(d<bd){ sd=bd; bd=d; best=k; } else if(d<sd) sd=d; });
+      cells.push({x:x,y:y,o:best,d:bd,edge:(sd-bd)<26,rnd:h1(i*31+j*17),river:Math.abs(x-riverX(y))<R*0.95});
+    }
+  }
+  /* sound: one-shots, only while time runs forward at play speed */
+  var ac=null, riser=null;
+  function audio(){
+    if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+    if(ac.state==='suspended') ac.resume();
+    return ac;
+  }
+  function noise(a,dur,type,freq,gain,decay){
+    var len=Math.floor(a.sampleRate*dur), buf=a.createBuffer(1,len,a.sampleRate), d=buf.getChannelData(0);
+    for(var i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay||3);
+    var n=a.createBufferSource(), f=a.createBiquadFilter(), g=a.createGain();
+    n.buffer=buf; f.type=type; f.frequency.value=freq; g.gain.value=gain;
+    n.connect(f).connect(g).connect(a.destination); n.start();
+  }
+  function drum(power){
+    var a=audio(); if(!a) return; var t0=a.currentTime;
+    var o=a.createOscillator(), g=a.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(125,t0); o.frequency.exponentialRampToValueAtTime(36,t0+0.6);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.6*power,t0+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t0+1.0);
+    o.connect(g).connect(a.destination); o.start(t0); o.stop(t0+1.1);
+    noise(a,0.35,'lowpass',900,0.22*power,3);
+  }
+  function tick(){ var a=audio(); if(a) noise(a,0.07,'highpass',2600,0.16,2); }
+  function whoosh(dur,gain){ var a=audio(); if(a) noise(a,dur,'bandpass',700,gain,1.2); }
+  function crash(){ var a=audio(); if(a) noise(a,1.8,'highpass',4200,0.2,2); }
+  function startRiser(){
+    var a=audio(); if(!a||riser) return; var t0=a.currentTime, g=a.createGain(), f=a.createBiquadFilter(), o=a.createOscillator(), o2=a.createOscillator();
+    o.type='sawtooth'; o2.type='sawtooth'; o.frequency.setValueAtTime(70,t0); o.frequency.exponentialRampToValueAtTime(420,t0+4.5);
+    o2.frequency.setValueAtTime(70.7,t0); o2.frequency.exponentialRampToValueAtTime(424,t0+4.5);
+    f.type='lowpass'; f.frequency.setValueAtTime(300,t0); f.frequency.exponentialRampToValueAtTime(3200,t0+4.5);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.07,t0+4.3); g.gain.linearRampToValueAtTime(0.0001,t0+4.7);
+    o.connect(f); o2.connect(f); f.connect(g).connect(a.destination); o.start(t0); o2.start(t0); o.stop(t0+4.8); o2.stop(t0+4.8);
+    riser={g:g,o:[o,o2]};
+  }
+  window.__introHush=function(){
+    if(riser&&ac){ var t0=ac.currentTime; try{ riser.g.gain.cancelScheduledValues(t0); riser.g.gain.setValueAtTime(riser.g.gain.value,t0); riser.g.gain.linearRampToValueAtTime(0.0001,t0+0.2); riser.o.forEach(function(o){ o.stop(t0+0.25); }); }catch(e){} }
+    riser=null;
+  };
+  var EVENTS=[];
+  STEPS.forEach(function(s){ EVENTS.push([s.t,tick]); });
+  EVENTS.push([T_HIT,function(){ drum(1.25); whoosh(1.4,0.16); }]);
+  seedT.forEach(function(t){ EVENTS.push([t,function(){ drum(0.55); }]); });
+  EVENTS.push([T_RIVER,function(){ whoosh(2.0,0.1); }]);
+  EVENTS.push([T_SNAP,function(){ drum(0.6); crash(); }]);
+  EVENTS.push([9.9,startRiser]);
+  for(var b=0;b<6;b++) EVENTS.push([9.6+b*0.5+0.0,function(){ drum(0.32); }]);
+  EVENTS.push([T_CLASH,function(){ drum(1.1); crash(); }]);
+  EVENTS.push([T_TITLE,function(){ drum(1.6); crash(); whoosh(0.9,0.2); }]);
+  var lastT=-1;
+  function bandPos(i,now){
+    var s=SEEDS[i], u=ease((now-9.0)/3.6);
+    return [s[0]+(CX+(s[0]<CX?-1:1)*20-s[0])*u, s[1]+(CY+(s[1]<CY?-1:1)*14-s[1])*u];
+  }
+  var LETTERS='MARCHLAND'.split('');
+
+  scene({
+    tag:'Welcome', title:'Marchland',
+    body:'A step-powered territory game for the family. Walk in real life, claim your steps once a day, and turn them into ground, walls, towers and soldiers on one shared map with no edges. This short tour covers every rule.',
+    dur:19.5,
+    init:function(){ setup(); M=blank(); lastT=-1; M.hud=[['Players','4 keeps'],['Map','120 × 120, no edges']]; },
+    beats:[
+      [0.4,function(){ M.note='Every day, you walk.'; }],
+      [T_HIT,function(){ M.note='Steps become marches.'; }],
+      [3.4,function(){ M.note='Four keeps light up.'; M.hud=[['Ground','growing'],['Map','120 × 120, no edges']]; }],
+      [T_RIVER,function(){ M.note='Rivers cut the world in two.'; }],
+      [9.0,function(){ M.note='The bands march out.'; }],
+      [T_CLASH,function(){ M.note='Borders meet.'; }],
+      [T_TITLE,function(){ M.note='Welcome to Marchland.'; M.hud=[['Your move','press Next — or just listen']]; }]
+    ],
+    draw:function(now){
+      setup();
+      if(playing && lastT>=0 && now-lastT<0.5){
+        EVENTS.forEach(function(e){ if(lastT<e[0] && now>=e[0]) e[1](); });
+      }
+      lastT=now;
+      // camera shake
+      var shake=0;
+      [[T_HIT,1.2],[T_CLASH,1.0],[T_TITLE,1.6],[T_SNAP,0.5]].forEach(function(h){ var a=now-h[0]; if(a>=0&&a<0.55) shake=Math.max(shake,(1-a/0.55)*h[1]*5); });
+      ctx.save();
+      if(!REDUCED && shake>0) ctx.translate(Math.sin(now*93)*shake, Math.cos(now*71)*shake*0.7);
+      // sky
+      var g=ctx.createRadialGradient(CX,CY,30,CX,CY,W*0.72); g.addColorStop(0,NIGHT2); g.addColorStop(1,NIGHT);
+      ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+      // stars
+      for(var s=0;s<70;s++){
+        var sx=h1(s)*W, sy=h1(s+90)*H, tw=0.35+0.65*Math.abs(Math.sin(now*(0.8+h1(s+7))+s));
+        ctx.globalAlpha=0.5*tw*clamp(1-Math.max(0,now-T_HIT)/2.2,0.25,1); ctx.fillStyle='#DDE5DF'; ctx.fillRect(sx,sy,1.4,1.4);
+      }
+      ctx.globalAlpha=1;
+      // the shockwave from the last footstep
+      if(now>=T_HIT && now<T_HIT+1.6){
+        var a0=now-T_HIT; ctx.save(); ctx.globalAlpha=clamp(1-a0/1.6,0,1)*0.9; ctx.strokeStyle=GOLD1; ctx.lineWidth=4*(1-a0/1.6)+1; ctx.shadowColor=GOLD2; ctx.shadowBlur=22;
+        ctx.beginPath(); ctx.arc(CX,CY,a0*330,0,6.3); ctx.stroke(); ctx.restore();
+      }
+      // land
+      cells.forEach(function(c){
+        var lit=seedT[c.o]+c.d/250-0.1+c.rnd*0.3;
+        var riverAt=T_RIVER+ (c.y/H)*1.7;
+        if(c.river && now>=riverAt){
+          var wa=clamp((now-riverAt)/0.5,0,1);
+          hexPath(c.x,c.y,R*0.96); ctx.fillStyle=rgba(WATER,0.35+0.55*wa); ctx.fill();
+          ctx.strokeStyle='rgba(140,200,220,'+(0.15+0.3*(1-wa))+')'; ctx.lineWidth=1; ctx.stroke();
+          return;
+        }
+        if(now<lit){
+          hexPath(c.x,c.y,R*0.94); ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1; ctx.stroke(); return;
+        }
+        var fresh=clamp((now-lit)/0.7,0,1), owner=c.o;
+        if(c.edge && now>=T_CLASH-0.6 && now<T_TITLE+0.4) owner=(Math.floor(now*4+c.rnd*9)%2)?c.o:(c.o+1+Math.floor(c.rnd*3))%4;
+        hexPath(c.x,c.y,R*0.94*(0.7+0.3*ease(fresh)));
+        ctx.fillStyle=rgba(COLS[owner],0.16+0.5*(1-fresh)*(1-fresh)); ctx.fill();
+        ctx.strokeStyle=rgba(COLS[owner],0.35+0.55*(1-fresh)+(c.edge?0.2:0)); ctx.lineWidth=1.2+(1-fresh)*1.6; ctx.stroke();
+      });
+      // wave fronts
+      SEEDS.forEach(function(s,k){
+        var a=now-seedT[k]; if(a<0||a>1.8) return;
+        ctx.save(); ctx.globalAlpha=clamp(1-a/1.8,0,1)*0.8; ctx.strokeStyle=COLS[k]; ctx.lineWidth=3; ctx.shadowColor=COLS[k]; ctx.shadowBlur=16;
+        ctx.beginPath(); ctx.arc(s[0],s[1],a*250,0,6.3); ctx.stroke(); ctx.restore();
+      });
+      // bridge over the river, and its fall
+      var by=H*0.5, bx=riverX(by);
+      if(now>=T_RIVER+1.5){
+        var snap=now>=T_SNAP, fall=clamp((now-T_SNAP)/0.8,0,1);
+        ctx.save(); ctx.lineWidth=3.5; ctx.strokeStyle='#C99A2E'; ctx.shadowColor='#F2A65A'; ctx.shadowBlur=snap?0:12;
+        for(var p=0;p<5;p++){
+          var px=bx-R*0.85+R*1.7*(p+0.5)/5, dy=snap&&p>=1&&p<=3?fall*R*2.4*(1+p*0.2):0;
+          ctx.globalAlpha=snap&&p>=1&&p<=3?1-fall:1;
+          ctx.beginPath(); ctx.moveTo(px,by-R*0.9+dy); ctx.lineTo(px+(snap?fall*(p-2)*4:0),by+R*0.9+dy); ctx.stroke();
+        }
+        ctx.restore();
+        if(snap && now<T_SNAP+1.4){
+          for(var k=0;k<16;k++){ var aa=now-T_SNAP, ang=-Math.PI*h1(k)-0.05, sp=50+90*h1(k+9);
+            ctx.globalAlpha=clamp(1-aa/1.3,0,1); ctx.fillStyle='#BFE0EA'; ctx.beginPath(); ctx.arc(bx+Math.cos(ang)*sp*aa,by+Math.sin(ang)*sp*aa+120*aa*aa,2.2,0,6.3); ctx.fill(); }
+          ctx.globalAlpha=1;
+        }
+      }
+      // keeps
+      SEEDS.forEach(function(s,k){
+        var a=now-seedT[k]; if(a<0) return;
+        var rise=ease(a/0.5);
+        ctx.save(); ctx.translate(0,(1-rise)*14); ctx.globalAlpha=rise; ctx.shadowColor=COLS[k]; ctx.shadowBlur=20;
+        keepGlyph(s[0],s[1],COLS[k],'castle',1.35); ctx.restore();
+        if(a>1.0){ var tw=[s[0]+(CX-s[0])*0.12,s[1]+(CY-s[1])*0.12]; ctx.save(); ctx.globalAlpha=ease((a-1.0)/0.5); ctx.shadowColor=COLS[k]; ctx.shadowBlur=10; keepGlyph(tw[0],tw[1],COLS[k],'tower',1.0); ctx.restore(); }
+      });
+      // marching bands and clash
+      if(now>=9.0){
+        var sizes=[7,6,5,8];
+        for(var b=0;b<4;b++){
+          var p=bandPos(b,now), lost=now>=T_CLASH?Math.min(3,Math.floor((now-T_CLASH)/0.5)+1):0;
+          if(now<T_CLASH+1.5 || true){
+            if(now<T_CLASH){ for(var d=1;d<7;d++){ var q=bandPos(b,now-d*0.1); ctx.globalAlpha=0.22*(1-d/7); ctx.fillStyle=COLS[b]; ctx.beginPath(); ctx.arc(q[0],q[1],R*0.7*(1-d/9),0,6.3); ctx.fill(); } ctx.globalAlpha=1; }
+            ctx.save(); ctx.shadowColor=COLS[b]; ctx.shadowBlur=16; ctx.beginPath(); ctx.arc(p[0],p[1],R*0.9,0,6.3); ctx.fillStyle='#0B1216'; ctx.fill();
+            ctx.lineWidth=3; ctx.strokeStyle=COLS[b]; ctx.stroke(); ctx.restore();
+            ctx.save(); ctx.fillStyle='#F2F4EE'; ctx.font='600 12px "IBM Plex Mono", monospace'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(sizes[b]-lost),p[0],p[1]+1); ctx.restore();
+          }
+        }
+      }
+      if(now>=T_CLASH && now<T_CLASH+1.3){
+        var a3=now-T_CLASH;
+        ctx.save(); ctx.globalAlpha=clamp(1-a3/0.4,0,1)*0.9; ctx.fillStyle='#FFF3D6'; ctx.beginPath(); ctx.arc(CX,CY,50*(0.4+a3*3),0,6.3); ctx.fill(); ctx.restore();
+        for(var sp=0;sp<60;sp++){
+          var ang2=h1(sp*3)*6.283, v2=70+220*h1(sp+11);
+          ctx.globalAlpha=clamp(1-a3/1.3,0,1); ctx.fillStyle=sp%3?'#FFD27A':COLS[sp%4];
+          ctx.fillRect(CX+Math.cos(ang2)*v2*a3-1.5, CY+Math.sin(ang2)*v2*a3+70*a3*a3-1.5,3,3);
+        }
+        ctx.globalAlpha=1;
+      }
+      // footprints, and the counter that drives them
+      STEPS.forEach(function(st){
+        var a=now-st.t; if(a<0) return;
+        var fade=clamp(1-(now-T_HIT)/1.0,0,1)*clamp(1-a/6,0,1); if(fade<=0) return;
+        ctx.save(); ctx.translate(st.x,st.y); ctx.rotate(st.a);
+        ctx.globalAlpha=fade*ease(a/0.15); ctx.fillStyle=GOLD1; ctx.shadowColor=GOLD2; ctx.shadowBlur=14;
+        ctx.beginPath(); ctx.ellipse(0,0,4,7,0,0,6.3); ctx.fill(); ctx.beginPath(); ctx.ellipse(0,-10,3,3.4,0,0,6.3); ctx.fill();
+        if(a<0.7){ ctx.globalAlpha=(1-a/0.7)*0.5*fade; ctx.strokeStyle=GOLD1; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(0,-2,6+a*46,0,6.3); ctx.stroke(); }
+        ctx.restore();
+      });
+      if(now<T_HIT+2.4){
+        var cnt=Math.round(12847*ease((now-0.3)/2.4)), ha=clamp(1-(now-(T_HIT+1.6))/0.8,0,1);
+        ctx.save(); ctx.globalAlpha=ha; ctx.textAlign='left';
+        ctx.fillStyle='rgba(221,229,223,0.65)'; ctx.font='500 11px "IBM Plex Mono", monospace'; ctx.fillText('TODAY’S STEPS',24,32);
+        ctx.fillStyle=GOLD1; ctx.font='500 30px "IBM Plex Mono", monospace'; ctx.shadowColor=GOLD2; ctx.shadowBlur=14;
+        ctx.fillText(cnt.toLocaleString(),24,64);
+        if(now>=T_HIT){ ctx.fillStyle='#41BC97'; ctx.font='500 15px "IBM Plex Mono", monospace'; ctx.shadowBlur=0; ctx.fillText('= 17 MARCHES',24,88); }
+        ctx.restore();
+      }
+      ctx.restore();
+      // embers
+      if(now>=3.4){
+        var ea=clamp((now-3.4)/2,0,1);
+        for(var e=0;e<80;e++){
+          var spd=16+34*h1(e+5), ex=h1(e)*W+Math.sin(now*0.8+e)*14, ey=H+20-((now*spd+h1(e+50)*H*1.4)%(H+40));
+          ctx.globalAlpha=ea*(0.2+0.5*h1(e+7))*(0.6+0.4*Math.sin(now*3+e)); ctx.fillStyle=e%4?'#F2A65A':'#FFE3A3';
+          ctx.beginPath(); ctx.arc(ex,ey,1+1.5*h1(e+3),0,6.3); ctx.fill();
+        }
+        ctx.globalAlpha=1;
+      }
+      // the title
+      if(now>=T_TITLE-0.9){
+        var dim=clamp((now-(T_TITLE-0.9))/1.2,0,1);
+        ctx.fillStyle='rgba(4,8,10,'+(0.7*dim)+')'; ctx.fillRect(0,0,W,H);
+        var vg=ctx.createRadialGradient(CX,CY,H*0.2,CX,CY,W*0.7); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,'+(0.6*dim)+')'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+      }
+      if(now>=T_TITLE){
+        var a4=now-T_TITLE;
+        if(a4<0.5){ ctx.save(); ctx.globalAlpha=(1-a4/0.5)*0.8; ctx.fillStyle='#FFF3D6'; ctx.fillRect(0,0,W,H); ctx.restore(); }
+        if(a4<1.4){ ctx.save(); ctx.globalAlpha=clamp(1-a4/1.4,0,1)*0.8; ctx.strokeStyle=GOLD1; ctx.lineWidth=5*(1-a4/1.4)+1; ctx.shadowColor=GOLD2; ctx.shadowBlur=24; ctx.beginPath(); ctx.arc(CX,CY-20,a4*520,0,6.3); ctx.stroke(); ctx.restore(); }
+        ctx.save(); ctx.font='700 78px "Fraunces","Iowan Old Style",Georgia,serif'; ctx.textBaseline='middle'; ctx.textAlign='left';
+        var track=6, widths=LETTERS.map(function(L){ return ctx.measureText(L).width; }), total=widths.reduce(function(x,y){ return x+y; },0)+track*(LETTERS.length-1), x0=CX-total/2, cx=x0;
+        LETTERS.forEach(function(L,i){
+          var la=a4-i*0.055, sc=1+1.6*Math.pow(1-ease(la/0.35),2), al=clamp(la/0.2,0,1);
+          if(la>=0){
+            ctx.save(); ctx.translate(cx+widths[i]/2,CY-20); ctx.scale(sc,sc); ctx.globalAlpha=al;
+            ctx.shadowColor='#F2A65A'; ctx.shadowBlur=26+12*Math.sin(now*2.4+i*0.6);
+            var gr=ctx.createLinearGradient(0,-40,0,40); gr.addColorStop(0,GOLD1); gr.addColorStop(1,GOLD2); ctx.fillStyle=gr;
+            ctx.textAlign='center'; ctx.fillText(L,0,0); ctx.restore();
+          }
+          cx+=widths[i]+track;
+        });
+        ctx.restore();
+        if(a4>1.0){
+          var a5=clamp((a4-1.0)/0.9,0,1), half=210*ease(a5);
+          ctx.save(); ctx.globalAlpha=a5; ctx.strokeStyle=GOLD2; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(CX-half,CY+38); ctx.lineTo(CX+half,CY+38); ctx.stroke();
+          ctx.fillStyle='#DDE5DF'; ctx.font='500 13.5px "IBM Plex Mono", monospace'; ctx.textAlign='center';
+          ctx.fillText('EVERY STEP YOU WALK BECOMES GROUND YOU HOLD',CX,CY+64);
+          ctx.restore();
+        }
+        if(a4>2.6){
+          var a6=clamp((a4-2.6)/0.8,0,1);
+          ctx.save(); ctx.globalAlpha=a6; ctx.textAlign='center'; ctx.font='600 15px "IBM Plex Mono", monospace'; ctx.fillStyle=GOLD1; ctx.shadowColor=GOLD2; ctx.shadowBlur=12;
+          ctx.fillText('WALK  ·  CLAIM  ·  BUILD  ·  CONQUER',CX,CY+100);
+          ctx.restore();
+        }
+      }
+    }
+  });
+  SCENES.unshift(SCENES.pop());
+})();
+
+
 /* ══════════════════════════════════════════════════════════════════════
    NARRATION — a recorded track, rendered once with a neural voice and
    shipped with the page, so every listener hears the same thing rather than
@@ -1821,6 +2087,7 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
    script can be read and re-recorded; they are never spoken by the device.
    ══════════════════════════════════════════════════════════════════════ */
 var NARRATION=[
+[[0.9,"w_1",2.35,"Every step you walk becomes ground you hold."],[4.9,"w_2",3.86,"Raise a keep. Muster soldiers. Push your border across the world."],[10.4,"w_3",2.52,"Rivals will rise. Bridges will fall."],[14.6,"w_4",1.39,"Welcome to Marchland."]],
  [[0.8, "n1_1", 2.76, "You start with one keep, and a little ground around it."], [4.6, "n1_2", 2.78, "The map is shared, but it isn't real geography."], [7.83, "n1_3", 3.89, "Everyone starts far apart, so you'll have to march to find each other."]],
  [[0.6, "n2_1", 1.68, "Your steps become marches."], [2.73, "n2_5", 3.7, "Once a day, you read your step total off the Health app, and claim it."], [6.88, "n2_10", 2.93, "A day of ten thousand steps earns fourteen marches."], [11.0, "n2_2", 4.08, "Say one of you walks four thousand steps, and the other walks twenty thousand."], [15.53, "n2_3", 2.28, "That's nine marches, against nineteen."], [18.26, "n2_4", 6.1, "Five times the walking, but only about twice the reward. That's what keeps a lighter walker in the game."]],
  [[1.0, "n3_1", 3.5, "Each march buys one cell, touching ground you already hold."], [4.95, "n3_2", 3.26, "So your border creeps outward. You can't jump across the map."], [8.66, "n3_3", 4.22, "Six marches later, there's a quarry and an iron vein inside your border."]],
@@ -1863,6 +2130,7 @@ function preloadChapter(i){
 }
 function hush(){
   if(window.__finaleHush) window.__finaleHush();
+  if(window.__introHush) window.__introHush();
   if(nowPlaying){ try{ nowPlaying.pause(); nowPlaying.currentTime=0; }catch(e){} nowPlaying=null; }
 }
 function say(entry){
