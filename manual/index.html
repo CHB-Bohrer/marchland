@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
 <meta property="og:title" content="Marchland Field Manual">
-<meta property="og:description" content="Eleven chapters on how Marchland works, with narration.">
+<meta property="og:description" content="Twelve chapters on how Marchland works, with narration.">
 <meta property="og:type" content="website">
 <style>
   html,body{margin:0;padding:0}
@@ -133,7 +133,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">Eleven chapters, about four and a half minutes, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
+  <p class="standfirst">Twelve chapters, about five minutes, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -1032,6 +1032,230 @@ scene({
   }
 });
 
+/* 12 ── prepare for battle: the finale */
+(function(){
+  var COLS=['#41BC97','#E2705B','#7FA5CE','#D2A544'];
+  var NIGHT='#0B1216', NIGHT2='#15232A', WATER='#1E3C47';
+  function h1(n){ var x=Math.sin(n*127.1+311.7)*43758.5453; return x-Math.floor(x); }
+  function clamp(x,a,b){ return x<a?a:x>b?b:x; }
+  function ease(x){ x=clamp(x,0,1); return 1-Math.pow(1-x,3); }
+  var seats=null, cells=null, riverX=null;
+  function setup(){
+    if(seats) return;
+    var corners=[[W*0.13,H*0.2],[W*0.87,H*0.2],[W*0.13,H*0.8],[W*0.87,H*0.8]];
+    seats=corners.map(function(c){
+      var best=null,bd=1e9;
+      BOARD.forEach(function(p){ var d=Math.hypot(hx(p[0],p[1])-c[0],hy(p[0],p[1])-c[1]); if(d<bd){ bd=d; best=p; } });
+      return best;
+    });
+    riverX=function(y){ return W*0.5+26*Math.sin(y/55); };
+    cells=BOARD.map(function(p){
+      var x=hx(p[0],p[1]), y=hy(p[0],p[1]);
+      var river=Math.abs(x-riverX(y))<S*0.8;
+      var best=0,bd=1e9,second=1e9;
+      seats.forEach(function(s,i){ var d=hexDist(p[0],p[1],s[0],s[1]); if(d<bd){ second=bd; bd=d; best=i; } else if(d<second) second=d; });
+      return {q:p[0],r:p[1],x:x,y:y,river:river,owner:best,d:bd,edge:(second-bd)<=1,rnd:h1(p[0]*31+p[1]*17)};
+    });
+    // one bridge where the river crosses the middle row
+    var bestB=null,bb=1e9;
+    cells.forEach(function(c){ if(c.river){ var d=Math.abs(c.y-H*0.5); if(d<bb){ bb=d; bestB=c; } } });
+    if(bestB){ bestB.bridge=true; }
+  }
+  function keepAt(i){ var s=seats[i]; return [hx(s[0],s[1]),hy(s[0],s[1])]; }
+  function towerAt(i){ var k=keepAt(i), dx=W*0.5-k[0], dy=H*0.5-k[1], L=Math.hypot(dx,dy); return [k[0]+dx/L*S*3.2,k[1]+dy/L*S*3.2]; }
+  function bandPos(i,now){ var k=keepAt(i), u=ease((now-6.0)/5.0), tx=W*0.5+(k[0]<W*0.5?-1:1)*S*1.9, ty=H*0.5+(k[1]<H*0.5?-1:1)*S*1.3; return [k[0]+(tx-k[0])*u, k[1]+(ty-k[1])*u]; }
+  var HITS=[[6.0,0.6],[7.6,0.8],[11.5,0.7],[12.3,0.7],[13.1,0.8],[13.9,1.0],[16.9,1.4]];
+  var CLASH=[[11.5,0],[12.3,1],[13.1,2],[13.9,3]];
+  var ac=null, drone=null;
+  function audio(){
+    if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+    if(ac.state==='suspended') ac.resume();
+    return ac;
+  }
+  function drum(power){
+    var a=audio(); if(!a) return; var t0=a.currentTime;
+    var o=a.createOscillator(), g=a.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(120,t0); o.frequency.exponentialRampToValueAtTime(38,t0+0.55);
+    g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.55*power,t0+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.9);
+    o.connect(g).connect(a.destination); o.start(t0); o.stop(t0+1);
+    var len=Math.floor(a.sampleRate*0.35), buf=a.createBuffer(1,len,a.sampleRate), d=buf.getChannelData(0);
+    for(var i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,3);
+    var n=a.createBufferSource(), f=a.createBiquadFilter(), ng=a.createGain();
+    n.buffer=buf; f.type='lowpass'; f.frequency.value=900; ng.gain.value=0.22*power;
+    n.connect(f).connect(ng).connect(a.destination); n.start(t0);
+  }
+  function startDrone(){
+    var a=audio(); if(!a||drone) return; var t0=a.currentTime;
+    var g=a.createGain(); g.gain.setValueAtTime(0.0001,t0); g.gain.exponentialRampToValueAtTime(0.09,t0+2.5);
+    var f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=420;
+    [55,82.4,110].forEach(function(fr){ var o=a.createOscillator(); o.type='sawtooth'; o.frequency.value=fr; o.detune.value=(fr%2?6:-5); o.connect(f); o.start(t0); (g._o=g._o||[]).push(o); });
+    f.connect(g).connect(a.destination); drone=g;
+  }
+  window.__finaleHush=function(){
+    if(drone&&ac){ var t0=ac.currentTime; try{ drone.gain.cancelScheduledValues(t0); drone.gain.setValueAtTime(drone.gain.value,t0); drone.gain.exponentialRampToValueAtTime(0.0001,t0+0.6); drone._o.forEach(function(o){ o.stop(t0+0.7); }); }catch(e){} }
+    drone=null;
+  };
+  var lastT=-1;
+  scene({
+    tag:'Battle', title:'Prepare for battle',
+    body:'That is the whole game: walk, claim your steps once a day, spend your marches, raise soldiers and walls and towers, and keep your land connected to home. The board is waiting.',
+    dur:23,
+    init:function(){ setup(); M=blank(); lastT=-1; M.hud=[['Players','4 keeps'],['Map','120 × 120, no edges']]; },
+    beats:[
+      [0.8,function(){ M.note='Four keeps light up at the corners of the world.'; }],
+      [6.0,function(){ M.note='The bands march out.'; M.hud=[['Bands','marching'],['Map','120 × 120, no edges']]; }],
+      [7.6,function(){ M.note='A bridge falls — the river now splits the board.'; }],
+      [8.6,function(){ M.note='Towers open fire on anything that comes within range.'; }],
+      [11.5,function(){ M.note='Borders meet.'; M.hud=[['Bands','engaged'],['Map','120 × 120, no edges']]; }],
+      [16.9,function(){ M.note='Walk far. Claim well. Hold the line.'; M.hud=[['Your move','claim today’s steps']]; }]
+    ],
+    draw:function(now){
+      setup();
+      // sound: only when time runs forward at play speed
+      if(playing && lastT>=0 && now-lastT<0.5){
+        HITS.forEach(function(h){ if(lastT<h[0] && now>=h[0]) drum(h[1]); });
+        if(lastT<15.0 && now>=15.0) startDrone();
+      }
+      lastT=now;
+      // camera shake after hits
+      var shake=0; HITS.forEach(function(h){ var a=now-h[0]; if(a>=0&&a<0.5) shake=Math.max(shake,(1-a/0.5)*h[1]*5); });
+      ctx.save();
+      if(!REDUCED && shake>0) ctx.translate(Math.sin(now*91)*shake, Math.cos(now*77)*shake*0.7);
+      // night sky
+      var g=ctx.createRadialGradient(W/2,H*0.45,40,W/2,H/2,W*0.75);
+      g.addColorStop(0,NIGHT2); g.addColorStop(1,NIGHT);
+      ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+      // land
+      cells.forEach(function(c){
+        var s=S*0.92;
+        if(c.river){
+          hexPath(c.x,c.y,S*1.0); ctx.fillStyle=WATER; ctx.fill();
+          if(c.bridge){
+            var broke=now>=7.6, fall=clamp((now-7.6)/0.8,0,1);
+            ctx.save(); ctx.strokeStyle='#8F6F1C'; ctx.lineWidth=3;
+            for(var i=0;i<5;i++){
+              var px=c.x-S*0.45+S*0.9*(i+0.5)/5, dy=broke&&i>=1&&i<=3 ? fall*S*0.6*(1+i*0.2) : 0;
+              ctx.globalAlpha=broke&&i>=1&&i<=3 ? 1-fall : 1;
+              ctx.beginPath(); ctx.moveTo(px,c.y-S*0.21+dy); ctx.lineTo(px+(broke?fall*(i-2)*3:0),c.y+S*0.21+dy); ctx.stroke();
+            }
+            ctx.restore();
+            if(broke && now<9){ // splash
+              for(var k=0;k<14;k++){ var a=now-7.6, ang=-Math.PI*h1(k)*1.0-0.05, sp=40+60*h1(k+9);
+                var x=c.x+Math.cos(ang)*sp*a, y=c.y+Math.sin(ang)*sp*a+90*a*a;
+                ctx.globalAlpha=clamp(1-a/1.3,0,1); ctx.fillStyle='#A9C3CC'; ctx.beginPath(); ctx.arc(x,y,2,0,6.3); ctx.fill(); }
+              ctx.globalAlpha=1;
+            }
+          }
+          return;
+        }
+        var grow=0.9+c.owner*0.6+c.d*0.55+c.rnd*0.3;           // when this cell joins its keep
+        var ownedNow = now>=grow && (c.d<=5 || now>=11.5+c.rnd*2.5);
+        var owner=c.owner;
+        if(ownedNow && c.edge && now>=11.5 && now<16){ // contested cells flip back and forth
+          owner = (Math.floor(now*3+c.rnd*7)%2) ? c.owner : (c.owner+1+Math.floor(c.rnd*3))%4;
+        }
+        hexPath(c.x,c.y,s);
+        if(ownedNow){
+          var fresh=clamp((now-grow)/0.5,0,1);
+          ctx.fillStyle=rgba(COLS[owner],0.14+0.18*(1-fresh)); ctx.fill();
+          ctx.strokeStyle=rgba(COLS[owner],0.75); ctx.lineWidth=1.6; ctx.stroke();
+        } else {
+          ctx.fillStyle='rgba(255,255,255,0.025)'; ctx.fill();
+          ctx.strokeStyle='rgba(255,255,255,0.06)'; ctx.lineWidth=1; ctx.stroke();
+        }
+      });
+      // keeps, with a flare as each lights
+      for(var i=0;i<4;i++){
+        var k=keepAt(i), lit=0.3+i*0.6;
+        if(now<lit) continue;
+        var age=now-lit;
+        if(age<1.6){ ctx.save(); ctx.globalAlpha=clamp(1-age/1.6,0,1); ctx.strokeStyle=COLS[i]; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(k[0],k[1],S*(0.5+age*2.2),0,6.3); ctx.stroke(); ctx.restore(); }
+        ctx.save(); ctx.shadowColor=COLS[i]; ctx.shadowBlur=18; keepGlyph(k[0],k[1],COLS[i],'castle',1.15); ctx.restore();
+        if(now>=3.0){ var tw=towerAt(i); ctx.save(); ctx.shadowColor=COLS[i]; ctx.shadowBlur=10; keepGlyph(tw[0],tw[1],COLS[i],'tower',0.9); ctx.restore(); }
+      }
+      // tower volleys at the marching bands (8.6 – 14)
+      if(now>=8.6 && now<14.5){
+        for(var i2=0;i2<4;i2++){
+          var tw2=towerAt(i2), tgt=bandPos((i2+1)%4,now);
+          for(var v=0;v<3;v++){
+            var t0=8.6+i2*0.23+v*0.9+ (Math.floor((now-8.6)/2.7))*2.7; var a2=now-t0;
+            if(a2<0||a2>0.7) continue;
+            var u=a2/0.7, mx=(tw2[0]+tgt[0])/2, my=Math.min(tw2[1],tgt[1])-60;
+            var x=(1-u)*(1-u)*tw2[0]+2*(1-u)*u*mx+u*u*tgt[0], y=(1-u)*(1-u)*tw2[1]+2*(1-u)*u*my+u*u*tgt[1];
+            ctx.save(); ctx.strokeStyle=COLS[i2]; ctx.shadowColor=COLS[i2]; ctx.shadowBlur=12; ctx.lineWidth=2.5; ctx.lineCap='round';
+            var u2=Math.max(0,u-0.12), x2=(1-u2)*(1-u2)*tw2[0]+2*(1-u2)*u2*mx+u2*u2*tgt[0], y2=(1-u2)*(1-u2)*tw2[1]+2*(1-u2)*u2*my+u2*u2*tgt[1];
+            ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x,y); ctx.stroke(); ctx.restore();
+            if(u>0.92){ ctx.save(); ctx.globalAlpha=(1-u)/0.08; ctx.fillStyle='#FFF3D6'; ctx.beginPath(); ctx.arc(tgt[0],tgt[1],10,0,6.3); ctx.fill(); ctx.restore(); }
+          }
+        }
+      }
+      // bands
+      if(now>=6.0){
+        var sizes=[7,6,5,8];
+        for(var b=0;b<4;b++){
+          var p=bandPos(b,now), lost=now>=11.5?Math.min(3,Math.floor((now-11.5)/0.8)+1):0;
+          ctx.save(); ctx.shadowColor=COLS[b]; ctx.shadowBlur=14;
+          ctx.beginPath(); ctx.arc(p[0],p[1],S*0.34,0,6.3); ctx.fillStyle='#0B1216'; ctx.fill();
+          ctx.lineWidth=3; ctx.strokeStyle=COLS[b]; ctx.stroke(); ctx.restore();
+          ctx.save(); ctx.fillStyle='#F2F4EE'; ctx.font='600 '+Math.round(S*0.4)+'px "IBM Plex Mono", monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+          ctx.fillText(String(sizes[b]-lost),p[0],p[1]+1); ctx.restore();
+          // dust trail while marching
+          if(now<11){ for(var d=1;d<6;d++){ var q=bandPos(b,now-d*0.12); ctx.globalAlpha=0.18*(1-d/6); ctx.fillStyle=COLS[b]; ctx.beginPath(); ctx.arc(q[0],q[1],S*0.3*(1-d/8),0,6.3); ctx.fill(); } ctx.globalAlpha=1; }
+        }
+      }
+      // clash sparks
+      CLASH.forEach(function(cl){
+        var a3=now-cl[0]; if(a3<0||a3>1.1) return;
+        var c1=bandPos(cl[1],now), c2=bandPos((cl[1]+1)%4,now), cx=(c1[0]+c2[0])/2, cy=(c1[1]+c2[1])/2;
+        ctx.save(); ctx.globalAlpha=clamp(1-a3/0.35,0,1)*0.8; ctx.fillStyle='#FFF3D6'; ctx.beginPath(); ctx.arc(cx,cy,26*(0.5+a3*2),0,6.3); ctx.fill(); ctx.restore();
+        for(var sp=0;sp<26;sp++){
+          var ang=h1(sp*3+cl[1])*6.283, v2=60+140*h1(sp+cl[1]*11);
+          var x=cx+Math.cos(ang)*v2*a3, y=cy+Math.sin(ang)*v2*a3+60*a3*a3;
+          ctx.globalAlpha=clamp(1-a3/1.1,0,1); ctx.fillStyle=sp%3?'#FFD27A':COLS[(cl[1]+sp)%4];
+          ctx.fillRect(x-1.5,y-1.5,3,3);
+        }
+        ctx.globalAlpha=1;
+      });
+      ctx.restore();
+      // embers rising through the second half
+      if(now>=9){
+        var ea=clamp((now-9)/2,0,1);
+        for(var e=0;e<70;e++){
+          var spd=18+30*h1(e+5), x=h1(e)*W+Math.sin(now*0.8+e)*14, y=H+20-((now*spd+h1(e+50)*H*1.4)%(H+40));
+          ctx.globalAlpha=ea*(0.25+0.55*h1(e+7))*(0.6+0.4*Math.sin(now*3+e));
+          ctx.fillStyle=e%4?'#F2A65A':'#FFE3A3'; ctx.beginPath(); ctx.arc(x,y,1+1.6*h1(e+3),0,6.3); ctx.fill();
+        }
+        ctx.globalAlpha=1;
+      }
+      // the title card
+      if(now>=15.2){
+        var dim=clamp((now-15.2)/1.6,0,1);
+        ctx.fillStyle='rgba(5,9,11,'+(0.62*dim)+')'; ctx.fillRect(0,0,W,H);
+        var vg=ctx.createRadialGradient(W/2,H/2,H*0.2,W/2,H/2,W*0.7); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,'+(0.6*dim)+')');
+        ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+      }
+      if(now>=16.9){
+        var a4=now-16.9, sc=1+0.35*Math.pow(1-ease(a4/0.6),2), al=clamp(a4/0.35,0,1);
+        if(a4<0.6){ ctx.save(); ctx.globalAlpha=(1-a4/0.6)*0.7; ctx.fillStyle='#FFF3D6'; ctx.fillRect(0,0,W,H); ctx.restore(); }
+        ctx.save(); ctx.translate(W/2,H*0.44); ctx.scale(sc,sc); ctx.globalAlpha=al;
+        ctx.shadowColor='#F2A65A'; ctx.shadowBlur=28+10*Math.sin(now*2.2);
+        ctx.font='700 54px "Fraunces","Iowan Old Style",Georgia,serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        var grad=ctx.createLinearGradient(0,-30,0,30); grad.addColorStop(0,'#FFE7A8'); grad.addColorStop(1,'#D2A544');
+        ctx.fillStyle=grad; ctx.fillText('Prepare for battle',0,0);
+        ctx.restore();
+        if(a4>0.9){
+          var a5=clamp((a4-0.9)/0.8,0,1);
+          ctx.save(); ctx.globalAlpha=a5; ctx.strokeStyle='#D2A544'; ctx.lineWidth=1.5;
+          var half=150*ease(a5); ctx.beginPath(); ctx.moveTo(W/2-half,H*0.44+40); ctx.lineTo(W/2+half,H*0.44+40); ctx.stroke();
+          ctx.fillStyle='#DDE5DF'; ctx.font='500 14px "IBM Plex Mono", monospace'; ctx.textAlign='center';
+          ctx.fillText('WALK FAR  ·  CLAIM WELL  ·  HOLD THE LINE',W/2,H*0.44+64);
+          ctx.restore();
+        }
+      }
+    }
+  });
+})();
+
 /* ══════════════════════════════════════════════════════════════════════
    NARRATION — a recorded track, rendered once with a neural voice and
    shipped with the page, so every listener hears the same thing rather than
@@ -1050,7 +1274,8 @@ var NARRATION=[
  [[1.4, "n7_1", 2.93, "A second castle is a campaign, not a purchase."], [4.78, "n7_2", 3.31, "No two of your keeps can stand within seven cells of each other."], [8.54, "n7_3", 2.71, "So building one means pushing your border out first."], [11.7, "n7_4", 3.29, "Now the eastern arm draws its supply from the new keep."], [15.44, "n7_5", 2.54, "And every castle costs more than the one before."], [18.43, "n7_6", 2.71, "And soldiers mustered there are already at the front."]],
  [[0.8, "r_1", 5.64, "Rivers cut across the map. Nobody can claim them, and nothing crosses them, except at a bridge."], [7.24, "r_2", 3.96, "A bridge is held like any other cell. Supply and soldiers cross it."], [12.0, "r_3", 3.67, "But a band standing beside a bridge can break it, for two marches."], [16.47, "r_4", 5.45, "Now everything on the far bank is cut off, until someone rebuilds the bridge with forty stone."], [22.72, "r_5", 4.58, "And the map has no edge. Walk far enough east, and you come back from the west."]],
  [[0.8, "n8_1", 2.52, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.34, "Read the total off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.22, "Miss a day, and those steps are gone. They don't carry over."], [12.4, "n8_4", 3.05, "And one day counts for thirty thousand steps, at most."]],
- [[0.6, "n9_1", 4.39, "Every claim goes up on a public log, and its marches can be spent straight away."], [5.44, "n9_2", 4.06, "For twelve hours, anyone else can dispute it. Then the other players vote."], [9.95, "n9_3", 4.58, "It takes a majority of them to void a claim. Here, both of them vote to void it."], [14.98, "n9_4", 4.03, "Kit keeps what he has. But the fifteen marches come off his next claim."], [19.46, "n9_5", 4.85, "The next day he earns twenty. Fifteen pay off the debt, and five are his to spend."], [24.76, "n9_6", 4.27, "A screenshot from the Health app is the easiest way to avoid an argument."]]
+ [[0.6, "n9_1", 4.39, "Every claim goes up on a public log, and its marches can be spent straight away."], [5.44, "n9_2", 4.06, "For twelve hours, anyone else can dispute it. Then the other players vote."], [9.95, "n9_3", 4.58, "It takes a majority of them to void a claim. Here, both of them vote to void it."], [14.98, "n9_4", 4.03, "Kit keeps what he has. But the fifteen marches come off his next claim."], [19.46, "n9_5", 4.85, "The next day he earns twenty. Fifteen pay off the debt, and five are his to spend."], [24.76, "n9_6", 4.27, "A screenshot from the Health app is the easiest way to avoid an argument."]],
+ [[0.8, "b_1", 4.49, "Four keeps. One world. And every step you take is a soldier on the march."], [6.09, "b_2", 3.91, "Borders will meet. Bridges will fall. Towers will hold the line."], [10.8, "b_3", 3.7, "So walk far, choose your ground, and never leave a tower empty."], [17.2, "b_4", 1.18, "Prepare for battle."]]
 ];
 NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
 
@@ -1084,6 +1309,7 @@ function preloadChapter(i){
   for(var j=0;j<ns.length;j++) clipFor(ns[j][1]);
 }
 function hush(){
+  if(window.__finaleHush) window.__finaleHush();
   if(nowPlaying){ try{ nowPlaying.pause(); nowPlaying.currentTime=0; }catch(e){} nowPlaying=null; }
 }
 function say(entry){
