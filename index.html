@@ -23,7 +23,7 @@ var DB_URL = "https://marchland-352fc-default-rtdb.firebaseio.com";
   --paper:#E5E8E2; --surface:#F2F4EE; --sink:#DCE0D8;
   --ink:#16242A; --ink-2:#54666A; --rule:#C2C9BE;
   --p0:#1C6B57; --p1:#B23F2E; --p2:#3E5E86; --p3:#8F6F1C;
-  --brass:#8F6F1C; --steel:#3E5E86;
+  --brass:#8F6F1C; --steel:#3E5E86; --water:#2F8FB3;
   --display:"Fraunces","Iowan Old Style",Georgia,serif;
   --body:"Archivo","Helvetica Neue",Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
@@ -33,7 +33,7 @@ var DB_URL = "https://marchland-352fc-default-rtdb.firebaseio.com";
     --paper:#0E1619; --surface:#162226; --sink:#0A1114;
     --ink:#DDE5DF; --ink-2:#8DA1A2; --rule:#2B3B3F;
     --p0:#41BC97; --p1:#E2705B; --p2:#7FA5CE; --p3:#D2A544;
-    --brass:#D2A544; --steel:#7FA5CE;
+    --brass:#D2A544; --steel:#7FA5CE; --water:#49A9CF;
   }
 }
 *{ box-sizing:border-box; }
@@ -67,6 +67,8 @@ input:focus-visible, select:focus-visible{ outline:2px solid var(--brass); outli
 .ledger{ display:flex; flex-wrap:wrap; border-bottom:1px solid var(--rule); }
 .stat{ flex:1 1 78px; padding:9px 12px; border-right:1px solid var(--rule); display:flex; flex-direction:column; gap:1px; }
 .stat:last-child{ border-right:0; }
+@keyframes statflash{ 0%{ color:var(--brass); transform:scale(1.22); } 100%{ transform:none; } }
+.stat.flash .v{ display:inline-block; transform-origin:left center; animation:statflash 1.4s ease-out; }
 .stat .k{ font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); }
 .stat .v{ font-family:var(--mono); font-size:18px; font-variant-numeric:tabular-nums; }
 .stat .u{ font-family:var(--mono); font-size:9.5px; color:var(--ink-2); }
@@ -76,6 +78,7 @@ input:focus-visible, select:focus-visible{ outline:2px solid var(--brass); outli
 .rail{ display:flex; flex-wrap:wrap; gap:7px; align-items:center; padding:10px 12px; border-top:1px solid var(--rule); }
 .canvas-pad{ position:relative; background:var(--sink); }
 canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crosshair; }
+.replaybtn{ position:absolute; top:8px; left:8px; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; background:var(--surface); opacity:.95; }
 .mapctl{ position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:5px; }
 .mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
 .status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
@@ -202,6 +205,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 
       <div class="canvas-pad">
         <canvas id="board"></canvas>
+        <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
           <button id="zout" aria-label="Zoom out">−</button>
@@ -212,6 +216,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 
       <div class="rail">
         <button id="m-claim" aria-pressed="true">Spend a march</button>
+        <button id="m-bridge" aria-pressed="false">Bridge <span class="cost">1 m · 40 tm · 20 st</span></button>
         <button id="m-wall" aria-pressed="false">Wall <span class="cost">30 st</span></button>
         <button id="m-tower" aria-pressed="false">Tower <span class="cost">40 st · 30 tm</span></button>
         <button id="m-castle" aria-pressed="false">Castle <span class="cost">260 tm · 200 st · 60 ir</span></button>
@@ -222,8 +227,9 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
       <div class="status" id="status"><span>Loading…</span></div>
 
       <div class="legend">
-        <span><span class="sw" style="background:var(--brass);border-color:var(--brass)"></span> wall I–III</span>
+        <span><span class="sw" style="background:#B9B4A8;border-color:#948F83"></span> stone wall I–III</span>
         <span>▲ timber</span><span>◆ stone</span><span>● iron</span><span>≡ grain</span>
+        <span><span class="sw" style="background:var(--water);border-color:var(--water);opacity:.6"></span> river &mdash; bridge it to cross (a day to build)</span>
         <span>/// cut off from your keep</span>
         <span>dotted ring = field of fire</span>
         <span>dashed cell = you can take it</span>
@@ -240,7 +246,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
     <div class="panel" id="claims-panel">
       <div class="claims-head">
         <h2>Claim log</h2>
-        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 12 hours, and the other players then vote for up to 24 hours. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
+        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
       <div class="log" id="claims-log"></div>
@@ -274,10 +280,11 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 var STEPS_PER_KM=1350, MAX_STEPS_DAY=30000;
 var TICK_MS=4*60*60*1000, MAX_TICKS=18;         // harvest accrues offline: 6 ticks a day, capped at 3 days
 var AX=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
-var PLAIN=0,FOREST=1,QUARRY=2,IRON=3,FARM=4;
+var PLAIN=0,FOREST=1,QUARRY=2,IRON=3,FARM=4,RIVER=5;
 var YIELD={}; YIELD[FOREST]={r:'timber',n:2}; YIELD[QUARRY]={r:'stone',n:2};
 YIELD[IRON]={r:'iron',n:1}; YIELD[FARM]={r:'grain',n:3};
 var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
+var BRIDGE_MS=24*36e5, BRIDGE_COST={timber:40,stone:20};   // plus one march; ready a day later
 var SPEC={};
 SPEC[TOWER] ={range:[0,1,2,3],volley:[0,1,2,3],gar:[0,1,2,4],cost:{stone:40,timber:30}};
 SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,stone:60}};
@@ -319,6 +326,32 @@ function terrainAt(q,r){
   if(a>0.56) return FARM;
   return PLAIN;
 }
+/* ═══ rivers ═══════════════════════════════════════════════════════════
+   Rivers are the contour lines of one slow, smooth height field: a cell is
+   river when it sits on the high side of the 0.5 contour and touches a cell
+   on the low side. A contour never breaks, so every river is an unbroken
+   line with no gap to slip through, and they fall roughly 17 cells apart.
+   The ring around every seat is kept dry so nobody starts in the water.
+   Held river cells are bridges; see building() for one still going up.  */
+var RIVER_S=14, RIVER_SEED=5.37, riverH={}, riverMemo={}, riverN=0, DRY=[];
+for(var di=0;di<48;di++) DRY.push(seatFor(di));
+function riverHeight(q,r){
+  var k=q+'_'+r, h=riverH[k];
+  if(h===undefined){ var x=q+r/2, y=r*0.8660254; h=riverH[k]=0.62*noise(x,y,RIVER_S,RIVER_SEED)+0.38*noise(x,y,RIVER_S/2.7,RIVER_SEED+19); }
+  return h;
+}
+function riverAt(q,r){
+  var k=q+'_'+r, v=riverMemo[k];
+  if(v!==undefined) return v;
+  if(++riverN>200000){ riverMemo={}; riverH={}; riverN=0; }
+  v=false;
+  if(riverHeight(q,r)>=0.5){
+    for(var i=0;i<6;i++) if(riverHeight(q+AX[i][0],r+AX[i][1])<0.5){ v=true; break; }
+    if(v) for(var j=0;j<DRY.length;j++) if(hexDist(q,r,DRY[j].q,DRY[j].r)<=1){ v=false; break; }
+  }
+  return (riverMemo[k]=v);
+}
+function groundAt(q,r){ return riverAt(q,r)?RIVER:terrainAt(q,r); }
 function squaresFor(km){ return Math.max(1,Math.round(5*Math.sqrt(Math.max(0,km)))); }
 function since(ts){
   if(!ts) return '—';
@@ -364,27 +397,32 @@ try{ myName=localStorage.getItem('marchland.name')||''; }catch(e){}
 
 /* ═══ game state ═══════════════════════════════════════════════════════
    G = { v, code, created, players:{pid:{name,seat,q,r,res,field,squares,
-         lastCollect,collected,lastTick,seen,voids}}, cells:{ "q_r": {o,w,k,l,g,d} },
-         claims:{ id:{pid,steps,got,t,voters:{pid:1},shot,votes:{pid:{v,t}},final} } }
+         lastCollect,collected,lastTick,seen,voids}}, cells:{ "q_r": {o,w,k,l,g,d,b} },   b = when a bridge is finished
+         claims:{ id:{pid,steps,got,t,voters:{pid:1},shot,votes:{pid:{v,t}},final} },
+         events:{ id:{pid,k:'m'|'b'|'br',q,r,fq,fr,t,prev,loss} } }   the last week of moves, for replays
    Screenshots live outside the board, at /marchland_shots/<code>/<id>, so the
    board download that every change triggers never drags images along.     */
 var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
 var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
-  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{} };
+  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{}, events:{} };
 }
 function cellOf(q,r){
   var c=G.cells[key(q,r)];
-  if(!c) return {o:null,w:0,k:null,l:0,g:0,d:0,q:q,r:r,t:terrainAt(q,r)};
-  c.q=q; c.r=r; c.t=terrainAt(q,r);
+  if(!c) return {o:null,w:0,k:null,l:0,g:0,d:0,q:q,r:r,t:groundAt(q,r)};
+  c.q=q; c.r=r; c.t=groundAt(q,r);
   return c;
 }
 function writeCell(q,r,c){
   var k=key(q,r);
   if(!c.o && !c.k){ delete G.cells[k]; return; }
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
+  if(c.b) G.cells[k].b=c.b;
 }
+/* a bridge that is still going up: owned, but nothing crosses it or draws supply through it yet.
+   A held river cell with no finish time is a bridge that was already there. */
+function building(c){ return !!(c && c.b && c.b>Date.now()); }
 function eachCell(fn){ for(var k in G.cells){ var p=k.split('_'); fn(cellOf(parseInt(p[0],10),parseInt(p[1],10))); } }
 function me(){ return G.players[ME]; }
 function seatColor(seat){ return ['--p0','--p1','--p2','--p3'][seat%4]; }
@@ -402,7 +440,7 @@ function seedPlayer(pid,name){
     var cur=q.shift(),k=key(cur[0],cur[1]);
     if(seen[k]) continue; seen[k]=1;
     var c=cellOf(cur[0],cur[1]);
-    if(c.o) continue;
+    if(c.o || c.t===RIVER) continue;                 // nobody starts on a river
     c.o=pid; writeCell(cur[0],cur[1],c); placed++;
     for(var i=0;i<6;i++){ if(hash2(cur[0]*(seat+3),cur[1]+i)>0.25) q.push([cur[0]+AX[i][0],cur[1]+AX[i][1]]); }
   }
@@ -424,7 +462,7 @@ function supplied(pid){
       var nq=cur[0]+AX[i][0], nr=cur[1]+AX[i][1], nk=key(nq,nr);
       if(set[nk]) continue;
       var n=G.cells[nk];
-      if(n && n.o===pid){ set[nk]=1; stack.push([nq,nr]); }
+      if(n && n.o===pid && !building(n)){ set[nk]=1; stack.push([nq,nr]); }
     }
   }
   return set;
@@ -437,9 +475,11 @@ function garrisonNeed(pid){
 function ratesFor(pid){
   var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
   for(var k in G.cells){
-    var c=G.cells[k]; if(c.o!==pid) continue; own++;
+    var c=G.cells[k]; if(c.o!==pid||building(c)) continue; own++;
     if(!sup[k]) continue; s++;
-    var p=k.split('_'), y=YIELD[terrainAt(parseInt(p[0],10),parseInt(p[1],10))];
+    // ground held from before rivers ran through it keeps the yield of the land it was;
+    // a bridge built since (it has a finish time) yields nothing
+    var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.b?groundAt(q0,r0):terrainAt(q0,r0)];
     if(y) out[y.r]+=y.n;
     if(c.k===CASTLE) out.grain+=2;
   }
@@ -457,7 +497,7 @@ function coverOn(q,r,notPid){        // manned guns of everyone except notPid
   return shots;
 }
 function adjacentTo(q,r,pid){
-  for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===pid) return true; }
+  for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===pid&&!building(n)) return true; }
   return false;
 }
 
@@ -530,9 +570,10 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify([G.cells,G.claims||{},othersOf(G.players)]);
+  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},othersOf(G.players)]);
   G.cells=remote.cells||{};
   G.claims=remote.claims||{};
+  G.events=remote.events||{};
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -542,7 +583,7 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,othersOf(G.players)])!==before;
+  return JSON.stringify([G.cells,G.claims,G.events,othersOf(G.players)])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -562,6 +603,7 @@ function pull(){
       refetch=false;
       myRev=rev;
       if(applyRemote(remote)){
+        liveEvents();
         render();
         setSync('board updated '+new Date().toLocaleTimeString());
       }
@@ -590,7 +632,7 @@ function untilMidnight(){
    Nothing is frozen while that happens. A voided claim's marches are owed
    instead, and come off the claimant's next claim. The claimant's own tab
    books the debt, because only that tab ever writes its record. */
-var CHALLENGE_MS=12*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5;
+var CHALLENGE_MS=24*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5;
 function claimState(c,now){
   now=now||Date.now();
   var voters=Object.keys(c.voters||{}), n=voters.length, close=c.t+CHALLENGE_MS;
@@ -642,6 +684,9 @@ function settleMine(){
     }
   });
   for(var v in pl.voids) if(now-pl.voids[v]>KEEP_MS+10*864e5){ delete pl.voids[v]; mine=true; }
+  Object.keys(G.events||{}).forEach(function(id){
+    var e=G.events[id]; if(e && e.pid===ME && now-e.t>EVENT_KEEP_MS){ delete G.events[id]; writes.push(['/events/'+id,null]); }
+  });
   var chain=mine?pushMe():Promise.resolve();
   if(writes.length){
     chain.then(function(){
@@ -714,12 +759,15 @@ function collect(){
   input.value='';
   var file=pendingShot; resetShotPick();
   render();
+  seenEv['c:'+id]=1;
+  play({pid:ME,k:'claim',q:pl.q,r:pl.r,n:Math.min(6,Math.max(2,Math.round(earned/3))),label:'+'+earned+' marches'});
+  flashStat(document.getElementById('s-march'));
   pushMe().then(function(){ return putPath('/claims/'+id,G.claims[id]); })
           .then(function(){ if(file) attachShot(id,file); });
   var m='Claimed <b>'+steps.toLocaleString()+' steps</b> ('+km.toFixed(1)+' km) → <span class="good">'+earned+' marches</span>.';
   if(paid) m+=' <span class="bad">'+paid+' of them went to pay off a voided claim</span>, so <b>'+got+'</b> are yours to spend.';
   else m+=' Yours to spend now.';
-  if(Object.keys(voters).length) m+=' The others have 12 hours to dispute it.';
+  if(Object.keys(voters).length) m+=' The others have 24 hours to dispute it.';
   if(capped) m+=' <span class="bad">Trimmed to '+MAX_STEPS_DAY.toLocaleString()+'</span> — that is the most one day can count.';
   say(m);
 }
@@ -748,19 +796,40 @@ function vote(id,v){
 function spendMarch(q,r){
   var pl=me(); if(!pl) return;
   var c=cellOf(q,r);
-  if(c.o===ME) return say('You already hold that ground.');
+  if(c.o===ME) return say(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.b)+'</b>.' : 'You already hold that ground.');
+  if(c.t===RIVER && !c.o) return say('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Switch to <b>Bridge</b> to build across; it takes a day.');
   if(!adjacentTo(q,r,ME)) return say('Marches extend a border — pick a cell touching your own ground.');
   if(c.k) return say('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
-  var cost=c.o?2:1;
+  var cost=c.o?2:1, prev=c.o, from=fromFor(q,r,ME), pw=c.w||0;
   if(pl.squares<cost) return say('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
   var guns=c.o?coverOn(q,r,ME):0, need=guns+(c.w||0);
   if(need>pl.field) return say('<span class="bad">That cell needs '+need+' soldier'+(need>1?'s':'')+'</span> — '+(guns?guns+' to cross the guns':'')+(guns&&c.w?' and ':'')+(c.w?c.w+' to break the wall':'')+'. You have '+pl.field+'.');
   pl.squares-=cost; pl.field-=need; c.w=0; c.o=ME;
   writeCell(q,r,c);
+  logMove(prev?'b':'m',q,r,from,prev,need,prev&&pw?{pw:pw}:null);
   render(); pushCell(q,r); pushMe();
   var m='Cell taken for <b>'+cost+'</b> march'+(cost>1?'es':'')+'.';
   if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost.</span>';
   say(m+' <b>'+avail()+'</b> left.');
+}
+
+/* Crossing a river takes a bridge: a march and some materials to start, and a
+   full day before anything can cross. Once finished it is ordinary ground —
+   borders and supply run over it, and someone else can take it for two. */
+function bridge(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(c.t!==RIVER) return say('Bridges go on river cells. Pick a river cell touching your ground.');
+  if(c.o===ME) return say(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.b)+'</b>.' : 'You already have a bridge here.');
+  if(c.o) return say('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Switch to <b>Spend a march</b> to take it &mdash; two marches, like the rest of their ground.');
+  if(!adjacentTo(q,r,ME)) return say('Build from your own bank &mdash; pick a river cell touching ground you hold.');
+  if(pl.squares<1) return say('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
+  for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return say('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'.'); }
+  for(var k2 in BRIDGE_COST) pl.res[k2]-=BRIDGE_COST[k2];
+  var from=fromFor(q,r,ME);
+  pl.squares-=1; c.o=ME; c.b=Date.now()+BRIDGE_MS; c.w=0;
+  writeCell(q,r,c); logMove('br',q,r,from,null,0);
+  render(); pushCell(q,r); pushMe();
+  say('<b>Bridge started.</b> It is finished in 24 hours; until then nothing crosses it. <b>'+avail()+'</b> marches left.');
 }
 
 /* Castles are meant to be rare: each one costs more than the last, and they
@@ -780,6 +849,7 @@ function build(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return say('Build on ground you hold.');
   if(c.k) return say('Something already stands here.');
+  if(c.t===RIVER) return say('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
     var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
@@ -788,8 +858,10 @@ function build(q,r,kind){
   for(var k in cost){ if(pl.res[k]<cost[k]) return say('Not enough materials — a castle here needs '+costLine(cost)+'.'); }
   if(pl.field<SPEC[kind].gar[1]) return say('No one to man it. Muster a soldier first.');
   for(var k2 in cost) pl.res[k2]-=cost[k2];
+  var from=fromFor(q,r,ME), pw=c.w||0;
   pl.field-=1; c.k=kind; c.l=1; c.g=1; c.w=0;
-  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  writeCell(q,r,c); logMove(kind===TOWER?'tw':'cs',q,r,from,null,0,pw?{pw:pw}:null);
+  render(); pushCell(q,r); pushMe();
   say(kind===TOWER
     ? 'Watchtower raised — one soldier garrisoned and no longer free to attack with.'
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.');
@@ -804,17 +876,20 @@ function upgrade(q,r){
   if(pl.field<extra) return say('Level '+ROMAN[lvl]+' needs '+SPEC[c.k].gar[lvl]+' men inside — you are '+(extra-pl.field)+' short.');
   for(var k2 in cost) pl.res[k2]-=cost[k2]*lvl;
   pl.field-=extra; c.l=lvl; c.g+=extra;
-  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  writeCell(q,r,c); logMove('up',q,r,fromFor(q,r,ME),null,0,{lvl:lvl,bk:c.k,n:Math.max(1,extra)});
+  render(); pushCell(q,r); pushMe();
   say('Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
 }
 function wall(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return say('Walls go on ground you hold.');
+  if(building(c)) return say('Finish the bridge first &mdash; it is ready in '+hoursLeft(c.b)+'.');
   if(c.k) return say('That cell holds a structure — upgrade it instead.');
   if((c.w||0)>=3) return say('Already walled to level III.');
   if(pl.res.stone<30) return say('Not enough stone — 30 a course.');
   pl.res.stone-=30; c.w=(c.w||0)+1;
-  writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  writeCell(q,r,c); logMove('w',q,r,fromFor(q,r,ME),null,0,{lvl:c.w});
+  render(); pushCell(q,r); pushMe();
   say('Wall at level <b>'+ROMAN[c.w]+'</b> — costs an attacker '+c.w+' soldier'+(c.w>1?'s':'')+' to break.');
 }
 function muster(q,r){
@@ -822,15 +897,501 @@ function muster(q,r){
   if(!(c.o===ME&&c.k===CASTLE)) return say('Soldiers muster at your castles.');
   if(pl.res.iron<25||pl.res.grain<40) return say('Not enough iron and grain.');
   pl.res.iron-=25; pl.res.grain-=40; pl.field++;
-  render(); push();
+  logMove('ms',q,r,null,null,0);
+  render(); push(); flashStat(document.getElementById('v-field').parentNode);
   say('<b>'+pl.field+' in the field.</b> Every soldier eats grain whether he marches or stands on a wall.');
+}
+
+/* ═══ artwork ══════════════════════════════════════════════════════════
+   Everything on the map is drawn here, in natural colours, so a forest
+   looks like trees and a mine looks like a mine. Terrain is painted once
+   per zoom level into small sprites and then stamped, so a board full of
+   trees costs no more to draw than a board of empty hexes. The people who
+   march and fight are drawn live, a few dozen strokes each.
+   Every piece is drawn around (0,0) at hex radius s. */
+var NAT={}, NAT_DARK=null;
+function natPalette(dark){
+  NAT_DARK=dark;
+  NAT = dark ? {
+    leaf:'#3E8653', leaf2:'#2A5E3A', leafHi:'#5FA46F', trunk:'#7C5B3B',
+    rock:'#8D8E88', rock2:'#6A6B66', rockHi:'#B3B3AC', block:'#A59F92', blockTop:'#C3BDB0',
+    ore:'#D98242', oreHi:'#F4C98F', ironRock:'#585A61', ironRock2:'#3F4147', mine:'#16181B',
+    wheat:'#D4B24F', wheat2:'#A88932', soil:'#6E5236', soil2:'#58412A', grass:'#6B9160',
+    stone:'#AEA99D', stone2:'#837F75', stoneHi:'#CBC6BA', mortar:'#5A574F', gate:'#221D1A',
+    wood:'#A77B4F', wood2:'#77532F', rope:'#C9B27E',
+    skin:'#E0B48E', line:'#111518', steel:'#C9D1D6', wave:'#D4ECF4', shadow:'rgba(0,0,0,0.35)'
+  } : {
+    leaf:'#4C8D52', leaf2:'#2E6A3D', leafHi:'#79B07A', trunk:'#6B4A2B',
+    rock:'#A7A79F', rock2:'#85867E', rockHi:'#D0D0C8', block:'#BCB5A5', blockTop:'#D9D3C4',
+    ore:'#B8642A', oreHi:'#E8A86D', ironRock:'#5E6068', ironRock2:'#45474E', mine:'#1E1B19',
+    wheat:'#D8B14A', wheat2:'#B08C2D', soil:'#9C7B52', soil2:'#826543', grass:'#7FA36A',
+    stone:'#BEB9AC', stone2:'#948F83', stoneHi:'#DAD5C9', mortar:'#726E65', gate:'#3A322C',
+    wood:'#B08355', wood2:'#7A5534', rope:'#8C7547',
+    skin:'#E6BA92', line:'#26292B', steel:'#8A949B', wave:'#EFF8FB', shadow:'rgba(20,30,20,0.22)'
+  };
+}
+natPalette(false);
+function artHash(q,r,salt){ var h=Math.imul(q,2654435761)^Math.imul(r+salt*31,1597334677); h=Math.imul(h^(h>>>15),2246822519); return ((h^(h>>>13))>>>0)/4294967296; }
+function poly(g,pts,fill,stroke,lw){
+  g.beginPath(); for(var i=0;i<pts.length;i++){ i?g.lineTo(pts[i][0],pts[i][1]):g.moveTo(pts[i][0],pts[i][1]); } g.closePath();
+  if(fill){ g.fillStyle=fill; g.fill(); }
+  if(stroke){ g.strokeStyle=stroke; g.lineWidth=lw||1; g.stroke(); }
+}
+function blob(g,x,y,rx,ry,fill){ g.beginPath(); g.ellipse(x,y,rx,ry,0,0,Math.PI*2); g.fillStyle=fill; g.fill(); }
+
+/* ── terrain ─────────────────────────────────────────────────────────── */
+function conifer(g,x,y,h){
+  blob(g,x+h*0.05,y+h*0.02,h*0.26,h*0.07,NAT.shadow);
+  g.fillStyle=NAT.trunk; g.fillRect(x-h*0.06,y-h*0.16,h*0.12,h*0.18);
+  for(var i=0;i<3;i++){
+    var yb=y-h*0.12-i*h*0.25, top=yb-h*0.42, hw=h*(0.34-i*0.075);
+    poly(g,[[x,top],[x+hw,yb],[x-hw,yb]],NAT.leaf2);
+    poly(g,[[x,top],[x+hw,yb],[x+hw*0.1,yb]],NAT.leaf);                  // lit side
+    g.strokeStyle=NAT.leafHi; g.lineWidth=Math.max(0.6,h*0.03); g.beginPath(); g.moveTo(x+hw*0.15,top+h*0.12); g.lineTo(x+hw*0.55,yb-h*0.05); g.stroke();
+  }
+}
+function artForest(g,s,v){
+  var sets=[[[-0.34,0.28,0.92],[0.3,0.32,0.84],[-0.02,0.02,1.08]],
+            [[-0.3,0.22,1.0],[0.34,0.1,0.9],[0.02,0.42,0.82]],
+            [[-0.38,0.36,0.8],[0.08,0.1,1.05],[0.4,0.38,0.86]]][v%3];
+  sets.slice().sort(function(a,b){ return a[1]-b[1]; }).forEach(function(t){ conifer(g,t[0]*s,t[1]*s,s*0.62*t[2]); });
+}
+function cutBlock(g,x,y,w,h,d){
+  poly(g,[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],NAT.block,NAT.rock2,Math.max(0.6,w*0.05));
+  poly(g,[[x,y],[x+d,y-d*0.6],[x+w+d,y-d*0.6],[x+w,y]],NAT.blockTop,NAT.rock2,Math.max(0.6,w*0.05));
+  poly(g,[[x+w,y],[x+w+d,y-d*0.6],[x+w+d,y+h-d*0.6],[x+w,y+h]],NAT.rock2);
+}
+function artQuarry(g,s,v){
+  blob(g,0,s*0.34,s*0.6,s*0.13,NAT.shadow);
+  // a raw rock face behind, cut blocks in front
+  poly(g,[[-s*0.55,s*0.3],[-s*0.42,-s*0.12],[-s*0.12,-s*0.34],[s*0.2,-s*0.26],[s*0.5,s*0.02],[s*0.56,s*0.3]],NAT.rock2);
+  poly(g,[[-s*0.42,-s*0.12],[-s*0.12,-s*0.34],[s*0.2,-s*0.26],[s*0.02,-s*0.04],[-s*0.24,0]],NAT.rock);
+  g.strokeStyle=NAT.rockHi; g.lineWidth=Math.max(0.7,s*0.03);
+  g.beginPath(); g.moveTo(-s*0.1,-s*0.3); g.lineTo(s*0.02,-s*0.06); g.moveTo(s*0.18,-s*0.22); g.lineTo(s*0.36,s*0.0); g.stroke();
+  var o=v===1?0.06:0;
+  cutBlock(g,-s*(0.44-o),s*0.06,s*0.34,s*0.24,s*0.1);
+  cutBlock(g,s*(0.02+o),s*0.12,s*0.3,s*0.2,s*0.09);
+  if(v===2) cutBlock(g,-s*0.2,-s*0.12,s*0.26,s*0.16,s*0.08);
+  // a pick leaning on the blocks
+  g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(1,s*0.05); g.lineCap='round';
+  g.beginPath(); g.moveTo(s*0.4,s*0.34); g.lineTo(s*0.52,-s*0.02); g.stroke();
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,s*0.045);
+  g.beginPath(); g.moveTo(s*0.38,-s*0.04); g.quadraticCurveTo(s*0.52,-s*0.1,s*0.66,-s*0.02); g.stroke();
+}
+function artIron(g,s,v){
+  blob(g,0,s*0.34,s*0.6,s*0.13,NAT.shadow);
+  // a hill with a timbered mine entrance and ore in the rock
+  poly(g,[[-s*0.62,s*0.34],[-s*0.4,-s*0.08],[-s*0.1,-s*0.36],[s*0.24,-s*0.3],[s*0.5,-s*0.02],[s*0.62,s*0.34]],NAT.ironRock);
+  poly(g,[[-s*0.1,-s*0.36],[s*0.24,-s*0.3],[s*0.5,-s*0.02],[s*0.62,s*0.34],[s*0.1,s*0.34]],NAT.ironRock2);
+  g.beginPath(); g.moveTo(-s*0.2,s*0.34); g.lineTo(-s*0.2,s*0.04); g.arc(0,s*0.04,s*0.2,Math.PI,0); g.lineTo(s*0.2,s*0.34); g.closePath();
+  g.fillStyle=NAT.mine; g.fill();
+  g.strokeStyle=NAT.wood; g.lineWidth=Math.max(1.2,s*0.07); g.lineCap='butt';
+  g.beginPath(); g.moveTo(-s*0.2,s*0.34); g.lineTo(-s*0.2,-s*0.04); g.lineTo(s*0.2,-s*0.04); g.lineTo(s*0.2,s*0.34); g.stroke();
+  var specks=[[-0.42,0.08],[-0.3,-0.12],[0.34,0.02],[0.42,0.2],[0.08,-0.24],[-0.46,0.24],[0.28,-0.16]];
+  specks.forEach(function(p,i){ if((i+v)%4===3) return;
+    var x=p[0]*s, y=p[1]*s, r=s*(0.045+0.02*((i*7+v)%3));
+    poly(g,[[x,y-r],[x+r,y],[x,y+r],[x-r,y]],NAT.ore);
+    blob(g,x-r*0.25,y-r*0.3,r*0.35,r*0.3,NAT.oreHi);
+  });
+  // a little ore cart at the mouth
+  g.fillStyle=NAT.wood2; g.fillRect(s*0.24,s*0.2,s*0.22,s*0.1);
+  blob(g,s*0.35,s*0.19,s*0.1,s*0.04,NAT.ore);
+  blob(g,s*0.28,s*0.32,s*0.035,s*0.035,NAT.line); blob(g,s*0.42,s*0.32,s*0.035,s*0.035,NAT.line);
+}
+function artFarm(g,s,v){
+  // a tilled strip of field with standing wheat and a sheaf
+  g.save(); g.rotate((v-1)*0.12);
+  poly(g,[[-s*0.62,s*0.34],[-s*0.46,-s*0.3],[s*0.46,-s*0.3],[s*0.62,s*0.34]],NAT.soil);
+  g.strokeStyle=NAT.soil2; g.lineWidth=Math.max(0.8,s*0.035);
+  for(var i=0;i<5;i++){ var t=-0.24+i*0.13; g.beginPath(); g.moveTo(-s*(0.5+t*0.25),s*t); g.lineTo(s*(0.5+t*0.25),s*t); g.stroke(); }
+  for(var row=0;row<4;row++){
+    var yy=s*(-0.2+row*0.15), n=5;
+    for(var k=0;k<n;k++){
+      var xx=s*(-0.4+k*0.2+(row%2)*0.05), hgt=s*0.16;
+      g.strokeStyle=NAT.wheat2; g.lineWidth=Math.max(0.7,s*0.025);
+      g.beginPath(); g.moveTo(xx,yy+s*0.05); g.lineTo(xx,yy-hgt+s*0.05); g.stroke();
+      blob(g,xx,yy-hgt+s*0.04,s*0.03,s*0.06,NAT.wheat);
+    }
+  }
+  g.restore();
+}
+function artGrass(g,s,v){
+  g.strokeStyle=NAT.grass; g.lineWidth=Math.max(0.8,s*0.03); g.lineCap='round'; g.globalAlpha=0.8;
+  [[-0.3,0.2],[0.25,-0.15],[0.1,0.32]].forEach(function(p,i){ if((i+v)%3===2) return;
+    var x=p[0]*s, y=p[1]*s, h=s*0.1;
+    g.beginPath(); g.moveTo(x-h*0.5,y-h); g.lineTo(x,y); g.lineTo(x+h*0.5,y-h); g.moveTo(x,y); g.lineTo(x,y-h*1.1); g.stroke();
+  });
+  g.globalAlpha=1;
+}
+function artWater(g,s,v){
+  g.strokeStyle=NAT.wave; g.lineCap='round';
+  for(var j=0;j<3;j++){
+    var y=s*(-0.28+j*0.26+(v%2)*0.04), m=s*(0.34-Math.abs(j-1)*0.08), x0=s*((j%2)*0.08-0.04);
+    g.globalAlpha=0.55+0.2*(j===1); g.lineWidth=Math.max(0.8,s*0.045);
+    g.beginPath();
+    for(var t=0;t<=14;t++){ var x=x0-m+2*m*t/14, yy=y+Math.sin(t/14*Math.PI*2+v)*s*0.05; t?g.lineTo(x,yy):g.moveTo(x,yy); }
+    g.stroke();
+  }
+  g.globalAlpha=1;
+}
+var ART_TERRAIN={1:artForest,2:artQuarry,3:artIron,4:artFarm,0:artGrass,5:artWater};
+
+/* sprites: one small canvas per (kind, variant, size, theme) */
+var spriteCache={}, spriteCount=0;
+function sprite(kind,v,s){
+  var dpr=Math.min(window.devicePixelRatio||1,2), k=kind+'|'+v+'|'+Math.round(s*4)+'|'+(NAT_DARK?1:0)+'|'+dpr;
+  var c=spriteCache[k];
+  if(c) return c;
+  if(++spriteCount>400){ spriteCache={}; spriteCount=0; }
+  var size=Math.ceil(s*2.5);
+  c=document.createElement('canvas'); c.width=Math.ceil(size*dpr); c.height=Math.ceil(size*dpr);
+  var g=c.getContext('2d'); g.scale(dpr,dpr); g.translate(size/2,size/2);
+  ART_TERRAIN[kind](g,kind===5?s:s*1.14,v);
+  c.half=size/2;
+  return (spriteCache[k]=c);
+}
+function stampTerrain(g,kind,cx,cy,s,v){
+  if(!ART_TERRAIN[kind]) return;
+  var sp=sprite(kind,v,s);
+  g.drawImage(sp,cx-sp.half,cy-sp.half,sp.half*2,sp.half*2);
+}
+
+/* ── buildings ───────────────────────────────────────────────────────── */
+function merlons(g,x0,x1,y,h,fill,edge){
+  var n=Math.max(2,Math.round((x1-x0)/(h*1.6))), w=(x1-x0)/(2*n-1);
+  for(var i=0;i<n;i++) poly(g,[[x0+i*2*w,y],[x0+i*2*w+w,y],[x0+i*2*w+w,y-h],[x0+i*2*w,y-h]],fill,edge,Math.max(0.6,h*0.12));
+}
+function pennant(g,x,y,h,col,t){
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,h*0.06); g.lineCap='round';
+  g.beginPath(); g.moveTo(x,y); g.lineTo(x,y-h); g.stroke();
+  var wv=Math.sin((t||0)*6)*h*0.06;
+  poly(g,[[x,y-h],[x+h*0.62,y-h*0.84+wv],[x,y-h*0.66]],col,NAT.line,Math.max(0.6,h*0.04));
+}
+function stoneLines(g,x0,y0,w,h,rows){
+  g.strokeStyle=NAT.mortar; g.globalAlpha=0.55; g.lineWidth=Math.max(0.5,h*0.03);
+  for(var i=1;i<rows;i++){ var y=y0+h*i/rows; g.beginPath(); g.moveTo(x0,y); g.lineTo(x0+w,y); g.stroke();
+    for(var j=0;j<4;j++){ var x=x0+w*((j+(i%2)*0.5+0.25)/4); g.beginPath(); g.moveTo(x,y-h/rows); g.lineTo(x,y); g.stroke(); } }
+  g.globalAlpha=1;
+}
+function artCastle(g,x,y,s,col,t){
+  g.save(); g.translate(x,y);
+  var w=s*0.92, lw=Math.max(0.8,s*0.03);
+  blob(g,0,s*0.42,s*0.62,s*0.12,NAT.shadow);
+  // curtain wall
+  poly(g,[[-w/2,s*0.42],[-w/2,-s*0.02],[w/2,-s*0.02],[w/2,s*0.42]],NAT.stone,NAT.stone2,lw);
+  stoneLines(g,-w/2,-s*0.02,w,s*0.44,4);
+  merlons(g,-w/2,w/2,-s*0.02,s*0.09,NAT.stone,NAT.stone2);
+  // keep behind the gate
+  poly(g,[[-s*0.2,-s*0.02],[-s*0.2,-s*0.38],[s*0.2,-s*0.38],[s*0.2,-s*0.02]],NAT.stoneHi,NAT.stone2,lw);
+  merlons(g,-s*0.2,s*0.2,-s*0.38,s*0.08,NAT.stoneHi,NAT.stone2);
+  // corner towers
+  [-1,1].forEach(function(sd){
+    var tx=sd*(w/2-s*0.12);
+    poly(g,[[tx-s*0.13,s*0.44],[tx-s*0.13,-s*0.22],[tx+s*0.13,-s*0.22],[tx+s*0.13,s*0.44]],NAT.stone,NAT.stone2,lw);
+    stoneLines(g,tx-s*0.13,-s*0.22,s*0.26,s*0.66,5);
+    merlons(g,tx-s*0.13,tx+s*0.13,-s*0.22,s*0.08,NAT.stone,NAT.stone2);
+    g.fillStyle=NAT.gate; g.fillRect(tx-s*0.02,-s*0.08,s*0.04,s*0.1);
+  });
+  // gate
+  g.beginPath(); g.moveTo(-s*0.1,s*0.42); g.lineTo(-s*0.1,s*0.2); g.arc(0,s*0.2,s*0.1,Math.PI,0); g.lineTo(s*0.1,s*0.42); g.closePath();
+  g.fillStyle=NAT.gate; g.fill();
+  g.strokeStyle=NAT.wood; g.lineWidth=Math.max(0.6,s*0.02);
+  for(var i=-1;i<=1;i++){ g.beginPath(); g.moveTo(i*s*0.045,s*0.14); g.lineTo(i*s*0.045,s*0.42); g.stroke(); }
+  pennant(g,0,-s*0.46,s*0.42,col,t);
+  g.restore();
+}
+function artTower(g,x,y,s,col,t){
+  g.save(); g.translate(x,y);
+  var lw=Math.max(0.8,s*0.03);
+  blob(g,0,s*0.42,s*0.34,s*0.09,NAT.shadow);
+  poly(g,[[-s*0.16,s*0.42],[-s*0.13,-s*0.26],[s*0.13,-s*0.26],[s*0.16,s*0.42]],NAT.stone,NAT.stone2,lw);
+  stoneLines(g,-s*0.15,-s*0.26,s*0.3,s*0.68,5);
+  poly(g,[[-s*0.21,-s*0.26],[-s*0.21,-s*0.36],[s*0.21,-s*0.36],[s*0.21,-s*0.26]],NAT.stoneHi,NAT.stone2,lw);
+  merlons(g,-s*0.21,s*0.21,-s*0.36,s*0.08,NAT.stoneHi,NAT.stone2);
+  g.fillStyle=NAT.gate; g.fillRect(-s*0.025,-s*0.14,s*0.05,s*0.13); g.fillRect(-s*0.06,s*0.26,s*0.12,s*0.16);
+  pennant(g,0,-s*0.44,s*0.34,col,t);
+  g.restore();
+}
+/* a stone wall along one hex edge, from (x1,y1) to (x2,y2); lvl 1–3 */
+function artWallEdge(g,x1,y1,x2,y2,s,lvl){
+  var w=s*(0.09+0.045*lvl);
+  g.lineCap='round';
+  g.strokeStyle=NAT.stone2; g.lineWidth=w+Math.max(1,s*0.03); g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.strokeStyle=NAT.stone; g.lineWidth=w; g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke();
+  g.strokeStyle=NAT.mortar; g.lineWidth=Math.max(0.6,s*0.018); g.setLineDash([Math.max(2,w*0.9),Math.max(1.5,w*0.5)]);
+  g.beginPath(); g.moveTo(x1,y1); g.lineTo(x2,y2); g.stroke(); g.setLineDash([]);
+  if(lvl>=2){                                        // crenellations on the top courses
+    var dx=x2-x1, dy=y2-y1, L=Math.hypot(dx,dy), n=Math.max(2,Math.floor(L/(w*1.3)));
+    g.fillStyle=NAT.stoneHi;
+    for(var i=0;i<n;i+=2){ var k=(i+0.5)/n, px=x1+dx*k, py=y1+dy*k; g.fillRect(px-w*0.28,py-w*0.28,w*0.56,w*0.56); }
+  }
+}
+/* a bridge deck across a river cell, lying along `ang`; dashed scaffolding while it is going up */
+function artBridge(g,x,y,s,ang,up,col){
+  g.save(); g.translate(x,y);
+  g.beginPath(); for(var hi=0;hi<6;hi++){ var ha=(60*hi-30)*Math.PI/180; hi?g.lineTo(s*0.94*Math.cos(ha),s*0.94*Math.sin(ha)):g.moveTo(s*0.94*Math.cos(ha),s*0.94*Math.sin(ha)); } g.closePath(); g.clip();
+  g.rotate(ang);
+  var L=s*1.02, w=s*0.3;
+  blob(g,0,w*1.15,L*0.95,w*0.25,NAT.shadow);
+  if(up){
+    g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(1,s*0.05);
+    for(var p=-2;p<=2;p++){ g.beginPath(); g.moveTo(p*L*0.38,-w*1.1); g.lineTo(p*L*0.38,w*1.1); g.stroke(); }  // piles
+    g.fillStyle=NAT.wood;
+    for(var x0=-L; x0<-L*0.2; x0+=s*0.16) g.fillRect(x0,-w,s*0.12,2*w);                               // first planks down
+    g.setLineDash([Math.max(2,s*0.1),Math.max(2,s*0.08)]); g.strokeStyle=col; g.lineWidth=Math.max(1,s*0.05);
+    g.strokeRect(-L,-w,2*L,2*w); g.setLineDash([]);
+  } else {
+    g.fillStyle=NAT.wood; g.fillRect(-L,-w,2*L,2*w);
+    g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.6,s*0.025);
+    for(var xx=-L+s*0.14; xx<L; xx+=s*0.16){ g.beginPath(); g.moveTo(xx,-w); g.lineTo(xx,w); g.stroke(); }
+    g.lineWidth=Math.max(1,s*0.05); g.strokeStyle=NAT.wood2;
+    g.beginPath(); g.moveTo(-L,-w); g.lineTo(L,-w); g.moveTo(-L,w); g.lineTo(L,w); g.stroke();
+    g.fillStyle=NAT.wood2;
+    for(var q=-2;q<=2;q++){ g.fillRect(q*L*0.45-s*0.03,-w-s*0.05,s*0.06,s*0.06); g.fillRect(q*L*0.45-s*0.03,w-s*0.01,s*0.06,s*0.06); }
+    g.strokeStyle=col; g.globalAlpha=0.9; g.lineWidth=Math.max(1,s*0.035);
+    g.beginPath(); g.moveTo(-L,-w-s*0.02); g.lineTo(L,-w-s*0.02); g.stroke(); g.globalAlpha=1;
+  }
+  g.restore();
+}
+
+/* ── people ──────────────────────────────────────────────────────────── */
+/* one soldier, feet at (x,y), h tall. o: face (1 right, -1 left), ph (walk phase),
+   fall 0–1, swing 0–1 (a stroke of the sword, or the hammer if tool is 'hammer'),
+   carry ('spear' | 'plank' | 'stone' | 'flag'), alpha */
+function artPerson(g,x,y,h,col,o){
+  o=o||{};
+  if(h<7){                                           // too small for limbs: a coloured bead
+    g.save(); g.globalAlpha*=(o.alpha==null?1:o.alpha)*(1-0.7*(o.fall||0));
+    blob(g,x,y-h*0.5,Math.max(1.6,h*0.3),Math.max(1.6,h*0.3),col); g.restore(); return;
+  }
+  var f=o.face||1, ph=o.ph||0, fall=o.fall||0;
+  g.save(); g.translate(x,y);
+  g.globalAlpha*=(o.alpha==null?1:o.alpha)*(1-0.55*fall);
+  if(fall) g.rotate(-f*fall*1.45);
+  g.scale(f,1);
+  var lw=Math.max(1,h*0.085), hip=-h*0.42, sh=-h*0.72, head=-h*0.87, sw=Math.sin(ph)*h*0.17;
+  g.lineCap='round'; g.lineJoin='round';
+  if(!fall) blob(g,0,0,h*0.2,h*0.05,NAT.shadow);
+  g.strokeStyle=NAT.line; g.lineWidth=lw;
+  g.beginPath(); g.moveTo(0,hip); g.lineTo(sw,0); g.moveTo(0,hip); g.lineTo(-sw,0); g.stroke();
+  poly(g,[[-h*0.12,sh],[h*0.12,sh],[h*0.17,hip+h*0.06],[-h*0.17,hip+h*0.06]],col,NAT.line,lw*0.55);
+  var a = o.swing!=null ? (-2.2+2.6*o.swing) : (-0.6+Math.sin(ph+Math.PI)*0.35);
+  var hx=Math.cos(a)*h*0.3, hy=sh+h*0.04+Math.sin(a)*h*0.3;
+  g.strokeStyle=NAT.line; g.lineWidth=lw*0.9;
+  g.beginPath(); g.moveTo(0,sh+h*0.04); g.lineTo(hx,hy); g.stroke();
+  if(o.carry==='stone'){
+    g.fillStyle=NAT.block; g.strokeStyle=NAT.rock2; g.lineWidth=lw*0.5;
+    g.fillRect(-h*0.2,sh-h*0.24,h*0.36,h*0.2); g.strokeRect(-h*0.2,sh-h*0.24,h*0.36,h*0.2);
+  } else if(o.carry==='plank'){
+    g.fillStyle=NAT.wood; g.strokeStyle=NAT.wood2; g.lineWidth=lw*0.5;
+    g.fillRect(-h*0.45,sh-h*0.2,h*0.9,h*0.1); g.strokeRect(-h*0.45,sh-h*0.2,h*0.9,h*0.1);
+  } else if(o.carry==='flag'){
+    g.strokeStyle=NAT.line; g.lineWidth=lw*0.7; g.beginPath(); g.moveTo(hx,hy+h*0.2); g.lineTo(hx,hy-h*0.6); g.stroke();
+    poly(g,[[hx,hy-h*0.6],[hx+h*0.38,hy-h*0.5],[hx,hy-h*0.38]],col,NAT.line,lw*0.4);
+  } else if(o.swing!=null && o.tool==='hammer'){
+    var ex=hx+Math.cos(a-0.3)*h*0.26, ey=hy+Math.sin(a-0.3)*h*0.26;
+    g.strokeStyle=NAT.wood2; g.lineWidth=lw*0.8; g.beginPath(); g.moveTo(hx,hy); g.lineTo(ex,ey); g.stroke();
+    g.save(); g.translate(ex,ey); g.rotate(a-0.3); g.fillStyle=NAT.line; g.fillRect(-h*0.04,-h*0.09,h*0.1,h*0.18); g.restore();
+  } else if(o.swing!=null){                            // sword
+    g.strokeStyle=NAT.steel; g.lineWidth=lw*0.8;
+    g.beginPath(); g.moveTo(hx,hy); g.lineTo(hx+Math.cos(a-0.5)*h*0.42,hy+Math.sin(a-0.5)*h*0.42); g.stroke();
+  } else {                                            // spear on the shoulder
+    g.strokeStyle=NAT.wood2; g.lineWidth=lw*0.7;
+    g.beginPath(); g.moveTo(hx-h*0.28,hy+h*0.22); g.lineTo(hx+h*0.3,hy-h*0.55); g.stroke();
+    poly(g,[[hx+h*0.3,hy-h*0.55],[hx+h*0.36,hy-h*0.72],[hx+h*0.24,hy-h*0.6]],NAT.steel);
+  }
+  blob(g,0,head,h*0.1,h*0.1,NAT.skin);
+  g.strokeStyle=NAT.line; g.lineWidth=lw*0.5; g.beginPath(); g.arc(0,head,h*0.1,0,Math.PI*2); g.stroke();
+  g.beginPath(); g.arc(0,head-h*0.01,h*0.115,Math.PI*1.05,Math.PI*1.95); g.lineTo(h*0.115,head-h*0.01); g.closePath();
+  g.fillStyle=NAT.steel; g.fill();
+  g.restore();
+}
+function artFlag(g,x,y,h,col,k){                      // a banner planted in new ground; k 0–1 as it goes up
+  if(k<=0) return;
+  g.save(); g.globalAlpha*=Math.min(1,k*2);
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,h*0.06); g.lineCap='round';
+  var top=y-h*k;
+  g.beginPath(); g.moveTo(x,y); g.lineTo(x,top); g.stroke();
+  poly(g,[[x,top],[x+h*0.5,top+h*0.12],[x,top+h*0.26]],col,NAT.line,Math.max(0.6,h*0.03));
+  g.restore();
+}
+function artSpark(g,x,y,r,k){                         // a clash of blades
+  if(k<=0||k>=1) return;
+  g.save(); g.globalAlpha*=1-k; g.strokeStyle='#FFF4C8'; g.lineWidth=Math.max(1,r*0.18); g.lineCap='round';
+  for(var i=0;i<6;i++){ var a=i*Math.PI/3+k; g.beginPath(); g.moveTo(x+Math.cos(a)*r*0.3*k,y+Math.sin(a)*r*0.3*k); g.lineTo(x+Math.cos(a)*r*(0.4+k),y+Math.sin(a)*r*(0.4+k)); g.stroke(); }
+  g.restore();
+}
+function artDust(g,x,y,r,k){
+  if(k<=0||k>=1) return;
+  g.save(); g.globalAlpha*=0.45*(1-k); blob(g,x,y,r*(0.5+k),r*(0.35+0.7*k),NAT_DARK?'#8A8F8C':'#B9B4A6'); g.restore();
+}
+function artLabel(g,x,y,text,size,col,alpha){      // a floating caption with a halo so it reads on any ground
+  if(alpha<=0) return;
+  g.save(); g.globalAlpha*=Math.min(1,alpha);
+  g.font='700 '+Math.round(size)+'px system-ui,-apple-system,"Segoe UI",sans-serif'; g.textAlign='center'; g.textBaseline='middle';
+  g.lineJoin='round'; g.lineWidth=Math.max(2,size*0.28); g.strokeStyle=NAT_DARK?'#0E1619':'#F2F4EE'; g.strokeText(text,x,y);
+  g.fillStyle=col; g.fillText(text,x,y); g.restore();
+}
+function artArrow(g,x0,y0,x1,y1,k,h){                 // k 0–1 along a lobbed arc
+  if(k<=0||k>=1) return;
+  var lift=Math.hypot(x1-x0,y1-y0)*0.35;
+  function at(u){ return [x0+(x1-x0)*u, y0+(y1-y0)*u-lift*4*u*(1-u)]; }
+  var p=at(k), p2=at(Math.max(0,k-0.06)), a=Math.atan2(p[1]-p2[1],p[0]-p2[0]);
+  g.save(); g.translate(p[0],p[1]); g.rotate(a);
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,h*0.06); g.beginPath(); g.moveTo(-h*0.5,0); g.lineTo(0,0); g.stroke();
+  poly(g,[[h*0.12,0],[-h*0.06,-h*0.07],[-h*0.06,h*0.07]],NAT.line);
+  g.restore();
+}
+
+/* ── the animations ──────────────────────────────────────────────────────
+   a = {kind, t0, from:[q,r], to:[q,r], col, dcol, loss, guns:[[q,r]…], lvl, bk, n, label}
+   kinds: march · battle · build (a bridge crew) · wall · raise (a tower or castle, bk)
+          · upgrade (bk, lvl) · muster · claim (n soldiers, label)
+   pos(q,r) gives screen [x,y]; s is the hex radius on screen. ANIM_REVEAL is when the
+   map should start showing the finished result under the animation (0: nothing hidden). */
+var ANIM_DUR={march:1.6, battle:3.0, build:1.8, wall:2.1, raise:2.9, upgrade:2.2, muster:1.9, claim:2.7};
+var ANIM_REVEAL={march:1.15, battle:2.35, build:1.4, wall:1.55, raise:2.35, upgrade:1.45, muster:0, claim:0};
+var ART_ROMAN=['','I','II','III'];
+function crewSpot(B,s,i,n){ var ang=Math.PI*(0.15+0.7*(n>1?i/(n-1):0.5)); return [B[0]+Math.cos(ang)*s*0.62*(i%2?1:-1), B[1]+s*0.34+Math.sin(ang)*s*0.12]; }
+function drawWorks(g,a,t,A,B,s,h){
+  var R=ANIM_REVEAL[a.kind];
+  if(a.kind==='wall' || a.kind==='raise'){
+    var n=a.kind==='wall'?2:(a.bk==='castle'?4:3), walk=0.8;
+    if(a.kind==='raise' && t<R){
+      g.save(); g.globalAlpha*=0.55*Math.min(1,t/0.4); blob(g,B[0],B[1]+s*0.3,s*0.58,s*0.15,NAT.soil); g.restore();
+      var up=ease3((t-0.8)/1.4);
+      if(up>0){
+        var top=B[1]+s*0.5-up*s*1.5, sw=a.bk==='castle'?s*0.55:s*0.3;
+        g.save(); g.beginPath(); g.rect(B[0]-s*1.2,top,s*2.4,B[1]+s*1.2-top); g.clip();
+        (a.bk==='castle'?artCastle:artTower)(g,B[0],B[1]-s*0.06,s,a.col,t); g.restore();
+        g.save(); g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(1,s*0.04); g.lineCap='round';
+        g.globalAlpha*=t>2.1?Math.max(0,(R-t)/0.25):1;
+        g.beginPath();
+        [-1,1].forEach(function(sd){ g.moveTo(B[0]+sd*sw,B[1]+s*0.46); g.lineTo(B[0]+sd*sw,top-s*0.08); });
+        g.moveTo(B[0]-sw-s*0.06,top); g.lineTo(B[0]+sw+s*0.06,top);
+        g.moveTo(B[0]-sw,(top+B[1]+s*0.46)/2); g.lineTo(B[0]+sw,(top+B[1]+s*0.46)/2);
+        g.stroke(); g.restore();
+        artDust(g,B[0]+(artHash(Math.floor(t*3),1,3)-0.5)*s*0.8,B[1]+s*0.38,s*0.35,(t*3)%1);
+      }
+    }
+    if(a.kind==='wall' && t<R+0.05){                  // the new course goes on edge by edge
+      for(var e=0;e<6;e++){
+        var ke=Math.min(1,(t-0.85-e*0.1)/0.2); if(ke<=0) continue;
+        var a1=(60*e-30)*Math.PI/180, a2=(60*e+30)*Math.PI/180, rr=s*0.94;
+        var x1=B[0]+rr*Math.cos(a1), y1=B[1]+rr*Math.sin(a1), x2=B[0]+rr*Math.cos(a2), y2=B[1]+rr*Math.sin(a2);
+        artWallEdge(g,x1,y1,x1+(x2-x1)*ke,y1+(y2-y1)*ke,s,a.lvl||1);
+        if(ke<1) artDust(g,(x1+x2)/2,(y1+y2)/2,s*0.25,ke);
+      }
+    }
+    for(var i=0;i<n;i++){
+      var sp=crewSpot(B,s,i,n), k=ease3((t-i*0.12)/walk), x=A[0]+(sp[0]-A[0])*k, y=A[1]+s*0.34+(sp[1]-A[1]-s*0.34)*k;
+      var working=t>walk+i*0.12, face=working?(x<B[0]?1:-1):(sp[0]>=A[0]?1:-1);
+      artPerson(g,x,y,h,a.col,{face:face, ph:working?0:t*11+i, carry:working?null:(i%2?'plank':'stone'), tool:'hammer',
+        swing:working?(Math.sin(t*12+i*2)*0.5+0.5):null});
+      if(working && t<R) artSpark(g,x+face*h*0.3,y-h*0.55,h*0.3,((t*2.2+i*0.37)%1));
+    }
+    if(a.kind==='raise') artLabel(g,B[0],B[1]-s*1.15-ease3((t-R)/0.5)*s*0.2,a.bk==='castle'?'New castle':'Watchtower',Math.max(10,s*0.36),a.col,t>R?Math.min(1,(t-R)/0.2):0);
+    return;
+  }
+  if(a.kind==='upgrade'){
+    var sw2=a.bk==='castle'?s*0.55:s*0.32, fade2=t<0.3?t/0.3:(t>R?Math.max(0,1-(t-R)/0.3):1);
+    g.save(); g.globalAlpha*=fade2; g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(1,s*0.04); g.beginPath();
+    [-1,1].forEach(function(sd){ g.moveTo(B[0]+sd*sw2,B[1]+s*0.46); g.lineTo(B[0]+sd*sw2,B[1]-s*0.62); });
+    for(var j=0;j<3;j++){ var yy=B[1]+s*0.4-j*s*0.42; g.moveTo(B[0]-sw2-s*0.05,yy); g.lineTo(B[0]+sw2+s*0.05,yy); }
+    g.stroke(); g.restore();
+    for(var m=0;m<2;m++){                              // masons on the scaffold
+      var mx=B[0]+(m?1:-1)*(sw2+h*0.22), my=B[1]+s*0.4-(m?0.42:0.84)*s*0.5;
+      artPerson(g,mx,my,h*0.9,a.col,{face:m?-1:1, tool:'hammer', swing:t<R?(Math.sin(t*12+m*2)*0.5+0.5):0.2, alpha:fade2});
+      if(t<R) artSpark(g,mx+(m?-1:1)*h*0.3,my-h*0.5,h*0.3,((t*2.4+m*0.5)%1));
+    }
+    var nIn=Math.min(3,Math.max(1,a.n||1));             // the extra garrison marches in
+    for(var gi=0;gi<nIn;gi++){
+      var kk=ease3((t-0.2-gi*0.2)/1.0), gx=A[0]+(B[0]-A[0])*kk, gy=A[1]+s*0.34+(B[1]-A[1])*kk;
+      if(kk<1) artPerson(g,gx,gy,h,a.col,{face:B[0]>=A[0]?1:-1, ph:t*11+gi, alpha:kk>0.8?(1-kk)/0.2:1});
+    }
+    var kr=(t-R+0.1)/0.7;
+    if(kr>0&&kr<1){ g.save(); g.globalAlpha*=1-kr; g.strokeStyle=NAT.oreHi; g.lineWidth=Math.max(1.5,s*0.06);
+      g.beginPath(); g.arc(B[0],B[1],s*(0.45+0.7*kr),0,Math.PI*2); g.stroke(); g.restore(); }
+    artLabel(g,B[0],B[1]-s*1.05-ease3((t-R)/0.6)*s*0.25,'Level '+ART_ROMAN[a.lvl||2],Math.max(10,s*0.38),a.col,t>R-0.1?Math.min(1,(t-R+0.1)/0.2):0);
+    return;
+  }
+  if(a.kind==='muster'){                               // a new soldier steps out of the gate and joins the field
+    var km=ease3((t-0.25)/0.9), sx=B[0]+km*s*0.8, sy=B[1]+s*0.4+km*s*0.1;
+    if(t>0.1) artPerson(g,sx,sy,h,a.col,{face:1, ph:t<1.15?t*11:0, carry:t>1.15?'flag':null});
+    artLabel(g,B[0],B[1]-s*1.0-ease3((t-0.3)/1.2)*s*0.3,'+1 soldier',Math.max(10,s*0.34),a.col,t>0.3?Math.min(1,(t-0.3)/0.2):0);
+    return;
+  }
+  if(a.kind==='claim'){                                // the day's marches arrive at the keep
+    var nc=Math.min(6,Math.max(2,a.n||4)), sx0=B[0]-s*2.8, sy0=B[1]+s*0.6;
+    for(var c=0;c<nc;c++){
+      var kc=ease3((t-c*0.16)/1.35), cx=sx0+(B[0]-sx0)*kc, cy=sy0+(B[1]+s*0.42-sy0)*kc;
+      if(t>c*0.16 && kc<1) artPerson(g,cx,cy,h,a.col,{face:1, ph:t*11+c, carry:c===0?'flag':null, alpha:kc>0.85?(1-kc)/0.15:Math.min(1,(t-c*0.16)/0.2)});
+    }
+    artLabel(g,B[0],B[1]-s*1.0-ease3((t-0.5)/1.6)*s*0.4,a.label||'',Math.max(11,s*0.42),a.col,t>0.5?Math.min(1,(t-0.5)/0.25):0);
+    return;
+  }
+}
+function ease3(k){ return k<0?0:k>1?1:1-Math.pow(1-k,3); }
+function drawAnim(g,a,now,pos,s){
+  var t=now-a.t0, D=ANIM_DUR[a.kind];
+  if(t<0||t>D) return;
+  var B=pos(a.to[0],a.to[1]), A=a.from?pos(a.from[0],a.from[1]):null, h=Math.max(7,s*0.72);
+  if(!A || (A[0]===B[0] && A[1]===B[1])) A=[B[0]-s*1.5,B[1]+s*0.1];
+  var dx=B[0]-A[0], dy=B[1]-A[1], face=dx>=0?1:-1, fade=t>D-0.35?(D-t)/0.35:1;
+  g.save(); g.globalAlpha*=fade;
+  if(a.kind!=='march' && a.kind!=='build' && a.kind!=='battle'){ drawWorks(g,a,t,A,B,s,h); g.restore(); return; }
+  if(a.kind==='march' || a.kind==='build'){
+    var n=a.kind==='build'?2:3, walk=ANIM_REVEAL[a.kind]-0.1;
+    for(var i=0;i<n;i++){
+      var k=ease3((t-i*0.14)/walk), off=(i-(n-1)/2)*h*0.5;
+      var x=A[0]+dx*k*0.92-dy/(Math.hypot(dx,dy)||1)*off*0.6, y=A[1]+dy*k*0.92+s*0.3+dx/(Math.hypot(dx,dy)||1)*off*0.3;
+      artPerson(g,x,y,h,a.col,{face:face, ph:t*11+i*1.3, carry: a.kind==='build'?'plank':(i===0?'flag':null)});
+    }
+    if(a.kind==='march') artFlag(g,B[0]+s*0.1,B[1]+s*0.35,h*1.3,a.col,(t-ANIM_REVEAL.march+0.1)/0.3);
+    else if(t>ANIM_REVEAL.build-0.2){                  // hammering: a puff of sawdust
+      artDust(g,B[0],B[1]+s*0.25,s*0.35,((t-ANIM_REVEAL.build+0.2)*1.6)%1);
+    }
+  } else {
+    var nA=Math.min(5,3+(a.loss||0)), nD=Math.min(4,2+Math.floor((a.loss||0)/2));
+    var meet=[A[0]+dx*0.6, A[1]+dy*0.6+s*0.3], L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+    // arrows from the towers and keeps covering the cell
+    (a.guns||[]).forEach(function(q,gi){
+      var P=pos(q[0],q[1]);
+      for(var v=0;v<3;v++){ var st=0.5+gi*0.15+v*0.28; artArrow(g,P[0],P[1]-s*0.4,meet[0]-ux*h*(0.4+v*0.3),meet[1]-h*0.5,(t-st)/0.7,h); }
+    });
+    for(var d=0;d<nD;d++){                           // defenders hold the cell, then fall or run
+      var off=(d-(nD-1)/2)*h*0.46, back=(d%2)*h*0.3, dx0=B[0]-ux*(s*0.2-back)-uy*off, dy0=B[1]+s*0.3+ux*off*0.5+uy*back;
+      var fallAt=1.7+d*0.12, fl=ease3((t-fallAt)/0.35), clash=t>1.0&&t<fallAt;
+      var lunge=clash?Math.sin((t-1)*9+d)*h*0.12:0, step=t>0.8?ease3((t-0.8)/0.3)*h*0.45:0;
+      artPerson(g,dx0-ux*(lunge+step),dy0-uy*(lunge+step),h,a.dcol,{face:-face, ph:0, swing:clash?(Math.sin((t-1)*10+d)*0.5+0.5):null, fall:fl, alpha:t>fallAt+0.6?Math.max(0,1-(t-fallAt-0.6)/0.4):1});
+    }
+    for(var i2=0;i2<nA;i2++){                        // attackers march up, fight, the lost ones fall
+      var off2=(i2-(nA-1)/2)*h*0.42, back2=(i2%2)*h*0.32, adv=ease3(t/1.0), clash2=t>1.0&&t<2.0;
+      var bx=A[0]+dx*(0.08+0.42*adv)-ux*back2-uy*off2, by=A[1]+dy*(0.08+0.42*adv)+s*0.3+ux*off2*0.5-uy*back2;
+      if(t>2.0){ var push=ease3((t-2.0)/0.35); bx+=dx*0.3*push; by+=dy*0.3*push; }
+      var lost=i2<(a.loss||0), fallAt2=1.35+i2*0.18, fl2=lost?ease3((t-fallAt2)/0.35):0;
+      var lg=clash2&&!fl2?Math.sin((t-1)*9+i2*1.7)*h*0.12:0;
+      artPerson(g,bx+ux*lg,by+uy*lg,h,a.col,{face:face, ph:t<1.0||t>2.0?t*11+i2:0, swing:clash2&&!lost?(Math.sin((t-1)*10+i2*2)*0.5+0.5):null, fall:fl2, alpha:lost&&t>fallAt2+0.6?Math.max(0,1-(t-fallAt2-0.6)/0.4):1});
+    }
+    for(var sp=0;sp<5;sp++){                         // clashes and dust where the lines meet
+      var st2=1.0+sp*0.19, jx=(artHash(sp,a.to[0],7)-0.5)*s*0.7, jy=(artHash(sp,a.to[1],9)-0.5)*s*0.4;
+      artSpark(g,meet[0]+jx,meet[1]-h*0.55+jy,h*0.5,(t-st2)/0.3);
+      artDust(g,meet[0]+jx*1.2,meet[1]+jy*0.5,s*0.4,(t-st2+0.1)/0.7);
+    }
+    artFlag(g,B[0]+s*0.1,B[1]+s*0.35,h*1.3,a.col,(t-ANIM_REVEAL.battle+0.05)/0.3);
+  }
+  g.restore();
 }
 
 /* ═══ drawing ══════════════════════════════════════════════════════════ */
 var canvas=document.getElementById('board'), ctx=canvas.getContext('2d');
 var W=900,H=520,dpr=1,T={};
 function tok(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
-function readTokens(){ ['--paper','--surface','--sink','--ink','--ink-2','--rule','--p0','--p1','--p2','--p3','--brass','--steel'].forEach(function(k){ T[k]=tok(k); }); }
+function readTokens(){
+  ['--paper','--surface','--sink','--ink','--ink-2','--rule','--p0','--p1','--p2','--p3','--brass','--steel','--water'].forEach(function(k){ T[k]=tok(k); });
+  var dk=!!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  if(dk!==NAT_DARK) natPalette(dk);
+}
 function layout(){
   W=canvas.parentElement.clientWidth;
   H=Math.max(360,Math.min(Math.round(W*0.62),Math.round(window.innerHeight*0.68)));
@@ -858,22 +1419,72 @@ function mark(t,cx,cy,s,col){
   else if(t===IRON){ ctx.beginPath(); ctx.arc(cx,cy,m*.6,0,6.284); ctx.fill(); }
   else if(t===FARM){ ctx.beginPath(); for(var i=-1;i<=1;i++){ ctx.moveTo(cx-m*.8,cy+i*m*.55); ctx.lineTo(cx+m*.8,cy+i*m*.55); } ctx.stroke(); }
 }
-function drawBuilding(c,cx,cy,r,col){
-  ctx.fillStyle=col; ctx.strokeStyle=col;
-  var b=r*0.30;
-  if(c.k===CASTLE){
-    ctx.fillRect(cx-b,cy-b*.5,b*2,b*1.3);
-    ctx.fillRect(cx-b,cy-b,b*.6,b*.6); ctx.fillRect(cx-b*.3,cy-b,b*.6,b*.6); ctx.fillRect(cx+b*.4,cy-b,b*.6,b*.6);
-  } else {
-    ctx.fillRect(cx-b*.42,cy-b*.6,b*.84,b*1.6);
-    ctx.fillRect(cx-b*.7,cy-b,b*1.4,b*.45);
+function drawBuilding(c,cx,cy,r,col,detail){
+  if(detail){ (c.k===CASTLE?artCastle:artTower)(ctx,cx,cy-r*0.06,r,col,clock()); }
+  else {
+    ctx.fillStyle=col; ctx.strokeStyle=col;
+    var b=r*0.30;
+    if(c.k===CASTLE){
+      ctx.fillRect(cx-b,cy-b*.5,b*2,b*1.3);
+      ctx.fillRect(cx-b,cy-b,b*.6,b*.6); ctx.fillRect(cx-b*.3,cy-b,b*.6,b*.6); ctx.fillRect(cx+b*.4,cy-b,b*.6,b*.6);
+    } else {
+      ctx.fillRect(cx-b*.42,cy-b*.6,b*.84,b*1.6);
+      ctx.fillRect(cx-b*.7,cy-b,b*1.4,b*.45);
+    }
   }
   var need=SPEC[c.k].gar[c.l];
   for(var i=0;i<c.l;i++){
-    var px=cx-(c.l-1)*r*0.13+i*r*0.26, py=cy+r*0.62;
+    var px=cx-(c.l-1)*r*0.13+i*r*0.26, py=cy+r*(detail?0.7:0.62);
     ctx.beginPath(); ctx.arc(px,py,Math.max(1.4,r*0.075),0,6.284);
     if(i<c.g||c.g>=need){ ctx.fillStyle=T['--steel']; ctx.fill(); }
     else { ctx.strokeStyle=T['--p1']; ctx.lineWidth=1.2; ctx.stroke(); }
+  }
+}
+function waves(cx,cy,s){
+  var m=s*0.42;
+  ctx.save(); ctx.strokeStyle=T['--surface']; ctx.globalAlpha=.7; ctx.lineWidth=Math.max(1,s*0.06); ctx.lineCap='round';
+  for(var j=-1;j<=1;j+=2){
+    var y=cy+j*s*0.17; ctx.beginPath();
+    for(var t=0;t<=12;t++){ var x=cx-m+2*m*t/12, yy=y+Math.sin(t/12*Math.PI*2)*s*0.07; t?ctx.lineTo(x,yy):ctx.moveTo(x,yy); }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+/* a bridge: a deck laid between two dry banks where there are any; dashed while it is going up */
+function span(c,cx,cy,s,col,detail){
+  var up=building(c), ax=0;
+  for(var i=0;i<3;i++){ if(!riverAt(c.q+AX[i][0],c.r+AX[i][1]) && !riverAt(c.q+AX[i+3][0],c.r+AX[i+3][1])){ ax=i; break; } }
+  if(detail){
+    artBridge(ctx,cx,cy,s,[0,-60,-120][ax]*Math.PI/180,up,col);
+    if(up && s>=15){
+      ctx.save(); ctx.font='600 '+Math.round(s*0.34)+'px ui-monospace, monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      var lab=hoursLeft(c.b), tw=ctx.measureText(lab).width;
+      ctx.fillStyle=T['--surface']; ctx.globalAlpha=.85; ctx.fillRect(cx-tw/2-3,cy-s*0.22,tw+6,s*0.44); ctx.globalAlpha=1;
+      ctx.fillStyle=col; ctx.fillText(lab,cx,cy); ctx.restore();
+    }
+    return;
+  }
+  ctx.save();
+  hexPath(cx,cy,s*0.94); ctx.clip();
+  ctx.translate(cx,cy); ctx.rotate([0,-60,-120][ax]*Math.PI/180);
+  var L=s*1.1, w=s*0.3;
+  ctx.fillStyle=T['--surface']; ctx.globalAlpha=up?.45:.9; ctx.fillRect(-L,-w,2*L,2*w);
+  ctx.fillStyle=col; ctx.globalAlpha=up?.10:.22; ctx.fillRect(-L,-w,2*L,2*w); ctx.globalAlpha=1;
+  ctx.strokeStyle=up?col:T['--brass']; ctx.lineWidth=Math.max(1.3,s*0.08);
+  if(up) ctx.setLineDash([Math.max(2,s*0.14),Math.max(2,s*0.12)]);
+  ctx.beginPath(); ctx.moveTo(-L,-w); ctx.lineTo(L,-w); ctx.moveTo(-L,w); ctx.lineTo(L,w); ctx.stroke();
+  ctx.setLineDash([]);
+  if(!up && s>9){
+    ctx.lineWidth=Math.max(1,s*0.035); ctx.beginPath();
+    for(var x=-L+s*0.18;x<L;x+=s*0.24){ ctx.moveTo(x,-w); ctx.lineTo(x,w); }
+    ctx.stroke();
+  }
+  ctx.restore();
+  if(up && s>=15){
+    ctx.save(); ctx.font='600 '+Math.round(s*0.36)+'px ui-monospace, monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillStyle=col;
+    ctx.fillText(hoursLeft(c.b),cx,cy); ctx.restore();
   }
 }
 function draw(){
@@ -884,27 +1495,39 @@ function draw(){
   var sup=me()?supplied(ME):{};
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
-  var guns=[], walls=[], builds=[];
+  var guns=[], walls=[], builds=[], spans=[], detail=S>=12, now=clock();
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
-    var c=cellOf(q,r), col=colorFor(c.o);
+    var c=cellOf(q,r), vl=veilOf(key(q,r),now);
+    if(vl) c={o:vl.o,w:vl.w||0,k:vl.k||null,l:vl.l||0,g:vl.g||0,d:0,q:q,r:r,t:c.t};    // as it was until its animation arrives
+    var col=colorFor(c.o), wet=c.t===RIVER;
     hexPath(p[0],p[1],S*0.94);
-    var cut = c.o===ME && !sup[key(q,r)];
-    if(c.o){ ctx.save(); ctx.globalAlpha=cut?.07:.20; ctx.fillStyle=col; ctx.fill(); ctx.restore(); }
+    if(wet){ ctx.save(); ctx.globalAlpha=.5; ctx.fillStyle=T['--water']; ctx.fill(); ctx.restore(); }
+    var cut = !vl && c.o===ME && !sup[key(q,r)] && !building(c);
+    if(c.o){ ctx.save(); ctx.globalAlpha=cut?.08:(detail?.32:.22); ctx.fillStyle=col; ctx.fill(); ctx.restore(); }
     if(cut){
       ctx.save(); ctx.clip(); ctx.strokeStyle=T['--ink-2']; ctx.globalAlpha=.55; ctx.lineWidth=1; ctx.beginPath();
       for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
       ctx.stroke(); ctx.restore();
     }
-    if(mode==='claim'&&haveMarch&&c.o!==ME&&!c.k&&adjacentTo(q,r,ME)){
+    if(haveMarch&&c.o!==ME&&!c.k&&(mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
       ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=T[seatColor(me().seat)]; ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
       hexPath(p[0],p[1],S*0.94);
     }
-    ctx.lineWidth=1; ctx.globalAlpha=c.o?.85:.28;
+    ctx.lineWidth=c.o&&detail?1.8:1; ctx.globalAlpha=c.o?.9:.28;
     ctx.strokeStyle=c.o?col:T['--rule']; ctx.stroke(); ctx.globalAlpha=1;
-    if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
+    if(detail){
+      var vr=Math.floor(artHash(q,r,1)*3);
+      if(wet){ if(c.o) spans.push([c,p,col]); else stampTerrain(ctx,5,p[0],p[1],S,vr); }
+      else if(!c.k && (c.t!==PLAIN || S>=18)){
+        if(!c.o) ctx.globalAlpha=.62;                  // unclaimed ground recedes; held ground reads at full strength
+        stampTerrain(ctx,c.t,p[0],p[1],S,vr); ctx.globalAlpha=1;
+      }
+    }
+    else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
+    else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
   }
@@ -919,15 +1542,16 @@ function draw(){
     ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,S*(0.08+0.05*c.w));
     for(var i=0;i<6;i++){
       var n=G.cells[key(c.q+AX[i][0],c.r+AX[i][1])];
-      if(n&&n.o===c.o&&n.w>0) continue;
-      var a1=(60*i-30)*Math.PI/180,a2=(60*i+30)*Math.PI/180,rr=S*0.94;
-      ctx.beginPath();
-      ctx.moveTo(p[0]+rr*Math.cos(a1),p[1]+rr*Math.sin(a1));
-      ctx.lineTo(p[0]+rr*Math.cos(a2),p[1]+rr*Math.sin(a2));
-      ctx.stroke();
+      if(n&&n.o===c.o&&n.w>0) continue;               // no wall between two walled cells of one owner
+      var ea=[0,-60,-120,180,120,60][i], a1=(ea-30)*Math.PI/180,a2=(ea+30)*Math.PI/180,rr=S*0.94;
+      var x1=p[0]+rr*Math.cos(a1), y1=p[1]+rr*Math.sin(a1), x2=p[0]+rr*Math.cos(a2), y2=p[1]+rr*Math.sin(a2);
+      if(detail){ artWallEdge(ctx,x1,y1,x2,y2,S,c.w); continue; }
+      ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
     }
   });
-  builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2]); });
+  spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
+  builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
+  anims.forEach(function(a){ drawAnim(ctx,a,now,toScreen,S); });
 
   // Anyone off the edge of the screen gets an arrow pointing at their keep, with
   // how far away it is — otherwise a distant opponent is simply invisible.
@@ -955,6 +1579,155 @@ function draw(){
   });
 }
 
+/* ═══ moves, animations and the replay ═════════════════════════════════
+   Every march, battle and bridge is logged as a small event under the board.
+   Your own moves animate as you make them; when you open the game, the moves
+   the others made since you last looked are replayed one by one, with the
+   map showing each cell as it was until its little army arrives. */
+var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
+var REDUCE=!!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
+function clock(){ return performance.now()/1000; }
+function fromFor(q,r,pid){
+  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===pid&&!building(n)) return [nq,nr]; }
+  return [q-1,r];
+}
+function gunsAt(q,r,pid){                          // manned towers and keeps of pid that cover (q,r)
+  var out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(!c.k||c.o!==pid||!c.g) continue;
+    var p=k.split('_'), cq=parseInt(p[0],10), cr=parseInt(p[1],10);
+    if(hexDist(q,r,cq,cr)<=SPEC[c.k].range[c.l]) out.push([cq,cr]); }
+  return out.slice(0,3);
+}
+function veilOf(k,now){
+  for(var i=0;i<anims.length;i++){ var a=anims[i]; if(a.key===k && a.veil && now<a.t0+ANIM_REVEAL[a.kind]) return a.veil; }
+  return replayVeil[k]||null;
+}
+function kick(){ if(!animRaf) animRaf=requestAnimationFrame(animTick); }
+function animTick(){
+  animRaf=0; var now=clock();
+  anims=anims.filter(function(a){ return now<a.t0+ANIM_DUR[a.kind]; });
+  draw();
+  if(anims.length) kick();
+}
+/* event kinds: m march · b battle · br bridge · w wall · tw tower · cs castle · up upgrade · ms muster
+   (claims are not logged twice: the claim log already has them, and replays read it) */
+var ANIM_KIND={m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim'};
+function veilFor(ev){                                // how the cell looked just before this move
+  switch(ev.k){
+    case 'm': case 'br': return {o:null};
+    case 'b': return {o:ev.prev||null, w:ev.pw||0};
+    case 'w': return {o:ev.pid, w:(ev.lvl||1)-1};
+    case 'tw': case 'cs': return {o:ev.pid, w:ev.pw||0};
+    case 'up': var bk=ev.bk===CASTLE?CASTLE:TOWER, l=(ev.lvl||2)-1; return {o:ev.pid, k:bk, l:l, g:SPEC[bk].gar[l]};
+  }
+  return null;
+}
+function play(ev,delay){
+  if(REDUCE||!G) return 0;
+  var kind=ANIM_KIND[ev.k]; if(!kind) return 0;
+  var veil=veilFor(ev);
+  anims.push({kind:kind, t0:clock()+(delay||0), from:ev.fq!=null?[ev.fq,ev.fr]:null, to:[ev.q,ev.r],
+    key:veil?key(ev.q,ev.r):null, veil:veil, col:colorFor(ev.pid), dcol:colorFor(ev.prev), loss:ev.loss||0,
+    lvl:ev.lvl, bk:ev.k==='tw'?TOWER:ev.k==='cs'?CASTLE:ev.bk, n:ev.n, label:ev.label,
+    guns:kind==='battle'&&ev.prev?gunsAt(ev.q,ev.r,ev.prev):[]});
+  kick();
+  return ANIM_DUR[kind];
+}
+function flashStat(el){ if(!el) return; el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+function claimEvent(id){                             // a claim, seen as a move: the marches arrive at the keep
+  var c=G.claims&&G.claims[id], p=c&&G.players[c.pid];
+  if(!c||!p) return null;
+  return {id:'c:'+id, pid:c.pid, k:'claim', q:p.q, r:p.r, t:c.t, steps:c.steps||0, got:c.got||0,
+    n:Math.min(6,Math.max(2,Math.round((c.got||0)/3))), label:'+'+(c.got||0)+' marches'};
+}
+function logMove(k,q,r,from,prev,loss,extra){
+  var t=Date.now(), id=ME+'-'+t.toString(36), ev={pid:ME,k:k,q:q,r:r,t:t};
+  if(from){ ev.fq=from[0]; ev.fr=from[1]; }
+  if(prev) ev.prev=prev;
+  if(loss) ev.loss=loss;
+  if(extra) for(var x in extra) if(extra[x]!=null) ev[x]=extra[x];
+  G.events=G.events||{}; G.events[id]=ev; seenEv[id]=1;
+  me().evSeen=Math.max(me().evSeen||0,t);
+  putPath('/events/'+id,ev);
+  play(ev);
+}
+function describe(e){
+  var who='<b>'+esc(nameOf(e.pid))+'</b>';
+  if(e.k==='claim') return who+' claimed '+e.steps.toLocaleString()+' steps &rarr; '+e.got+' marches.';
+  if(e.k==='w') return who+' built a wall (level '+ROMAN[e.lvl||1]+').';
+  if(e.k==='tw') return who+' raised a watchtower.';
+  if(e.k==='cs') return who+' founded a new castle.';
+  if(e.k==='up') return who+' upgraded a '+(e.bk===CASTLE?'castle':'tower')+' to level '+ROMAN[e.lvl||2]+'.';
+  if(e.k==='ms') return who+' mustered a soldier.';
+  if(e.k==='br') return who+' started a bridge.';
+  if(e.k==='m') return who+' marched into new ground.';
+  var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
+  return e.prev===ME ? who+' <span class="bad">took one of your cells</span>'+lost+'.' : who+' took a cell from '+esc(nameOf(e.prev))+lost+'.';
+}
+function startReplay(since){
+  var all=Object.keys(G.events||{});
+  var list=all.map(function(id){ return G.events[id]; })
+    .concat(Object.keys(G.claims||{}).map(claimEvent))
+    .filter(function(e){ return e && e.pid!==ME && e.t>since && G.players[e.pid]; })
+    .sort(function(a,b){ return a.t-b.t; });
+  markAllSeen();
+  if(list.length) me().evSeen=Math.max(me().evSeen||0,list[list.length-1].t);
+  if(!list.length||REDUCE) return false;
+  var mine=list.filter(function(e){ return e.prev===ME; }).length;
+  replaySummary=list.length+' move'+(list.length>1?'s':'')+' by the others since you were last here'+(mine?', <span class="bad">'+mine+' of them against you</span>':'')+'.';
+  list=list.slice(-MAX_REPLAY);
+  replayQ=list.slice(); replayVeil={}; replayN=list.length; replayI=0; replayS=S;
+  for(var i=replayQ.length-1;i>=0;i--){ var e=replayQ[i], v=veilFor(e); if(v) replayVeil[key(e.q,e.r)]=v; }
+  replaying=true; S=Math.max(S,24);
+  document.getElementById('skipreplay').classList.remove('hide');
+  replayTimer=setTimeout(nextReplay,600);
+  draw();
+  return true;
+}
+function nextReplay(){
+  if(!replaying) return;
+  var e=replayQ.shift();
+  if(!e){ endReplay(); return; }
+  replayI++;
+  centreOn(e.q,e.r);
+  delete replayVeil[key(e.q,e.r)];
+  say('While you were away <span class="muted">('+replayI+' of '+replayN+')</span> &mdash; '+describe(e));
+  var d=play(e);
+  replayTimer=setTimeout(nextReplay,(d+0.5)*1000);
+}
+function endReplay(){
+  if(!replaying) return;
+  replaying=false; clearTimeout(replayTimer); replayQ=[]; replayVeil={}; anims=[];
+  document.getElementById('skipreplay').classList.add('hide');
+  S=replayS||S; if(me()) centreOn(me().q,me().r);
+  render();
+  say('That&rsquo;s the replay &mdash; '+replaySummary+' You have <b>'+avail()+'</b> marches to spend.');
+}
+function markAllSeen(){
+  Object.keys(G.events||{}).forEach(function(id){ seenEv[id]=1; });
+  Object.keys(G.claims||{}).forEach(function(id){ seenEv['c:'+id]=1; });
+}
+/* moves that arrive while you are playing animate where you can see them */
+function liveEvents(){
+  if(!G||!me()) return;
+  var list=[];
+  Object.keys(G.events||{}).forEach(function(id){ if(!seenEv[id]){ seenEv[id]=1; list.push(G.events[id]); } });
+  Object.keys(G.claims||{}).forEach(function(id){ if(!seenEv['c:'+id]){ seenEv['c:'+id]=1; list.push(claimEvent(id)); } });
+  list=list.filter(function(e){ return e && e.pid!==ME; }).sort(function(a,b){ return a.t-b.t; });
+  if(!list.length) return;
+  me().evSeen=Math.max(me().evSeen||0,list[list.length-1].t);
+  if(replaying) return;
+  var delay=0;
+  list.slice(-5).forEach(function(e){
+    var p=toScreen(e.q,e.r);
+    if(p[0]>-S && p[0]<W+S && p[1]>-S && p[1]<H+S) delay+=play(e,delay)*0.6;
+  });
+  var hit=list.filter(function(e){ return e.prev===ME; });
+  say(describe(hit.length?hit[hit.length-1]:list[list.length-1]));
+}
+document.getElementById('skipreplay').addEventListener('click',endReplay);
+
 /* ═══ render ═══════════════════════════════════════════════════════════ */
 function render(){
   if(!G||!me()) return;
@@ -979,6 +1752,11 @@ function render(){
   document.getElementById('bankinfo').textContent =
     (done ? 'today claimed ✓ · next claim in '+untilMidnight() : 'today not claimed yet · one claim a day')
     +' · '+R.sup+'/'+R.own+' cells supplied';
+  var ups=[]; for(var bk in G.cells){ var bc=G.cells[bk]; if(bc.o===ME&&building(bc)) ups.push(bc.b); }
+  ups.sort(function(a,b){ return a-b; });
+  if(ups.length) document.getElementById('bankinfo').textContent += ups.length>1
+    ? ' · '+ups.length+' bridges building, first ready in '+hoursLeft(ups[0])
+    : ' · bridge ready in '+hoursLeft(ups[0]);
   document.getElementById('collect').disabled = done;
   var rows=Object.keys(G.players).map(function(pid){
     var p=G.players[pid];
@@ -991,6 +1769,7 @@ function render(){
       +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
   }).join('');
   document.getElementById('m-wall').disabled=pl.res.stone<30;
+  document.getElementById('m-bridge').disabled=!(pl.res.timber>=BRIDGE_COST.timber&&pl.res.stone>=BRIDGE_COST.stone);
   document.getElementById('m-tower').disabled=!(pl.res.stone>=40&&pl.res.timber>=30);
   var cc=castleCost(ME);
   document.getElementById('m-castle').disabled=!(pl.res.timber>=cc.timber&&pl.res.stone>=cc.stone&&pl.res.iron>=cc.iron);
@@ -1149,9 +1928,11 @@ function endPointer(ev){
   if(pts().length<2) pinchFrom=null;
   if(pts().length===0){
     dragFrom=null;
+    if(wasDragging && !moved && G && me() && replaying){ endReplay(); dragged=false; return; }
     if(wasDragging && !moved && G && me()){
       var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top);
       if(mode==='claim') spendMarch(h[0],h[1]);
+      else if(mode==='bridge') bridge(h[0],h[1]);
       else if(mode==='wall') wall(h[0],h[1]);
       else if(mode==='tower') build(h[0],h[1],TOWER);
       else if(mode==='castle') build(h[0],h[1],CASTLE);
@@ -1167,9 +1948,10 @@ canvas.addEventListener('wheel',function(ev){
   ev.preventDefault();
   setZoom(S*(ev.deltaY<0?1.15:1/1.15)); draw();
 },{passive:false});
-var MODES={claim:'m-claim',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop'};
+var MODES={claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop'};
 var HINTS={
-  claim:'Click any dashed cell touching your ground to spend a march. Someone else&rsquo;s ground costs two, and their walls and manned guns cost soldiers on top.',
+  claim:'Click any dashed cell touching your ground to spend a march. Someone else&rsquo;s ground costs two, and their walls and manned guns cost soldiers on top. Rivers can&rsquo;t be marched into &mdash; bridge them.',
+  bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. It needs a soldier standing in it from the moment it exists.',
   castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing.',
@@ -1257,12 +2039,14 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; myRev=remote.rev||0; }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; myRev=remote.rev||0; }
     else G=blankGame(gameCode);
     var isNew=!G.players[ME];
+    var since=isNew?Date.now():(G.players[ME].evSeen||G.players[ME].seen||0);
     if(isNew) seedPlayer(ME,name); else G.players[ME].name=name;
     catchUp(ME);
     enterGame(isNew);
+    if(!isNew) startReplay(since); else markAllSeen();
     // a newcomer writes the ground they were seeded with; anyone else writes
     // only their own record, so rejoining can never overwrite a vote or claim
     if(isNew) pushAll(); else pushMe();
