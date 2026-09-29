@@ -133,7 +133,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">A short opening, then twelve chapters — about five minutes in all,, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
+  <p class="standfirst">A short opening, then twelve chapters — about five minutes in all, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -2108,13 +2108,13 @@ NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
    built-in speech synthesiser: if the clips can't load, the narration button
    says so and the manual carries on silently, rather than reading the script
    in a robot voice. */
-var voiceOn=true, clips={}, nowPlaying=null, voiceBroken=false;
+var voiceOn=true, clips={}, nowPlaying=null, voiceBroken=false, badClips=0;
 function clipFor(id){
   var src='marchland-deploy/audio/'+id+'.mp3';
   var a=clips[src];
   if(!a){
     a=new Audio(src); a.preload='auto';
-    a.addEventListener('error',function(){ narrationFailed(); });
+    a.addEventListener('error',function(){ a.__bad=true; badClips++; if(badClips>=6) narrationFailed(); });
     clips[src]=a;
   }
   return a;
@@ -2137,6 +2137,7 @@ function say(entry){
   if(!voiceOn||!entry||voiceBroken) return;
   hush();
   var a=clipFor(entry[1]);
+  if(a.__bad) return;   /* one missing clip skips that line only */
   nowPlaying=a;
   try{ a.currentTime=0; }catch(e){}
   var pr=a.play();
