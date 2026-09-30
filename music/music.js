@@ -4,8 +4,8 @@
 (function(){
   var KEY='marchland.music', script=document.currentScript;
   var base=script&&script.src?script.src.replace(/[^\/]*$/,''):'';
-  var URL=base+'adventure.mp3';
-  var LEVEL=0.7, DUCKED=0.22;
+  var URL=base+'adventure.mp3?v=3';
+  var LEVEL=0.9, DUCKED=0.3;
   var ac=null, gain=null, src=null, buf=null, loading=false, started=false;
   var on=true, talking=0;
   try{ if(localStorage.getItem(KEY)==='off') on=false; }catch(e){}
