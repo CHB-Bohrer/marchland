@@ -174,7 +174,7 @@ footer a:hover{ color:var(--ink); }
     <dt>River</dt><dd>Can&rsquo;t be marched into. A bridge costs 1 march + 40 timber + 20 stone and is ready 24 hours later; then borders and supply cross it. Someone else&rsquo;s bridge costs 2 marches. A band beside a bridge can break it for 2 marches; the river is then bare until a new bridge is built</dd>
     <dt>The map</dt><dd>120 × 120 cells, wrapping at every edge</dd>
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
-    <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells; keeps every cell of yours in that reach supplied</dd>
+    <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
@@ -876,12 +876,6 @@ function supplied(owner){
       if(c && c.o===owner && !ok[nk]){ ok[nk]=1; queue.push(nk); }
     }
   }
-  /* a manned tower keeps its own range supplied, road or no road */
-  for(var tk in M.cells){
-    var t=M.cells[tk]; if(t.o!==owner || t.k!=='tower') continue;
-    var tp=tk.split('_'), rng=t.l||1;
-    for(var ck in M.cells){ var cp=ck.split('_'); if(M.cells[ck].o===owner && hexDist(+tp[0],+tp[1],+cp[0],+cp[1])<=rng) ok[ck]=1; }
-  }
   return ok;
 }
 function markSupply(owner){
@@ -1314,8 +1308,8 @@ scene({
 /* 6 ── supply */
 scene({
   tag:'Supply', title:'Only connected land pays',
-  body:'Terrain yields nothing on its own. A cell produces only if you can trace an unbroken path of your own ground from it back to one of your castles — or if it sits inside the range of one of your manned towers. This is the sharpest rule in the game: a single cell taken in the right place can switch off a whole province, unless a tower is holding it up.',
-  dur:36,
+  body:'Terrain yields nothing on its own. A cell produces only if you can trace an unbroken path of your own ground from it back to one of your castles. This is the sharpest rule in the game: a single cell taken in the right place can switch off a whole province.',
+  dur:26,
   init:function(){
     M=blank();
     put(0,0,{o:'you',k:'castle'});
@@ -1339,15 +1333,7 @@ scene({
       M.note='Four cells still belong to you. They are simply no longer connected, and they now yield nothing.';
     }],
     [17.5,function(){ M.note='You did not lose the ground. You lost the road to it — which in practice is the same thing.'; }],
-    [20.6,function(){ M.note='Cutting a supply line is almost always cheaper than taking the land it feeds.'; }],
-    [25.4,function(n){
-      put(4,0,{o:'you',k:'tower'},n); markSupply('you');
-      var dark=0, mine=0;
-      for(var k in M.cells){ if(M.cells[k].o==='you'){ mine++; if(M.cells[k].dark) dark++; } }
-      M.hud=[['Supplied',(mine-dark)+' of '+mine],['Tower','keeps its range supplied']];
-      M.note='Unless there\'s a tower. A manned tower keeps every cell of yours in its range supplied, road or no road.';
-    }],
-    [32.1,function(){ M.note='A tower on a weak neck makes cutting you off much harder.'; }]
+    [20.6,function(){ M.note='Cutting a supply line is almost always cheaper than taking the land it feeds.'; }]
   ],
   draw:function(now){
     drawBoard(now);
@@ -2095,7 +2081,7 @@ var NARRATION=[
  [[1.2, "n4_1", 4.25, "When you reach someone else's land, you can still take it. It just costs double."], [5.9, "n4_2", 2.35, "Two cells taken, four marches gone."], [8.7, "n4_3", 3.86, "The double price is what stops a border collapsing in a single evening."], [13.01, "n4_4", 3.79, "And a keep can never be taken outright. It has to be starved out."]],
  [[0.8, "s_1", 4.85, "Marches alone can't take anyone's land. You need soldiers standing right beside it."], [6.45, "s_2", 3.72, "Soldiers are mustered at a castle, and they stand together as a band."], [10.97, "s_3", 4.42, "Walking a band across your own ground costs one march for every three cells."], [16.19, "s_4", 6.31, "Red has a band of one, guarding the cells around it. Taking one of them costs you a soldier for each of theirs."], [23.3, "s_5", 3.7, "Your three beat their one. The other two walk in, and hold the cell."], [27.8, "s_6", 2.83, "A band standing still guards your border in the same way."]],
  [[1.2, "n5_1", 2.74, "Stone builds walls, up to three courses deep."], [4.39, "n5_2", 2.16, "A tower covers every cell around it."], [7.0, "n5_3", 3.48, "Neither one stops an attack. They just make it cost soldiers."], [10.93, "n5_4", 3.07, "The cell falls, and four of your six soldiers fall with it."], [14.45, "n5_5", 3.65, "Towers need men inside them, and soldiers eat grain, forever."]],
- [[1.4, "n6_1", 2.18, "Land doesn't produce anything on its own."], [4.03, "n6_2", 4.49, "A cell only pays if there's an unbroken path from it, back to one of your castles."], [8.97, "n6_3", 3.36, "Now red takes a single cell, the neck of your eastern arm."], [12.78, "n6_4", 4.32, "Those four cells are still yours. But they're cut off, so they yield nothing."], [17.55, "n6_5", 2.66, "You didn't lose the ground. You lost the road to it."], [20.66, "n6_6", 4.2, "Cutting a supply line is usually cheaper than taking the land it feeds."], [25.4, "n6_7", 5.88, "Unless there's a tower. A manned tower keeps every cell in its range supplied, road or no road."], [32.1, "n6_8", 3.38, "Put one on a weak neck, and cutting you off gets a lot harder."]],
+ [[1.4, "n6_1", 2.18, "Land doesn't produce anything on its own."], [4.03, "n6_2", 4.49, "A cell only pays if there's an unbroken path from it, back to one of your castles."], [8.97, "n6_3", 3.36, "Now red takes a single cell, the neck of your eastern arm."], [12.78, "n6_4", 4.32, "Those four cells are still yours. But they're cut off, so they yield nothing."], [17.55, "n6_5", 2.66, "You didn't lose the ground. You lost the road to it."], [20.66, "n6_6", 4.2, "Cutting a supply line is usually cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 2.93, "A second castle is a campaign, not a purchase."], [4.78, "n7_2", 3.31, "No two of your keeps can stand within seven cells of each other."], [8.54, "n7_3", 2.71, "So building one means pushing your border out first."], [11.7, "n7_4", 3.29, "Now the eastern arm draws its supply from the new keep."], [15.44, "n7_5", 2.54, "And every castle costs more than the one before."], [18.43, "n7_6", 2.71, "And soldiers mustered there are already at the front."]],
  [[0.8, "n8_1", 2.52, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.34, "Read the total off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.22, "Miss a day, and those steps are gone. They don't carry over."], [12.4, "n8_4", 3.05, "And one day counts for thirty thousand steps, at most."]],
  [[0.6, "n9_1", 4.39, "Every claim goes up on a public log, and its marches can be spent straight away."], [5.44, "n9_7", 3.94, "For a full day, anyone else can dispute it. Then the other players vote."], [9.95, "n9_3", 4.58, "It takes a majority of them to void a claim. Here, both of them vote to void it."], [14.98, "n9_4", 4.03, "Kit keeps what he has. But the fifteen marches come off his next claim."], [19.46, "n9_5", 4.85, "The next day he earns twenty. Fifteen pay off the debt, and five are his to spend."], [24.76, "n9_6", 4.27, "A screenshot from the Health app is the easiest way to avoid an argument."]],
