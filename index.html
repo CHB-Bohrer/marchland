@@ -518,17 +518,6 @@ function supplied(pid){
       if(n && n.o===pid && !building(n)){ set[nk]=1; stack.push([nq,nr]); }
     }
   }
-  /* A manned tower is a supply depot: every cell of yours within its range
-     stays supplied even when the road home has been cut. */
-  for(var tk in G.cells){
-    var t=G.cells[tk];
-    if(t.o!==pid || t.k!==TOWER || !t.g) continue;
-    var tp=tk.split('_'), tq=parseInt(tp[0],10), tr=parseInt(tp[1],10), rng=SPEC[TOWER].range[t.l];
-    for(var dq=-rng; dq<=rng; dq++) for(var dr=Math.max(-rng,-dq-rng); dr<=Math.min(rng,-dq+rng); dr++){
-      var ck=key(tq+dq,tr+dr), cc=G.cells[ck];
-      if(cc && cc.o===pid && !building(cc)) set[ck]=1;
-    }
-  }
   return set;
 }
 function garrisonNeed(pid){
@@ -939,6 +928,7 @@ function vote(id,v){
   putPath('/claims/'+id+'/votes/'+ME,c.votes[ME]);
   var after=claimState(c), who=esc(nameOf(c.pid));
   if(after.s==='void') say('Voided — '+c.got+' marches will come off '+who+'&rsquo;s next claim.');
+  else if(st.s==='open' && v==='ok') say('Noted — you&rsquo;re fine with '+who+'&rsquo;s claim. You can still dispute it until the window closes.');
   else if(st.s==='open') say('Disputed. The others now vote on '+who+'&rsquo;s claim — the vote closes in '+hoursLeft(after.until)+'. If it is voided, '+c.got+' marches come off '+who+'&rsquo;s next claim.');
   else if(after.s==='stands') say('Settled — '+who+'&rsquo;s claim stands.');
   else say('Vote recorded. You can change it until the vote closes.');
@@ -1035,7 +1025,7 @@ function build(q,r,kind){
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
-    ? 'Watchtower raised. Every cell of yours within '+SPEC[TOWER].range[1]+' of it stays supplied even if the road home is cut, as long as a soldier is inside.'
+    ? 'Watchtower raised. Keep a soldier in it and its guns cost attackers soldiers.'
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
@@ -1053,7 +1043,7 @@ function upgrade(q,r){
   writeCell(q,r,c); logMove('up',q,r,fromFor(q,r,ME),null,0,{lvl:lvl,bk:c.k,n:Math.max(1,extra)});
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
-  say('Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.'+(c.k===TOWER?' It now keeps everything of yours within '+SPEC[TOWER].range[lvl]+' cells supplied.':''));
+  say('Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
 }
 function wall(q,r){
   var pl=me(), c=cellOf(q,r);
@@ -2132,6 +2122,18 @@ function renderNotice(list){
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
       lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was voided by '+namesOf(st.noBy)+' — '+c.got+' marches will come off your next claim.</span>');
     }
+    /* every login: others' claims from the last 24 hours that can still be disputed */
+    if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS){
+      var canV=c.voters&&c.voters[ME], my=c.votes&&c.votes[ME]&&c.votes[ME].v;
+      var hot=armed&&armed.id===e.id;
+      lines.push('<span class="claimalert"><b>'+esc(nameOf(c.pid))+'</b> claimed <b>'+(c.steps||0).toLocaleString()+' steps</b> ('+c.got+' marches) '+since(c.t)+'. '
+        +(canV
+          ? (my==='ok' ? 'You said it looks fine. ' : '')+'You have '+hoursLeft(st.until)+' left to dispute it. '
+            +(my==='ok'?'':'<button data-act="ok" data-id="'+e.id+'">Looks fine</button> ')
+            +'<button data-act="no" data-id="'+e.id+'"'+(hot?' aria-pressed="true"':'')+'>'+(hot?'Tap again to dispute':'Dispute')+'</button>'
+          : 'It can be disputed for another '+hoursLeft(st.until)+'.')
+        +'</span>');
+    }
     if(c.pid!==ME && st.s==='disputed' && c.voters && c.voters[ME] && !(c.votes&&c.votes[ME])){
       lines.push('<span><b>'+esc(nameOf(c.pid))+'</b>&rsquo;s claim of '+c.steps.toLocaleString()+' steps is disputed and needs your vote — it&rsquo;s in the claim log below.</span>');
     }
@@ -2239,8 +2241,8 @@ var HINTS={
   claim:'Click any dashed cell touching your ground to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it, big enough to pay for their walls, guns and guarding band with one left over to hold it. Rivers can&rsquo;t be marched into &mdash; bridge them.',
   bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
-  tower:'Click ground you hold to raise a watchtower. While a soldier is inside, it keeps every cell of yours in its range supplied, even if the road home is cut, and its guns cost attackers soldiers.',
-  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle, or inside a manned tower&rsquo;s range, produce anything &mdash; the faded, hatched ones are cut off and yield nothing.',
+  tower:'Click ground you hold to raise a watchtower. While a soldier is inside, its guns cost attackers soldiers.',
+  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing.',
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
