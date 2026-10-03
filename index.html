@@ -867,7 +867,7 @@ function say(h){ var st=document.getElementById('status'); st.classList.remove('
    line is usually scrolled out of sight. So a refusal also marks the spot that
    was tapped (or shakes the button), flashes the status line with an arrow, and,
    if the status line is off screen, floats a pointer that brings it into view. */
-var lastTap=null, whyT=0;
+var lastTap=null, whyT=0, whyAt=0;
 function headline(h){
   var d=document.createElement('div'); d.innerHTML=h;
   var t=(d.textContent||'').replace(/\s+/g,' ').trim(), m=t.match(/^.{8,}?[.!?](?=\s|$)/);
@@ -897,7 +897,7 @@ function nope(h,el){
   document.getElementById('why-msg').textContent=headline(h)||'That can’t be done.';
   w.classList.toggle('up',v.above);
   document.getElementById('why-arrow').innerHTML=v.above?'&uarr;':'&darr;';
-  w.classList.remove('hide','show'); void w.offsetWidth; w.classList.add('show');
+  w.classList.remove('hide','show'); void w.offsetWidth; w.classList.add('show'); whyAt=Date.now();
   clearTimeout(whyT); whyT=setTimeout(hideWhy,10000);
 }
 
@@ -1907,6 +1907,7 @@ function draw(){
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
   var guns=[], walls=[], builds=[], spans=[], bands=[], detail=S>=7, now=clock();
+  var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[];          // the living map: only when animations are on and the map is close enough to see it
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
@@ -1942,12 +1943,16 @@ function draw(){
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
+    if(amb){ if(wet && !c.o) waters.push([p,q,r]); else if(c.o && !cut && !vl && !c.k && (c.t===QUARRY||c.t===IRON)) works.push([c.t,p,q,r]); }
   }
+  if(amb) ambGround(ctx,waters,works,now);
   ctx.setLineDash([3,4]);
+  if(amb) ctx.lineDashOffset=-(now*3)%7;             // the fields of fire turn slowly, like a watch being kept
   guns.forEach(function(e){
     ctx.strokeStyle=e[2]; ctx.globalAlpha=.4; ctx.lineWidth=1;
     ctx.beginPath(); ctx.arc(e[1][0],e[1][1],S*1.72*SPEC[e[0].k].range[e[0].l],0,6.284); ctx.stroke(); ctx.globalAlpha=1;
   });
+  ctx.lineDashOffset=0;
   ctx.setLineDash([]); ctx.lineCap='round';
   walls.forEach(function(e){
     var c=e[0],p=e[1];
@@ -1963,8 +1968,11 @@ function draw(){
   });
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
+  if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
+  if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
+  if(amb) ambBirds(ctx,now);
 
   // Anyone off the edge of the screen gets an arrow pointing at their keep, with
   // how far away it is — otherwise a distant opponent is simply invisible.
@@ -2147,8 +2155,130 @@ function liveEvents(){
 document.getElementById('skipreplay').addEventListener('click',endReplay);
 (function(){ var b=document.getElementById('calm');
   function paint(){ b.innerHTML=REDUCE?'&#10074;&#10074;':'&#9654;'; b.title=REDUCE?'Animations are off - tap to turn on':'Animations are on - tap to turn off'; }
-  b.addEventListener('click',function(){ REDUCE=!REDUCE; try{ localStorage.setItem('marchland.calm',REDUCE?'1':'0'); }catch(e){} paint(); });
+  b.addEventListener('click',function(){ REDUCE=!REDUCE; try{ localStorage.setItem('marchland.calm',REDUCE?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); });
   paint(); })();
+
+/* ═══ the living map ═══════════════════════════════════════════════════
+   Between moves the board is never quite still: light glints on the rivers,
+   flags fly over the keeps, smoke rises from every castle that has men in it,
+   torches flicker in manned towers, quarries and mines that are working throw
+   up dust and lamplight, cloud shadows drift over the land and now and then a
+   flock of birds crosses. None of it touches the artwork underneath; it is
+   drawn on top, and only when animations are on and the map is zoomed in far
+   enough to see it. It runs at a modest frame rate, stops when the tab is
+   hidden or the map is scrolled away, and rests after a few idle minutes. */
+var AMB_MIN_S=14, AMB_IDLE_MS=3*60000;
+var ambRaf=0, ambLast=0, ambSeen=true, ambActive=Date.now();
+var AMB_FPS=(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ? 15 : 22;
+var flock={next:clock()+6+Math.random()*8, f:null};
+function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hidden && Date.now()-ambActive<AMB_IDLE_MS); }
+function ambLoop(ts){
+  ambRaf=0;
+  if(!ambWanted()) return;
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && S>=AMB_MIN_S){ ambLast=ts; draw(); }
+  ambRaf=requestAnimationFrame(ambLoop);
+}
+function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
+function ambWake(){ ambActive=Date.now(); ambKick(); }
+['pointerdown','keydown','wheel','scroll','touchstart'].forEach(function(ev){ window.addEventListener(ev,ambWake,{passive:true}); });
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) ambWake(); });
+if('IntersectionObserver' in window){
+  new IntersectionObserver(function(es){ es.forEach(function(e){ ambSeen=e.isIntersecting; }); ambKick(); }).observe(document.getElementById('board'));
+}
+function ambSmoke(){ return NAT_DARK ? '170,176,172' : '96,96,90'; }
+/* glints on open water, dust over working quarries, lamplight in working mines */
+function ambGround(g,waters,works,now){
+  var s=S;
+  g.save(); g.lineCap='round'; g.strokeStyle=NAT.wave; g.lineWidth=Math.max(1,s*0.05);
+  for(var i=0;i<waters.length;i++){
+    var w=waters[i], cx=w[0][0], cy=w[0][1], q=wrapC(w[1]), r=wrapC(w[2]);
+    for(var j=0;j<2;j++){
+      var h=artHash(q,r,10+j), u=(h+now*0.05+j*0.5)%1;
+      var a=Math.pow(Math.max(0,Math.sin(now*1.6+h*6.283)),3)*0.75*Math.sin(u*Math.PI);
+      if(a<0.03) continue;
+      var x=cx+(u-0.5)*s*1.1, y=cy+(artHash(q,r,20+j)-0.5)*s*0.9, l=s*(0.07+0.05*h);
+      g.globalAlpha=a; g.beginPath(); g.moveTo(x-l,y); g.lineTo(x+l,y); g.stroke();
+    }
+  }
+  g.globalAlpha=1;
+  works.forEach(function(w){
+    var cx=w[1][0], cy=w[1][1], q=wrapC(w[2]), r=wrapC(w[3]), h=artHash(q,r,31);
+    if(w[0]===QUARRY){                                // chips of stone and dust as the masons cut
+      var k=((now+h*7)%3.4)/1.2;
+      artDust(g,cx+s*(0.05+0.2*h),cy+s*0.22,s*0.3,k);
+    } else {                                          // a lamp burning in the mine mouth
+      var f=0.7+0.3*Math.sin(now*9+h*20)*Math.sin(now*5.3+h*11);
+      ambGlow(g,cx,cy+s*0.19,s*0.16,0.55*f);
+    }
+  });
+  g.restore();
+}
+function ambGlow(g,x,y,rad,a){
+  if(a<=0) return;
+  var gr=g.createRadialGradient(x,y,0,x,y,rad);
+  gr.addColorStop(0,'rgba(255,190,95,'+(NAT_DARK?a:a*0.7).toFixed(3)+')'); gr.addColorStop(1,'rgba(255,170,70,0)');
+  g.fillStyle=gr; g.beginPath(); g.arc(x,y,rad,0,6.284); g.fill();
+}
+/* smoke from inhabited castles, torchlight in manned towers and keeps */
+function ambKeeps(g,builds,now){
+  var s=S, sm=ambSmoke();
+  g.save();
+  builds.forEach(function(e){
+    var c=e[0], cx=e[1][0], cy=e[1][1]-s*0.06, h=artHash(wrapC(c.q),wrapC(c.r),41);
+    if(!(c.g>0)) return;                              // an empty keep is cold and dark
+    var f=0.72+0.28*Math.sin(now*11+h*30)*Math.sin(now*6.7+h*13);
+    if(c.k===CASTLE){
+      ambGlow(g,cx-s*0.34,cy-s*0.03,s*0.16,0.8*f); ambGlow(g,cx+s*0.34,cy-s*0.03,s*0.16,0.8*(1.4-f));
+      for(var i=0;i<4;i++){                            // a slow column of smoke drifting with the wind
+        var k=((now+h*5+i*0.9)%3.6)/3.6, sx=cx-s*0.34+k*s*0.38+Math.sin(k*6+h*9)*s*0.05, sy=cy-s*0.33-k*s*1.05;   // from the chimney in the left-hand tower, drifting the way the flag flies
+        var a=0.48*(1-k)*Math.min(1,k*5);
+        g.fillStyle='rgba('+sm+','+a.toFixed(3)+')'; g.beginPath(); g.arc(sx,sy,s*(0.05+0.13*k),0,6.284); g.fill();
+      }
+    } else ambGlow(g,cx,cy-s*0.075,s*0.16,0.85*f);
+  });
+  g.restore();
+}
+/* shadows of a few big clouds drifting over the land; they move with the map when it is dragged */
+function ambClouds(g,now){
+  var b=hexPx(viewQ,viewR), ox=W/2-b[0]+panX, oy=H/2-b[1]+panY, R=S*5.5, a=NAT_DARK?0.16:0.075;
+  g.save();
+  for(var k=0;k<3;k++){
+    var spanX=W+2*R, spanY=H+2*R;
+    var x=((k*0.37*spanX+now*S*(0.16+0.05*k)+ox)%spanX+spanX)%spanX-R;
+    var y=((k*0.41*spanY+now*S*0.03+oy*1)%spanY+spanY)%spanY-R;
+    [[0,0,1],[0.55,0.12,0.75],[-0.5,0.18,0.7],[0.15,-0.32,0.62]].forEach(function(p){
+      var px=x+p[0]*R, py=y+p[1]*R, rr=R*p[2], gr=g.createRadialGradient(px,py,0,px,py,rr);
+      gr.addColorStop(0,'rgba(12,22,18,'+a+')'); gr.addColorStop(0.6,'rgba(12,22,18,'+(a*0.55).toFixed(3)+')'); gr.addColorStop(1,'rgba(12,22,18,0)');
+      g.fillStyle=gr; g.beginPath(); g.arc(px,py,rr,0,6.284); g.fill();
+    });
+  }
+  g.restore();
+}
+/* now and then a small flock of birds crosses the map, their shadows sliding over the ground below */
+function ambBirds(g,now){
+  if(!flock.f && now>flock.next){
+    var ltr=Math.random()<0.5, n=3+Math.floor(Math.random()*3), dur=10+Math.random()*5;
+    flock.f={t0:now, dur:dur, ltr:ltr, n:n, y0:H*(0.15+Math.random()*0.6), dy:(Math.random()-0.5)*H*0.25, seed:Math.random()*10};
+  }
+  var f=flock.f; if(!f) return;
+  var k=(now-f.t0)/f.dur;
+  if(k>=1){ flock.f=null; flock.next=now+22+Math.random()*30; return; }
+  var sz=Math.max(4,S*0.2), lead=(f.ltr?-60+(W+120)*k:W+60-(W+120)*k), dir=f.ltr?1:-1;
+  g.save(); g.lineCap='round'; g.lineJoin='round';
+  for(var pass=0;pass<2;pass++){                     // shadows first, then the birds
+    for(var i=0;i<f.n;i++){
+      var rank=Math.ceil(i/2), side=i%2?1:-1;
+      var bx=lead-dir*rank*sz*2.6, by=f.y0+f.dy*k+(i?side*rank*sz*1.5:0)+Math.sin(now*1.3+i+f.seed)*sz*0.4;
+      var wy=sz*0.55*Math.sin(now*9+i*1.7+f.seed);
+      if(pass===0){ g.globalAlpha=0.12; blob(g,bx+S*0.9,by+S*1.8,sz*0.75,sz*0.25,NAT.line); continue; }
+      g.globalAlpha=0.85; g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,sz*0.17);
+      g.beginPath(); g.moveTo(bx-sz,by-wy);
+      g.quadraticCurveTo(bx-sz*0.45,by-wy*0.2-sz*0.25,bx,by);
+      g.quadraticCurveTo(bx+sz*0.45,by-wy*0.2-sz*0.25,bx+sz,by-wy); g.stroke();
+    }
+  }
+  g.restore();
+}
 
 /* ═══ render ═══════════════════════════════════════════════════════════ */
 function renderDaily(){
@@ -2440,6 +2570,7 @@ Object.keys(MODES).forEach(function(m){
   });
 });
 document.getElementById('why').addEventListener('click',function(){
+  if(Date.now()-whyAt<500) return;                  // the tail of the tap that caused it, landing on the pointer as it appears
   var st=document.getElementById('status');
   hideWhy();
   try{ st.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){ st.scrollIntoView(); }
@@ -2518,7 +2649,7 @@ function enterGame(isNew){
   document.getElementById('mydot').style.background=pColor(ME);
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
-  layout(); render();
+  layout(); render(); ambKick();
   if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.');
   else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
   chatStart();
