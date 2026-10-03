@@ -170,6 +170,23 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 .tapx{ position:absolute; width:30px; height:30px; border-radius:50%; border:2px solid var(--p1); color:var(--p1); background:var(--surface);
   display:flex; align-items:center; justify-content:center; font:700 15px/1 var(--body); pointer-events:none; animation:tapx 1.3s ease-out forwards; }
 
+/* the next-step coach: always says what a good next move is, and can point at it */
+.coach{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--rule); background:var(--surface); box-shadow:inset 3px 0 0 var(--brass); font-size:14px; line-height:1.4; }
+.coach-tag{ font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--brass); white-space:nowrap; flex:0 0 auto; }
+.coach-txt{ flex:1 1 auto; min-width:0; }
+.coach button{ flex:0 0 auto; padding:6px 11px; }
+.coach .coach-x{ border:0; background:transparent; color:var(--ink-2); padding:4px 6px; }
+.coach .coach-x:hover:not(:disabled){ color:var(--ink); }
+@keyframes coachflash{ 0%,45%{ background:var(--cb-flash); } 100%{ background:var(--surface); } }
+.coach.flash{ animation:coachflash 2.6s ease-out; }
+@keyframes coachpulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(143,111,28,0); } 35%{ box-shadow:0 0 0 5px rgba(143,111,28,.5); } }
+.coach-pulse{ animation:coachpulse 1.1s ease-out 3; border-color:var(--brass) !important; }
+.mapctl .helpme{ font-family:var(--display); font-weight:700; font-size:16px; color:var(--brass); border-color:var(--brass); }
+@media (max-width:560px){
+  .coach{ flex-wrap:wrap; gap:6px 10px; }
+  .coach-tag{ order:1; } .coach .coach-x{ order:2; margin-left:auto; }
+  .coach-txt{ order:3; flex:1 1 100%; } .coach #coach-go{ order:4; }
+}
 /* chat bar: docked along the bottom of the screen while you play, so it is always in reach */
 :root{ --cbh:0px; --cb-flash:rgba(143,111,28,.18); }
 @media (prefers-color-scheme: dark){ :root{ --cb-flash:rgba(210,165,68,.20); } }
@@ -279,6 +296,13 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
       <input type="file" accept="image/*" id="shotlate" class="hide">
 
+      <div class="coach hide" id="coach" role="status" aria-live="polite">
+        <span class="coach-tag">Next step</span>
+        <span class="coach-txt" id="coach-txt"></span>
+        <button type="button" id="coach-go" class="go">Show me</button>
+        <button type="button" id="coach-x" class="coach-x" aria-label="Hide these tips" title="Hide these tips (the ? on the map brings them back)">&#10005;</button>
+      </div>
+
       <div class="canvas-pad">
         <canvas id="board"></canvas>
         <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
@@ -288,6 +312,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="home" aria-label="Centre on your keep" title="Centre on your keep">◎</button>
           <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
+          <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
       </div>
 
@@ -887,6 +912,8 @@ function statusInView(){
 }
 function nope(h,el){
   say(h);
+  coach.nopes++;
+  if(coach.nopes>=2 && !coach.hidden && !coach.target){ setTimeout(function(){ if(coach.nopes>=2) coachShow('stuck'); },1400); }
   var st=document.getElementById('status');
   void st.offsetWidth; st.classList.add('nope');
   if(el) shake(el);
@@ -1061,6 +1088,8 @@ function collect(){
   if(Object.keys(voters).length) m+=' The others have 24 hours to dispute it.';
   if(capped) m+=' <span class="bad">Trimmed to '+MAX_STEPS_DAY.toLocaleString()+'</span> — that is the most one day can count.';
   say(m);
+  coach.nopes=0;
+  setTimeout(function(){ if(!replaying) coachShow('stuck'); },3000);   // and now where to spend them
 }
 
 var armed=null;                                     // dispute needs a second tap to confirm
@@ -1907,7 +1936,8 @@ function draw(){
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
   var guns=[], walls=[], builds=[], spans=[], bands=[], detail=S>=7, now=clock();
-  var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[];          // the living map: only when animations are on and the map is close enough to see it
+  var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
+  var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
@@ -1926,6 +1956,7 @@ function draw(){
     if(haveMarch&&c.o!==ME&&!c.k&&(mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
       ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=pColor(ME); ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
+      if(glowOn){ ctx.save(); ctx.globalAlpha=0.14+0.16*(0.5+0.5*Math.sin(now*4.5)); ctx.fillStyle=pColor(ME); hexPath(p[0],p[1],S*0.9); ctx.fill(); ctx.restore(); }
       hexPath(p[0],p[1],S*0.94);
     }
     ctx.lineWidth=c.o&&detail?1.8:1; ctx.globalAlpha=c.o?.9:.28;
@@ -1943,9 +1974,18 @@ function draw(){
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
-    if(amb){ if(wet && !c.o) waters.push([p,q,r]); else if(c.o && !cut && !vl && !c.k && (c.t===QUARRY||c.t===IRON)) works.push([c.t,p,q,r]); }
+    if(amb){
+      if(wet){ if(!c.o) waters.push([p,q,r]); }
+      else if(c.o){
+        if(!cut && !vl && !c.k && (c.t===QUARRY||c.t===IRON)) works.push([c.t,p,q,r]);
+        if(!cut && !vl && !c.k && !(c.b>0) && YIELD[c.t]) folk.push([c.t,p,q,r,col]);      // someone at work on every supplied field
+      } else if(!c.k){
+        var wh=artHash(wrapC(q),wrapC(r),71);                                            // a few sheep and deer on land nobody holds
+        if(c.t===PLAIN && wh<0.09) wild.push(['sheep',p,q,r]); else if(c.t===FOREST && wh<0.08) wild.push(['deer',p,q,r]);
+      }
+    }
   }
-  if(amb) ambGround(ctx,waters,works,now);
+  if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
   ctx.setLineDash([3,4]);
   if(amb) ctx.lineDashOffset=-(now*3)%7;             // the fields of fire turn slowly, like a watch being kept
   guns.forEach(function(e){
@@ -1973,6 +2013,7 @@ function draw(){
   if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
+  drawCoach(now);
 
   // Anyone off the edge of the screen gets an arrow pointing at their keep, with
   // how far away it is — otherwise a distant opponent is simply invisible.
@@ -2075,6 +2116,11 @@ function logMove(k,q,r,from,prev,loss,extra){
   me().evSeen=Math.max(me().evSeen||0,t);
   putPath('/events/'+id,ev);
   play(ev);
+  coach.nopes=0;
+  if(coach.following){                                // they are following the arrow: once this move has played, point at the next good cell
+    coach.target=null;
+    setTimeout(function(){ renderCoach(); var p=coach.plan; if(p && p.key==='march') coachShow('stuck'); else coach.following=false; },1300);
+  }
 }
 function describe(e){
   var who='<b>'+esc(nameOf(e.pid))+'</b>';
@@ -2105,7 +2151,7 @@ function startReplay(since){
   list=list.slice(-MAX_REPLAY);
   replayQ=list.slice(); replayVeil={}; replayN=list.length; replayI=0; replayS=S;
   for(var i=replayQ.length-1;i>=0;i--){ var e=replayQ[i], v=veilFor(e); if(v) replayVeil[key(e.q,e.r)]=v; }
-  replaying=true; S=Math.max(S,24);
+  replaying=true; S=Math.max(S,24); renderCoach();
   document.getElementById('skipreplay').classList.remove('hide');
   replayTimer=setTimeout(nextReplay,600);
   draw();
@@ -2129,6 +2175,7 @@ function endReplay(){
   S=replayS||S; if(me()) centreOn(me().q,me().r);
   render();
   say('That&rsquo;s the replay &mdash; '+replaySummary+' You have <b>'+avail()+'</b> marches to spend.');
+  if(!coach.hidden) flashCoach();
 }
 function markAllSeen(){
   Object.keys(G.events||{}).forEach(function(id){ seenEv[id]=1; });
@@ -2175,7 +2222,7 @@ function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hid
 function ambLoop(ts){
   ambRaf=0;
   if(!ambWanted()) return;
-  if(ts-ambLast>=1000/AMB_FPS && !animRaf && S>=AMB_MIN_S){ ambLast=ts; draw(); }
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && S>=AMB_MIN_S){ ambLast=ts; draw(); }   // the move and pointer loops draw every frame anyway
   ambRaf=requestAnimationFrame(ambLoop);
 }
 function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
@@ -2300,11 +2347,137 @@ function ambRings(g,x,y,s,t){
   }
   g.globalAlpha=1;
 }
+/* ── people at work ──
+   Every field you hold that is still connected to a castle has someone working
+   it, in your colour: a farmer walking the rows, a woodcutter at the trees, a
+   mason at the stone, a miner bringing ore out to the cart. Cut a field off
+   from your castles and its worker goes home, so a quiet field is a warning. */
+function ambFolk(g,folk,now){
+  var s=S; if(s<18) return;                          // too small to read below this
+  var h=Math.max(7,s*0.42);
+  g.save();
+  folk.forEach(function(f){
+    var t=f[0], cx=f[1][0], cy=f[1][1], q=wrapC(f[2]), r=wrapC(f[3]), col=f[4], hh=artHash(q,r,81);
+    if(t===FARM){
+      var u=(now*0.08+hh*7)%2, tri=u<1?u:2-u;
+      artPerson(g,cx+(-0.3+0.6*tri)*s,cy+s*0.3,h,col,{face:u<1?1:-1, ph:now*6+hh*9});
+    } else if(t===FOREST){
+      var sw=Math.sin(now*4.2+hh*9)*0.5+0.5, x=cx+s*0.3, y=cy+s*0.36;
+      artPerson(g,x,y,h,col,{face:-1, tool:'hammer', swing:sw});
+      if(sw>0.9){ blob(g,x-h*0.45,y-h*0.5,Math.max(0.8,s*0.022),Math.max(0.8,s*0.016),NAT.wood); blob(g,x-h*0.55,y-h*0.62,Math.max(0.7,s*0.016),Math.max(0.7,s*0.012),NAT.wood2); }
+    } else if(t===QUARRY){
+      artPerson(g,cx-s*0.3,cy+s*0.36,h,col,{face:1, tool:'hammer', swing:Math.sin(now*4.8+hh*7)*0.5+0.5});
+    } else {                                           // iron: out of the mine mouth to the cart and back
+      var u2=(now*0.15+hh*5)%1, out=u2<0.5, k=out?u2*2:(1-u2)*2;
+      artPerson(g,cx+k*s*0.3,cy+s*0.33+k*s*0.03,h*0.95,col,{face:out?1:-1, ph:now*7+hh*9, carry:out?'stone':null, alpha:Math.min(1,k*4)});
+    }
+  });
+  g.restore();
+}
+/* ── wildlife on land nobody holds: sheep grazing in small flocks, a deer at the edge of a wood ── */
+function ambWild(g,wild,now){
+  var s=S; if(s<16) return;
+  g.save(); g.lineCap='round';
+  wild.forEach(function(w){
+    var cx=w[1][0], cy=w[1][1], q=wrapC(w[2]), r=wrapC(w[3]);
+    if(w[0]==='sheep'){
+      var n=2+Math.floor(artHash(q,r,88)*3);
+      for(var i=0;i<n;i++){
+        var a=artHash(q,r,90+i), b=artHash(q,r,95+i), ph=now*0.12+i*2.1+a*6;
+        var x=cx+(a-0.5)*s*0.7+Math.sin(ph)*s*0.08, y=cy+(b-0.5)*s*0.5+Math.cos(ph*0.8)*s*0.03;
+        ambSheep(g,x,y,s*0.095,Math.cos(ph)>=0?1:-1,Math.sin(now*0.9+a*11)>-0.2);
+      }
+    } else {
+      var a2=artHash(q,r,77), x2=cx+(a2-0.5)*s*0.5, y2=cy+s*0.33;
+      ambDeer(g,x2,y2,s*0.11,a2<0.5?1:-1,Math.sin(now*0.45+a2*13)>-0.1,now+a2*7);
+    }
+  });
+  g.restore();
+}
+function ambSheep(g,x,y,z,face,grazing){
+  var wool=NAT_DARK?'#D8D5CB':'#F6F4EC', edge=NAT_DARK?'#8C8A82':'#A8A396', dark=NAT_DARK?'#2A2622':'#3A3430';
+  blob(g,x,y+z*0.62,z*0.95,z*0.22,NAT.shadow);
+  g.strokeStyle=dark; g.lineWidth=Math.max(0.7,z*0.16);
+  g.beginPath(); g.moveTo(x-z*0.45,y+z*0.2); g.lineTo(x-z*0.45,y+z*0.6); g.moveTo(x+z*0.4,y+z*0.2); g.lineTo(x+z*0.4,y+z*0.6); g.stroke();
+  g.beginPath(); g.ellipse(x,y,z,z*0.64,0,0,6.284); g.fillStyle=wool; g.fill(); g.strokeStyle=edge; g.lineWidth=Math.max(0.5,z*0.08); g.stroke();
+  blob(g,x-z*0.35,y-z*0.42,z*0.38,z*0.3,wool); blob(g,x+z*0.25,y-z*0.45,z*0.36,z*0.28,wool);
+  blob(g,x+face*z*0.98,y+(grazing?z*0.42:-z*0.12),z*0.3,z*0.24,dark);
+}
+function ambDeer(g,x,y,z,face,grazing,t){
+  var hide=NAT_DARK?'#A9774A':'#93633A', dark=NAT_DARK?'#5E4026':'#5B3D22';
+  blob(g,x,y+z*0.5,z*1.0,z*0.2,NAT.shadow);
+  g.strokeStyle=dark; g.lineWidth=Math.max(0.7,z*0.12);
+  g.beginPath(); [-0.6,-0.35,0.4,0.62].forEach(function(o){ g.moveTo(x+o*z,y); g.lineTo(x+o*z,y+z*0.5); }); g.stroke();
+  blob(g,x,y-z*0.08,z,z*0.42,hide);
+  var hx=x+face*z*(grazing?1.05:0.95), hy=y+(grazing?z*0.35:-z*0.75);
+  g.strokeStyle=hide; g.lineWidth=Math.max(1,z*0.28); g.beginPath(); g.moveTo(x+face*z*0.65,y-z*0.2); g.lineTo(hx,hy); g.stroke();
+  blob(g,hx+face*z*0.12,hy,z*0.26,z*0.18,hide);
+  if(!grazing){                                       // antlers, and an ear that twitches
+    g.strokeStyle=dark; g.lineWidth=Math.max(0.6,z*0.08); g.beginPath();
+    g.moveTo(hx,hy-z*0.1); g.lineTo(hx-face*z*0.15,hy-z*0.55); g.moveTo(hx-face*z*0.08,hy-z*0.32); g.lineTo(hx-face*z*0.32,hy-z*0.42);
+    g.moveTo(hx+face*z*0.08,hy-z*0.1); g.lineTo(hx+face*z*0.22,hy-z*0.5+Math.sin(t*3)*z*0.04); g.stroke();
+  }
+  blob(g,x-face*z*0.95,y-z*0.18,z*0.12,z*0.1,'#F3EEE4');                 // white tail
+}
+/* ── boats: now and then a little sailing boat comes down a river, cell by cell along the current,
+   passing under any bridge on the way ── */
+var boats={next:clock()+5+Math.random()*6, list:[]}, BOAT_CELL=3.2;
+function nextRiverCell(q,r,pq,pr){
+  var fl=flowAt(q,r), best=null, bd=0.25;
+  for(var i=0;i<6;i++){
+    var nq=q+AX[i][0], nr=r+AX[i][1];
+    if(!riverAt(nq,nr)) continue;
+    if(pq!=null && wrapC(nq)===wrapC(pq) && wrapC(nr)===wrapC(pr)) continue;
+    var d=PXDIR[i][0]*fl[0]+PXDIR[i][1]*fl[1];
+    if(d>bd){ bd=d; best=[nq,nr]; }
+  }
+  return best;
+}
+function ambBoats(g,waters,now){
+  if(waters.length>3 && now>boats.next && boats.list.length<3){
+    var w=waters[Math.floor(Math.random()*waters.length)], nx=nextRiverCell(w[1],w[2]);
+    if(nx) boats.list.push({q:w[1], r:w[2], nq:nx[0], nr:nx[1], t0:now, born:now, seed:Math.random(), end:0});
+    boats.next=now+10+Math.random()*14;
+  }
+  var s=S;
+  boats.list=boats.list.filter(function(b){ return !(b.end && now>b.end+1) && now-b.born<60; });
+  boats.list.forEach(function(b){
+    var k=(now-b.t0)/BOAT_CELL;
+    if(k>=1 && !b.end){
+      var nx=nextRiverCell(b.nq,b.nr,b.q,b.r);
+      if(nx){ b.q=b.nq; b.r=b.nr; b.nq=nx[0]; b.nr=nx[1]; b.t0=now; k=0; } else { b.end=now; k=1; }
+    }
+    if(b.end) k=1;
+    var A=toNear(b.q,b.r), Bq=nearCopy(b.nq,b.nr,b.q,b.r), hA=hexPx(b.q,b.r), hB=hexPx(Bq[0],Bq[1]);   // the next cell, on the same side of the wrap
+    var B=[A[0]+hB[0]-hA[0], A[1]+hB[1]-hA[1]];
+    var x=A[0]+(B[0]-A[0])*k, y=A[1]+(B[1]-A[1])*k+Math.sin(now*2+b.seed*9)*s*0.02, ang=Math.atan2(B[1]-A[1],B[0]-A[0]);
+    var alpha=Math.min(1,(now-b.born)/1)*(b.end?Math.max(0,1-(now-b.end)):1);
+    if(alpha>0) ambBoat(g,x,y,s,ang,now,b.seed,alpha);
+  });
+}
+function ambBoat(g,x,y,s,ang,now,seed,alpha){
+  var L=s*0.2, Wd=s*0.075;
+  g.save(); g.globalAlpha=alpha;
+  g.translate(x,y);
+  g.save(); g.rotate(ang);
+  g.strokeStyle=NAT.wave; g.lineWidth=Math.max(0.7,s*0.02); g.globalAlpha=alpha*0.6;      // the wake
+  g.beginPath(); g.moveTo(-L*0.9,-Wd*0.6); g.lineTo(-L*2.2,-Wd*1.8); g.moveTo(-L*0.9,Wd*0.6); g.lineTo(-L*2.2,Wd*1.8); g.stroke();
+  g.globalAlpha=alpha;
+  poly(g,[[-L,-Wd],[L*0.7,-Wd],[L*1.15,0],[L*0.7,Wd],[-L,Wd]],NAT.wood,NAT.wood2,Math.max(0.6,s*0.02));
+  g.restore();
+  var sway=Math.sin(now*1.7+seed*7)*s*0.012;                                                   // mast and sail stand upright
+  g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.8,s*0.025);
+  g.beginPath(); g.moveTo(0,-s*0.02); g.lineTo(sway,-s*0.36); g.stroke();
+  var dir=Math.cos(ang)>=0?1:-1;
+  poly(g,[[sway,-s*0.34],[sway+dir*s*0.17,-s*0.08],[sway*0.3,-s*0.06]],NAT_DARK?'#E4DCC6':'#FBF6E8',NAT.wood2,Math.max(0.5,s*0.015));
+  g.restore();
+}
 function ambGround(g,waters,works,now){
   var s=S;
   g.save(); g.lineCap='round'; g.lineJoin='round';
   for(var i=0;i<waters.length;i++) ambWater(g,waters[i],now);
   ambStir(g,waters,now);
+  ambBoats(g,waters,now);
   g.globalAlpha=1;
   works.forEach(function(w){
     var cx=w[1][0], cy=w[1][1], q=wrapC(w[2]), r=wrapC(w[3]), h=artHash(q,r,31);
@@ -2340,6 +2513,11 @@ function ambKeeps(g,builds,now){
         g.fillStyle='rgba('+sm+','+a.toFixed(3)+')'; g.beginPath(); g.arc(sx,sy,s*(0.05+0.13*k),0,6.284); g.fill();
       }
     } else ambGlow(g,cx,cy-s*0.075,s*0.16,0.85*f);
+    if(s>=22){                                          // a sentry walking the top of the wall
+      var sw=Math.sin(now*0.55+h*17), face=Math.cos(now*0.55+h*17)>=0?1:-1, hs=s*0.26;
+      if(c.k===CASTLE) artPerson(g,cx+sw*s*0.24,cy-s*0.02,hs,e[2],{face:face, ph:now*6+h*9});
+      else artPerson(g,cx+sw*s*0.08,cy-s*0.36,hs,e[2],{face:face, ph:now*6+h*9});
+    }
   });
   g.restore();
 }
@@ -2456,6 +2634,7 @@ function render(){
   lock('m-troop',!(pl.res.iron>=25&&pl.res.grain>=40));
   document.getElementById('mydot').style.background=pColor(ME);
   renderClaims();
+  renderCoach();
   draw();
 }
 
@@ -2755,7 +2934,7 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.');
+  if(isNew){ say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
   else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
   chatStart();
 }
@@ -2831,6 +3010,172 @@ document.getElementById('leave').addEventListener('click',function(){
   // forget the name on this device so the next person can type theirs
   push().then(function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); });
 });
+
+/* ═══ the next-step coach ════════════════════════════════════════════
+   A strip above the map always names one good next move, worked out from the
+   player's own position: vote on a disputed claim, man a castle before it
+   crumbles, spend marches on a cell that will pay, claim the day's steps,
+   build with spare stone. "Show me" (or the ? on the map) switches to the
+   right tool, brings the spot into view, lights up every cell you can take and
+   points at the best one. It also steps in by itself when someone seems stuck:
+   after a little while with nothing done, or after two refused taps in a row.
+   And while you follow its arrow it keeps pointing at the next good cell.  */
+var IDLE_HELP_MS=20000;
+var coach={plan:null, target:null, raf:0, lastAct:Date.now(), nopes:0, auto:{}, hidden:false, following:false};
+try{ coach.hidden=localStorage.getItem('marchland.tips')==='off'; }catch(e){}
+var KIND_NAME={}; KIND_NAME[FOREST]='a forest, for timber'; KIND_NAME[QUARRY]='a quarry, for stone'; KIND_NAME[IRON]='an iron mine, for iron'; KIND_NAME[FARM]='a farm, for grain'; KIND_NAME[PLAIN]='open ground';
+function coachTargets(){
+  var pl=me(), sup=supplied(ME), R=ratesFor(ME), seen={}, out=[];
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==ME || building(c)) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    for(var i=0;i<6;i++){
+      var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr;
+      if(seen[nk]) continue; seen[nk]=1;
+      var n=G.cells[nk]; if(n && (n.o||n.k)) continue;
+      var t=groundAt(nq,nr); if(t===RIVER) continue;
+      var y=YIELD[t], score = y ? (y.r==='grain' ? (R.net<0?6:2.6) : y.r==='iron' ? 2.4 : 2) : 0.3;
+      if(sup[k]) score+=1.5;                          // it joins supplied ground, so it produces at once
+      score-=hexDist(nq,nr,pl.q,pl.r)*0.04;
+      out.push({q:nq,r:nr,t:t,score:score});
+    }
+  }
+  return out.sort(function(a,b){ return b.score-a.score; });
+}
+function borderCell(){                                // a cell of mine worth fortifying: facing someone, or facing open ground
+  var best=null, bs=0;
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==ME || c.k || building(c)) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    if(groundAt(q,r)===RIVER) continue;
+    var sc=0;
+    for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o&&n.o!==ME) sc+=3; else if(!n||!n.o) sc+=1; }
+    if(c.w) sc-=c.w*2;
+    if(sc>bs){ bs=sc; best=[q,r]; }
+  }
+  return best;
+}
+function coachPlan(){
+  if(!G||!me()) return null;
+  if(replaying) return {key:'replay', txt:'Watching what the others did while you were away. Tap the map or <b>Skip replay</b> to start playing.'};
+  var pl=me(), R=ratesFor(ME), done=claimedToday(pl);
+  var need=Object.keys(G.claims||{}).filter(function(id){ var c=G.claims[id]; if(!c||c.pid===ME||!(c.voters&&c.voters[ME])||(c.votes&&c.votes[ME])) return false; return claimState(c).s==='disputed'; })[0];
+  if(need) return {key:'vote', txt:'<b>'+esc(nameOf(G.claims[need].pid))+'</b>&rsquo;s step claim has been disputed and needs your vote.', el:'claims-panel', go:'Take me there'};
+  if(R.gar[0]<R.gar[1] && !fieldOf(ME) && pl.res.iron>=25 && pl.res.grain>=40){
+    var cs=myCastleCells(ME)[0];
+    if(cs) return {key:'muster', txt:'One of your towers or castles is short of men and will crumble. <b>Muster</b> a soldier at your castle to man it.', mode:'troop', target:cs, label:'Tap your castle'};
+  }
+  var extra=(R.own>R.sup?' Hatched cells are cut off from your castles and produce nothing &mdash; link them back up.':'')
+    +(!done?' Don&rsquo;t forget to claim today&rsquo;s steps once you&rsquo;ve walked.':'');
+  if(pl.squares>0){
+    var ts=coachTargets();
+    if(ts.length){
+      var b=ts[0];
+      return {key:'march', txt:'You have <b>'+pl.squares+' march'+(pl.squares>1?'es':'')+'</b> to spend. Tap a <b>glowing cell</b> beside your land to take it &mdash; the arrow points at a good one, '+KIND_NAME[b.t]+'.'
+        +(R.net<0?' Your soldiers eat more grain than you grow, so farms (&equiv;) matter most.':'')+extra,
+        mode:'claim', target:[b.q,b.r], glow:true, label:'Tap here'};
+    }
+  }
+  if(!done && pl.squares<1) return {key:'claim', txt:'You&rsquo;re out of marches. After you walk, type <b>today&rsquo;s step count</b> from the Health app in the box above the map and press <b>Claim</b> to get more.', el:'stepsin'};
+  if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? Raise a <b>watchtower</b> on your border &mdash; while a soldier mans it, attackers lose men taking ground near it.'+extra, mode:'tower', target:bt, label:'Build here'}; }
+  if(pl.res.stone>=30){ var bw=borderCell(); if(bw) return {key:'wall', txt:'Spare stone? <b>Wall</b> a border cell so it costs attackers more to take.'+extra, mode:'wall', target:bw, label:'Wall here'}; }
+  return {key:'rest', txt:(done?'That&rsquo;s everything for today &mdash; tomorrow&rsquo;s steps bring new marches.':'Nothing to spend until you claim some steps.')+' Say hello in the chat at the bottom of the screen.', el:'chat-in', go:'Open the chat'};
+}
+function renderCoach(){
+  var box=document.getElementById('coach'); if(!box) return;
+  var p=coachPlan(); coach.plan=p;
+  box.classList.toggle('hide', coach.hidden || !p);
+  if(!p) return;
+  document.getElementById('coach-txt').innerHTML=p.txt;
+  var go=document.getElementById('coach-go');
+  go.textContent=p.go||'Show me'; go.classList.toggle('hide',!(p.target||p.el));
+}
+function flashCoach(){ var b=document.getElementById('coach'); b.classList.remove('flash'); void b.offsetWidth; b.classList.add('flash'); }
+function pulseEl(el){ if(!el) return; el.classList.remove('coach-pulse'); void el.offsetWidth; el.classList.add('coach-pulse'); setTimeout(function(){ el.classList.remove('coach-pulse'); },3500); }
+function mapInView(){ var r=document.querySelector('.canvas-pad').getBoundingClientRect(); return r.top>-r.height*0.4 && r.bottom<(innerHeight||800)+r.height*0.4; }
+/* auto: it stepped in by itself, so it never scrolls the page, takes the keyboard or swaps the tool you were using */
+function coachShow(how){                             // how: false = asked for it; 'stuck' = refused taps, a new player, a fresh claim; true = gone idle
+  renderCoach();
+  var p=coach.plan; if(!p) return;
+  var auto=!!how, idle=how===true;
+  coach.nopes=0;
+  if(coach.hidden && auto) return;
+  flashCoach();
+  if(p.target){
+    if(p.mode && mode!==p.mode){
+      if(idle) return;                                // never swap the tool under someone who is just thinking
+      var btn=document.getElementById(MODES[p.mode]); if(btn && !locked(btn)) btn.click();
+    }
+    if(!auto && !mapInView()) document.querySelector('.canvas-pad').scrollIntoView({behavior:'smooth',block:'center'});
+    if(auto && !mapInView()) return;
+    var nc=nearCopy(p.target[0],p.target[1],viewQ,viewR), sp=toScreen(nc[0],nc[1]);
+    if(sp[0]<S*1.5 || sp[0]>W-S*1.5 || sp[1]<S*2.2 || sp[1]>H-S*1.5){ centreOn(nc[0],nc[1]); }
+    coach.target={q:p.target[0], r:p.target[1], glow:!!p.glow, label:p.label||'Tap here', until:clock()+15};
+    coach.following=true;
+    coachKick();
+    if(!auto) say(p.txt);
+  } else if(p.el){
+    var el=document.getElementById(p.el);
+    if(!auto){
+      if(p.el==='chat-in') el.focus();
+      else { el.scrollIntoView({behavior:'smooth',block:'center'}); if(el.tagName==='INPUT') setTimeout(function(){ try{ el.focus({preventScroll:true}); }catch(e){ el.focus(); } },450); }
+    }
+    pulseEl(p.el==='chat-in'?document.getElementById('chatbar').querySelector('.cb-form'):el);
+  }
+}
+function coachKick(){ if(!coach.raf) coach.raf=requestAnimationFrame(coachTick); }
+function coachTick(){
+  coach.raf=0;
+  if(!coach.target) return;
+  if(clock()>coach.target.until){ coach.target=null; coach.following=false; draw(); return; }
+  if(!animRaf) draw();
+  coachKick();
+}
+/* the arrow on the map: rings pulsing round the cell, a bouncing arrow and a label */
+function drawCoach(now){
+  var c=coach.target; if(!c || now>c.until) return;
+  var P=toNear(c.q,c.r), x=P[0], y=P[1], s=S, bob=REDUCE?0:(Math.sin(now*5)*0.5+0.5), fade=Math.min(1,(c.until-now)/0.6);
+  ctx.save(); ctx.globalAlpha=fade;
+  for(var i=0;i<2;i++){
+    var ph=REDUCE?0.35:((now*0.8+i*0.5)%1);
+    ctx.globalAlpha=fade*0.85*(1-ph); ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,s*0.09);
+    hexPath(x,y,s*(0.9+ph*0.55)); ctx.stroke();
+  }
+  ctx.globalAlpha=fade;
+  var tip=y-s*0.55-bob*s*0.35, aw=Math.max(16,s*0.62), ah=Math.max(18,s*0.7);
+  ctx.beginPath();
+  ctx.moveTo(x,tip); ctx.lineTo(x-aw*0.6,tip-ah*0.55); ctx.lineTo(x-aw*0.22,tip-ah*0.55); ctx.lineTo(x-aw*0.22,tip-ah*1.1);
+  ctx.lineTo(x+aw*0.22,tip-ah*1.1); ctx.lineTo(x+aw*0.22,tip-ah*0.55); ctx.lineTo(x+aw*0.6,tip-ah*0.55); ctx.closePath();
+  ctx.fillStyle=T['--brass']; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=T['--surface']; ctx.stroke();
+  var fs=Math.max(11,Math.min(15,s*0.42)), lab=c.label;
+  ctx.font='600 '+Math.round(fs)+'px '+getComputedStyle(document.body).fontFamily;
+  var tw=ctx.measureText(lab).width, bx=x-tw/2-8, by=tip-ah*1.1-fs-12;
+  bx=Math.max(4,Math.min(W-tw-20,bx)); by=Math.max(4,by);
+  ctx.fillStyle=T['--ink']; ctx.beginPath();
+  if(ctx.roundRect) ctx.roundRect(bx,by,tw+16,fs+10,(fs+10)/2); else ctx.rect(bx,by,tw+16,fs+10);
+  ctx.fill();
+  ctx.fillStyle=T['--paper']; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(lab,bx+8,by+(fs+10)/2+0.5);
+  ctx.restore();
+}
+document.getElementById('coach-go').addEventListener('click',function(){ coachShow(false); });
+document.getElementById('helpme').addEventListener('click',function(){
+  coach.hidden=false; try{ localStorage.removeItem('marchland.tips'); }catch(e){}
+  coachShow(false);
+});
+document.getElementById('coach-x').addEventListener('click',function(){
+  coach.hidden=true; try{ localStorage.setItem('marchland.tips','off'); }catch(e){}
+  coach.target=null; renderCoach(); draw();
+  say('Tips hidden. The <b>?</b> button on the map brings them back whenever you want a hand.');
+});
+['pointerdown','keydown'].forEach(function(ev){ document.addEventListener(ev,function(){ coach.lastAct=Date.now(); },true); });
+setInterval(function(){                               // nothing done for a while: offer the next step, once per kind of step
+  if(!G||!me()||replaying||document.hidden||coach.hidden||coach.target) return;
+  if(Date.now()-coach.lastAct<IDLE_HELP_MS) return;
+  renderCoach();
+  var p=coach.plan; if(!p||!(p.target||p.el)||coach.auto[p.key]) return;
+  coach.auto[p.key]=1; coach.lastAct=Date.now();
+  coachShow(true);
+},4000);
 
 /* ═══ chat ═════════════════════════════════════════════════════════════
    One shared feed for everyone on the board. It lives beside the board, at
