@@ -137,6 +137,71 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
   .crow{ grid-template-columns:78px minmax(0,1fr) 62px; gap:8px; }
   .chart, .claims-head{ padding-left:16px; padding-right:16px; }
 }
+
+/* a refused action: the button looks disabled but can still be pressed, so it can say why */
+button[aria-disabled="true"]{ opacity:.4; cursor:not-allowed; }
+button[aria-disabled="true"]:hover{ border-color:var(--rule); }
+button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0); }
+@keyframes shake{ 0%,100%{ transform:none; } 20%{ transform:translateX(-4px); } 40%{ transform:translateX(4px); } 60%{ transform:translateX(-3px); } 80%{ transform:translateX(2px); } }
+.shake{ animation:shake .4s ease-in-out; }
+:root{ --nope-bg:rgba(178,63,46,.10); }
+@media (prefers-color-scheme: dark){ :root{ --nope-bg:rgba(226,112,91,.16); } }
+@keyframes nopeflash{ 0%,35%{ background:var(--nope-bg); box-shadow:inset 3px 0 0 var(--p1); } 100%{ background:transparent; box-shadow:inset 3px 0 0 transparent; } }
+.status.nope{ animation:nopeflash 2.4s ease-out; }
+@keyframes nudge{ 0%,100%{ transform:none; } 50%{ transform:translateX(4px); } }
+.status.nope::before{ content:"\279C"; color:var(--p1); font-size:15px; margin-right:9px; display:inline-block; animation:nudge .7s ease-in-out 4; }
+/* the pointer to the explanation, when it is off screen */
+.why{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(58px + env(safe-area-inset-bottom, 0px)); z-index:100002;
+  max-width:min(560px, calc(100% - 32px)); background:var(--ink); color:var(--paper); border:0; border-radius:999px;
+  padding:9px 15px 9px 13px; box-shadow:0 6px 22px rgba(0,0,0,.28); font-size:13px; line-height:1.3; text-align:left; gap:10px; }
+.why:hover:not(:disabled){ border-color:transparent; }
+.why.up{ top:calc(12px + env(safe-area-inset-top, 0px)); bottom:auto; }
+.why .why-x{ color:var(--p1); font-weight:700; flex:0 0 auto; }
+.why .why-msg{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.why .why-go{ flex:0 0 auto; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; opacity:.85; white-space:nowrap; }
+@keyframes bobdown{ 0%,100%{ transform:none; } 50%{ transform:translateY(4px); } }
+@keyframes bobup{ 0%,100%{ transform:none; } 50%{ transform:translateY(-4px); } }
+.why .why-arrow{ display:inline-block; font-size:15px; margin-left:4px; animation:bobdown .8s ease-in-out infinite; }
+.why.up .why-arrow{ animation-name:bobup; }
+@keyframes whyin{ from{ opacity:0; transform:translate(-50%,8px); } to{ opacity:1; transform:translate(-50%,0); } }
+.why.show{ animation:whyin .2s ease-out; }
+/* where the tap landed on the map */
+@keyframes tapx{ 0%{ opacity:0; transform:translate(-50%,-50%) scale(.6); } 15%{ opacity:1; transform:translate(-50%,-50%) scale(1); } 70%{ opacity:1; } 100%{ opacity:0; transform:translate(-50%,-50%) scale(1.15); } }
+.tapx{ position:absolute; width:30px; height:30px; border-radius:50%; border:2px solid var(--p1); color:var(--p1); background:var(--surface);
+  display:flex; align-items:center; justify-content:center; font:700 15px/1 var(--body); pointer-events:none; animation:tapx 1.3s ease-out forwards; }
+
+/* chat */
+.chat-btn{ position:fixed; right:10px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); z-index:100000; font:600 12px/1 system-ui,sans-serif; letter-spacing:.04em;
+  padding:8px 12px; border-radius:999px; border:1px solid rgba(120,130,140,.55); background:rgba(20,26,32,.82); color:#e8efe8; backdrop-filter:blur(4px); gap:7px; }
+.chat-btn:hover:not(:disabled){ border-color:#e8efe8; }
+.chat-btn svg{ width:14px; height:14px; display:block; }
+.chat-badge{ min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#E2705B; color:#fff; font:700 11px/18px system-ui,sans-serif; text-align:center; }
+.chat-peek{ position:fixed; right:10px; bottom:calc(52px + env(safe-area-inset-bottom, 0px)); z-index:100000; max-width:min(300px, calc(100% - 20px));
+  background:var(--surface); color:var(--ink); border:1px solid var(--rule); border-radius:10px; padding:8px 11px; font-size:13px; line-height:1.35;
+  box-shadow:0 6px 20px rgba(0,0,0,.18); text-align:left; display:block; }
+.chat-peek b{ font-weight:600; }
+.chat{ position:fixed; right:10px; bottom:calc(52px + env(safe-area-inset-bottom, 0px)); z-index:100001; width:min(360px, calc(100% - 20px));
+  height:min(470px, calc(100vh - 90px)); display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--rule);
+  border-radius:6px; box-shadow:0 10px 32px rgba(0,0,0,.24); overflow:hidden; }
+.chat-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 9px 14px; border-bottom:1px solid var(--rule); background:var(--paper); }
+.chat-head h2{ font-family:var(--display); font-size:17px; margin:0; font-weight:700; }
+.chat-head .muted{ font-size:12px; }
+.chat-head button{ padding:4px 9px; }
+.chat-feed{ flex:1 1 auto; overflow-y:auto; padding:6px 0; overscroll-behavior:contain; }
+.chat-feed .empty{ padding:14px; }
+.msg{ padding:6px 14px; font-size:14px; line-height:1.4; }
+.msg .who{ font-size:12.5px; font-weight:600; }
+.msg .when{ font-family:var(--mono); font-size:10.5px; color:var(--ink-2); margin-left:6px; font-weight:400; }
+.msg .txt{ overflow-wrap:anywhere; white-space:pre-wrap; }
+.msg.mine{ background:var(--paper); }
+.msg.pending .txt{ opacity:.55; }
+.msg .dot{ width:8px; height:8px; margin-right:6px; vertical-align:0; }
+.chat-form{ display:flex; gap:6px; padding:8px; border-top:1px solid var(--rule); background:var(--paper); }
+.chat-form input{ flex:1 1 auto; min-width:0; font-size:16px; padding:7px 9px; }
+.chat-note{ font-family:var(--mono); font-size:10.5px; color:var(--ink-2); padding:0 10px 7px; background:var(--paper); }
+@media (max-width:560px){
+  .chat{ right:8px; left:8px; width:auto; height:min(440px, calc(100vh - 120px)); }
+}
 </style>
 </head>
 <body>
@@ -280,6 +345,19 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
   </div>
 
 </div>
+
+<!-- ── pointer to the reason an action was refused (shown only when that reason is off screen) ── -->
+<button type="button" id="why" class="why hide" aria-live="polite"><span class="why-x" aria-hidden="true">&#10005;</span><span class="why-msg" id="why-msg"></span><span class="why-go"><span id="why-word">Why</span><span class="why-arrow" id="why-arrow" aria-hidden="true">&darr;</span></span></button>
+
+<!-- ── chat ───────────────────────────────────────────────────────── -->
+<button type="button" id="chat-btn" class="chat-btn hide" aria-expanded="false" aria-controls="chat"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3.2 2.6V11.5H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Chat<span id="chat-badge" class="chat-badge hide">0</span></button>
+<button type="button" id="chat-peek" class="chat-peek hide"></button>
+<section id="chat" class="chat hide" aria-label="Chat with the other players">
+  <div class="chat-head"><h2>Chat</h2><span class="muted">everyone on the board sees this</span><span class="spacer"></span><button type="button" id="chat-close" aria-label="Close chat">&#10005;</button></div>
+  <div class="chat-feed" id="chat-feed" aria-live="polite"></div>
+  <form class="chat-form" id="chat-form" autocomplete="off"><input id="chat-in" maxlength="280" placeholder="Say something to everyone…" aria-label="Message"><button type="submit" class="go" id="chat-send">Send</button></form>
+  <div class="chat-note" id="chat-note">Messages are kept for 30 days.</div>
+</section>
 
 <script>
 (function(){
@@ -479,7 +557,32 @@ function tidyBoard(g){
 function building(c){ return !!(c && c.f && c.f>Date.now()); }
 function eachCell(fn){ for(var k in G.cells){ var p=k.split('_'); fn(cellOf(parseInt(p[0],10),parseInt(p[1],10))); } }
 function me(){ return G.players[ME]; }
-function seatColor(seat){ return ['--p0','--p1','--p2','--p3'][seat%4]; }
+/* Player colours. Four colours were not enough once more than four people joined,
+   so seats now draw from fifteen, picked to stay distinct from each other, from the
+   rivers and from the grey of empty ground, in a light and a dark version. The first
+   four are the original four, so the first players (and the manual) look as before.
+   Every player on the board gets a different colour: a seat takes its own slot, and
+   if that is somehow taken, the next free one. Past fifteen, colours are generated. */
+var PAL_LIGHT=['#1C6B57','#B23F2E','#3E5E86','#8F6F1C','#B955A4','#B85F17','#693296','#3E891A','#137A80','#232F6E','#7D3850','#7E6CD9','#7A4306','#B5586D','#747B2F'];
+var PAL_DARK =['#41BC97','#E2705B','#7FA5CE','#D2A544','#EE8BDB','#F0934A','#A97BE0','#93C948','#45C7C4','#6E7CF0','#D9577F','#CDBEF9','#B3784F','#F6A9B4','#D8D772'];
+var palDark=false, colorIdx={}, colorSig='';
+function refreshColors(){
+  var ps=(G&&G.players)||{}, ids=Object.keys(ps).sort(function(a,b){ return ((ps[a].seat||0)-(ps[b].seat||0))||(a<b?-1:1); });
+  var sig=ids.map(function(p){ return p+':'+ps[p].seat; }).join(',');
+  if(sig===colorSig) return;
+  colorSig=sig; colorIdx={}; var used={};
+  ids.forEach(function(p){ var i=Math.max(0,ps[p].seat|0); while(used[i]) i++; used[i]=1; colorIdx[p]=i; });
+}
+function paletteAt(i){
+  var P=palDark?PAL_DARK:PAL_LIGHT;
+  if(i<P.length) return P[i];
+  return 'hsl('+Math.round((i*137.508+20)%360)+(palDark?',58%,68%)':',55%,38%)');
+}
+function pColor(pid){
+  if(!pid||!G||!G.players[pid]) return T['--ink-2']||(palDark?'#8DA1A2':'#54666A');
+  if(colorIdx[pid]==null) refreshColors();
+  return paletteAt(colorIdx[pid]||0);
+}
 function cellsOf(pid){ var n=0; for(var k in G.cells){ if(G.cells[k].o===pid) n++; } return n; }
 
 function seedPlayer(pid,name){
@@ -748,7 +851,46 @@ function pull(){
 function setSync(t){ var e=document.getElementById('syncstate'); if(e) e.textContent = online? t : 'local only'; }
 
 /* ═══ actions ══════════════════════════════════════════════════════════ */
-function say(h){ document.getElementById('status').innerHTML='<span>'+h+'</span>'; }
+function say(h){ var st=document.getElementById('status'); st.classList.remove('nope'); st.innerHTML='<span>'+h+'</span>'; }
+
+/* ── when something can't be done ──
+   The reason always goes in the status line under the map, but on a phone that
+   line is usually scrolled out of sight. So a refusal also marks the spot that
+   was tapped (or shakes the button), flashes the status line with an arrow, and,
+   if the status line is off screen, floats a pointer that brings it into view. */
+var lastTap=null, whyT=0;
+function headline(h){
+  var d=document.createElement('div'); d.innerHTML=h;
+  var t=(d.textContent||'').replace(/\s+/g,' ').trim(), m=t.match(/^.{8,}?[.!?](?=\s|$)/);
+  return m?m[0]:t;
+}
+function shake(el){ if(!el) return; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); setTimeout(function(){ el.classList.remove('shake'); },450); }
+function tapMark(x,y){
+  var pad=document.querySelector('.canvas-pad'); if(!pad) return;
+  var d=document.createElement('div'); d.className='tapx'; d.textContent='✕'; d.setAttribute('aria-hidden','true');
+  d.style.left=x+'px'; d.style.top=y+'px'; pad.appendChild(d);
+  setTimeout(function(){ if(d.parentNode) d.parentNode.removeChild(d); },1400);
+}
+function hideWhy(){ clearTimeout(whyT); var w=document.getElementById('why'); if(w){ w.classList.add('hide'); w.classList.remove('show'); } }
+function statusInView(){
+  var r=document.getElementById('status').getBoundingClientRect(), vh=window.innerHeight||document.documentElement.clientHeight;
+  return {seen:r.top>=0 && r.bottom<=vh, above:r.bottom<0||(r.top<0&&r.bottom<=vh)};
+}
+function nope(h,el){
+  say(h);
+  var st=document.getElementById('status');
+  void st.offsetWidth; st.classList.add('nope');
+  if(el) shake(el);
+  else if(lastTap && Date.now()-lastTap.t<600) tapMark(lastTap.x,lastTap.y);
+  lastTap=null;
+  var v=statusInView(), w=document.getElementById('why');
+  if(v.seen){ hideWhy(); return; }
+  document.getElementById('why-msg').textContent=headline(h)||'That can’t be done.';
+  w.classList.toggle('up',v.above);
+  document.getElementById('why-arrow').innerHTML=v.above?'&uarr;':'&darr;';
+  w.classList.remove('hide','show'); void w.offsetWidth; w.classList.add('show');
+  clearTimeout(whyT); whyT=setTimeout(hideWhy,10000);
+}
 
 /* One claim a day, for that day's steps. The day is the claimant's own
    calendar day, midnight to midnight — the same day the Health app shows. */
@@ -881,10 +1023,10 @@ function collect(){
   var pl=me(); if(!pl) return;
   var input=document.getElementById('stepsin');
   if(claimedToday(pl)){
-    return say('<span class="bad">You have already claimed today.</span> The next claim opens at midnight, in <b>'+untilMidnight()+'</b>.');
+    return nope('<span class="bad">You have already claimed today.</span> The next claim opens at midnight, in <b>'+untilMidnight()+'</b>.',document.getElementById('collect'));
   }
   var steps=parseFloat(input.value);
-  if(!isFinite(steps)||steps<=0) return say('Type today&rsquo;s step count from the Health app.');
+  if(!isFinite(steps)||steps<=0){ input.focus(); return nope('Type today&rsquo;s step count from the Health app in the box above the map, then press <b>Claim</b>.'); }
   var capped=false;
   if(steps>MAX_STEPS_DAY){ steps=MAX_STEPS_DAY; capped=true; }
   steps=Math.round(steps);
@@ -916,7 +1058,7 @@ var armed=null;                                     // dispute needs a second ta
 function vote(id,v){
   var c=G.claims[id]; if(!c||!(c.voters&&c.voters[ME])) return;
   var st=claimState(c);
-  if(st.s==='stands'||st.s==='void') return say('That claim is already settled.');
+  if(st.s==='stands'||st.s==='void') return nope('That claim is already settled.');
   if(st.s==='open' && v==='no' && !(armed&&armed.id===id&&armed.until>Date.now())){
     armed={id:id,until:Date.now()+5000}; renderClaims();
     setTimeout(function(){ if(armed&&armed.id===id){ armed=null; renderClaims(); } },5100);
@@ -937,12 +1079,12 @@ function vote(id,v){
 function spendMarch(q,r){
   var pl=me(); if(!pl) return;
   var c=cellOf(q,r);
-  if(c.o===ME) return say(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
-  if(c.t===RIVER && !c.o) return say('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Switch to <b>Bridge</b> to build across; it takes a day.');
-  if(!adjacentTo(q,r,ME)) return say('Marches extend a border — pick a cell touching your own ground.');
-  if(c.k) return say('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
+  if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
+  if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Switch to <b>Bridge</b> to build across; it takes a day.');
+  if(!adjacentTo(q,r,ME)) return nope('Marches extend a border — pick a cell touching your own ground.');
+  if(c.k) return nope('A keep or tower has to be starved out. Take the ground around it and cut its supply.');
   var cost=c.o?2:1, prev=c.o, pw=c.w||0;
-  if(pl.squares<cost) return say('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
+  if(pl.squares<cost) return nope('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
   if(!c.o){
     var from0=fromFor(q,r,ME);
     pl.squares-=cost; c.o=ME; writeCell(q,r,c);
@@ -956,9 +1098,9 @@ function spendMarch(q,r){
   for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)) mine.push({q:nq,r:nr,n:n.b}); }
   mine.sort(function(a,b){ return b.n-a.n; });
   var why=[]; if(guns) why.push(guns+' to cross the guns'); if(c.w) why.push(c.w+' to break the wall'); if(guard.n) why.push(guard.n+' to beat the band guarding it');
-  if(!mine.length) return say('<span class="bad">No soldiers next to that cell.</span> Taking someone else&rsquo;s ground needs one of your bands standing beside it'+(need?' with at least '+(need+1)+' in it ('+why.join(', ')+', and one to hold it)':'')+'. Use <b>Move soldiers</b> to bring a band up.');
+  if(!mine.length) return nope('<span class="bad">No soldiers next to that cell.</span> Taking someone else&rsquo;s ground needs one of your bands standing beside it'+(need?' with at least '+(need+1)+' in it ('+why.join(', ')+', and one to hold it)':'')+'. Use <b>Move soldiers</b> to bring a band up.');
   var band=mine[0];
-  if(band.n<need+1) return say('<span class="bad">That band is too small.</span> Taking the cell costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
+  if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> Taking the cell costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
   var victim=c.o;
   pl.squares-=cost; c.w=0; c.o=ME;
   guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ delete gc.b; pushCell(g[0],g[1]); } });
@@ -978,12 +1120,12 @@ function spendMarch(q,r){
    borders and supply run over it, and someone else can take it for two. */
 function bridge(q,r){
   var pl=me(), c=cellOf(q,r);
-  if(c.t!==RIVER) return say('Bridges go on river cells. Pick a river cell touching your ground.');
-  if(c.o===ME) return say(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
-  if(c.o) return say('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Switch to <b>Spend a march</b> to take it &mdash; two marches, like the rest of their ground.');
-  if(!adjacentTo(q,r,ME)) return say('Build from your own bank &mdash; pick a river cell touching ground you hold.');
-  if(pl.squares<1) return say('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
-  for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return say('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'.'); }
+  if(c.t!==RIVER) return nope('Bridges go on river cells. Pick a river cell touching your ground.');
+  if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
+  if(c.o) return nope('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Switch to <b>Spend a march</b> to take it &mdash; two marches, like the rest of their ground.');
+  if(!adjacentTo(q,r,ME)) return nope('Build from your own bank &mdash; pick a river cell touching ground you hold.');
+  if(pl.squares<1) return nope('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
+  for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return nope('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'. '+shortBy(BRIDGE_COST)); }
   for(var k2 in BRIDGE_COST) pl.res[k2]-=BRIDGE_COST[k2];
   var from=fromFor(q,r,ME);
   pl.squares-=1; c.o=ME; c.f=Date.now()+BRIDGE_MS; c.w=0;
@@ -1007,16 +1149,16 @@ function castleCost(pid){
 }
 function build(q,r,kind){
   var pl=me(), c=cellOf(q,r);
-  if(c.o!==ME) return say('Build on ground you hold.');
-  if(c.k) return say('Something already stands here.');
-  if(c.t===RIVER) return say('Nothing can be built on a river, even on a bridge.');
+  if(c.o!==ME) return nope('Build on ground you hold.');
+  if(c.k) return nope('Something already stands here.');
+  if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
     var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
-    if(near.length) return say('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
+    if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
-  for(var k in cost){ if(pl.res[k]<cost[k]) return say('Not enough materials — a castle here needs '+costLine(cost)+'.'); }
-  if(fieldOf(ME)<SPEC[kind].gar[1]) return say('No one to man it. Muster a soldier first.');
+  for(var k in cost){ if(pl.res[k]<cost[k]) return nope('Not enough materials — '+(kind===CASTLE?'a castle':'a tower')+' needs '+costLine(cost)+'. '+shortBy(cost)); }
+  if(fieldOf(ME)<SPEC[kind].gar[1]) return nope('No one to man it. Muster a soldier first.');
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   var from=fromFor(q,r,ME), pw=c.w||0;
   var sent=drawSoldiers(ME,q,r,1);                   // the nearest band sends a man
@@ -1029,14 +1171,31 @@ function build(q,r,kind){
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
+/* what is missing for a cost, and where it comes from */
+var SOURCE={stone:'quarries (&#9670;)', timber:'forests (&#9650;)', iron:'iron mines (&#9679;)', grain:'farms (&equiv;)'};
+function andList(a){ return a.length<2 ? a.join('') : a.slice(0,-1).join(', ')+' and '+a[a.length-1]; }
+function shortBy(cost){
+  var pl=me(), miss=[], from=[];
+  for(var k in cost){ var have=Math.floor(pl.res[k]||0); if(have<cost[k]){ miss.push('<b>'+(cost[k]-have)+' more '+k+'</b> (you have '+have+')'); from.push(SOURCE[k]); } }
+  if(!miss.length) return '';
+  var one=miss.length===1;
+  return 'You need '+andList(miss)+'. '+(one?'It comes':'They come')+' from '+andList(from)+' on your ground that has an unbroken path back to one of your castles, and '+(one?'it arrives':'they arrive')+' every few hours.';
+}
+/* a button that can't be used right now still takes the press, so it can say why */
+function lock(id,off){
+  var b=document.getElementById(id); if(!b) return;
+  b.disabled=false;
+  if(off) b.setAttribute('aria-disabled','true'); else b.removeAttribute('aria-disabled');
+}
+function locked(b){ return b && b.getAttribute('aria-disabled')==='true'; }
 function upgrade(q,r){
   var pl=me(), c=cellOf(q,r);
-  if(c.o!==ME||!c.k) return say('Click one of your own towers or castles.');
-  if(c.l>=3) return say('Already at level III.');
+  if(c.o!==ME||!c.k) return nope('Click one of your own towers or castles.');
+  if(c.l>=3) return nope('Already at level III.');
   var lvl=c.l+1, cost=SPEC[c.k].cost, extra=SPEC[c.k].gar[lvl]-c.g;
-  for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return say('Upgrade needs '+cost[k]*lvl+' '+k+'.'); }
+  for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return nope('Upgrade needs '+cost[k]*lvl+' '+k+'. You have '+Math.floor(pl.res[k])+'.'); }
   var have=fieldOf(ME);
-  if(have<extra) return say('Level '+ROMAN[lvl]+' needs '+SPEC[c.k].gar[lvl]+' men inside — you are '+(extra-have)+' short. Muster more soldiers.');
+  if(have<extra) return nope('Level '+ROMAN[lvl]+' needs '+SPEC[c.k].gar[lvl]+' men inside — you are '+(extra-have)+' short. Muster more soldiers.');
   for(var k2 in cost) pl.res[k2]-=cost[k2]*lvl;
   var sent=drawSoldiers(ME,q,r,extra);
   c=cellOf(q,r); c.l=lvl; c.g+=extra;
@@ -1047,11 +1206,11 @@ function upgrade(q,r){
 }
 function wall(q,r){
   var pl=me(), c=cellOf(q,r);
-  if(c.o!==ME) return say('Walls go on ground you hold.');
-  if(building(c)) return say('Finish the bridge first &mdash; it is ready in '+hoursLeft(c.f)+'.');
-  if(c.k) return say('That cell holds a structure — upgrade it instead.');
-  if((c.w||0)>=3) return say('Already walled to level III.');
-  if(pl.res.stone<30) return say('Not enough stone — 30 a course.');
+  if(c.o!==ME) return nope('Walls go on ground you hold.');
+  if(building(c)) return nope('Finish the bridge first &mdash; it is ready in '+hoursLeft(c.f)+'.');
+  if(c.k) return nope('That cell holds a structure — upgrade it instead.');
+  if((c.w||0)>=3) return nope('Already walled to level III.');
+  if(pl.res.stone<30) return nope('Not enough stone — 30 a course. '+shortBy({stone:30}));
   pl.res.stone-=30; c.w=(c.w||0)+1;
   writeCell(q,r,c); logMove('w',q,r,fromFor(q,r,ME),null,0,{lvl:c.w});
   render(); pushCell(q,r); pushMe();
@@ -1059,8 +1218,8 @@ function wall(q,r){
 }
 function muster(q,r){
   var pl=me(), c=cellOf(q,r);
-  if(!(c.o===ME&&c.k===CASTLE)) return say('Soldiers muster at your castles.');
-  if(pl.res.iron<25||pl.res.grain<40) return say('Not enough iron and grain.');
+  if(!(c.o===ME&&c.k===CASTLE)) return nope('Soldiers muster at your castles.');
+  if(pl.res.iron<25||pl.res.grain<40) return nope('Not enough iron and grain — a soldier takes 25 iron and 40 grain. '+shortBy({iron:25,grain:40}));
   pl.res.iron-=25; pl.res.grain-=40; c.b=(c.b||0)+1;
   writeCell(q,r,c); logMove('ms',q,r,null,null,0);
   render(); pushCell(q,r); pushMe(); flashStat(document.getElementById('v-field').parentNode);
@@ -1080,18 +1239,18 @@ function sayMove(){
 function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!sel){
-    if(c.o!==ME || !(c.b>0)) return say('Click one of your bands first &mdash; the numbered badges on your ground.');
+    if(c.o!==ME || !(c.b>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground.');
     sel={q:q,r:r}; sendN=0; draw(); return sayMove();
   }
   if(key(q,r)===key(sel.q,sel.r)){ sel=null; draw(); return say('Cancelled.'); }
-  if(c.o!==ME || building(c)) return say('Bands only walk on your own finished ground. To take that cell, stand a band next to it and use <b>Spend a march</b>.');
+  if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. To take that cell, stand a band next to it and use <b>Spend a march</b>.');
   var from=G.cells[key(sel.q,sel.r)], n=from&&from.b||0;
-  if(!n){ sel=null; draw(); return say('That band is gone.'); }
+  if(!n){ sel=null; draw(); return nope('That band is gone.'); }
   var send=sendN&&sendN<n?sendN:n;
   var d=roadLength(ME,sel.q,sel.r,q,r);
-  if(d<0) return say('<span class="bad">No road.</span> There is no unbroken path of your own ground between here and there.');
+  if(d<0) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground between here and there.');
   var cost=Math.ceil(d/MOVE_PER_MARCH);
-  if(pl.squares<cost) return say('That walk is '+d+' cells and costs '+cost+' march'+(cost>1?'es':'')+'. You have '+pl.squares+'.');
+  if(pl.squares<cost) return nope('That walk is '+d+' cells and costs '+cost+' march'+(cost>1?'es':'')+'. You have '+pl.squares+'.');
   pl.squares-=cost;
   from.b-=send; if(!from.b) delete from.b;
   c.b=(c.b||0)+send; writeCell(q,r,c);
@@ -1106,16 +1265,16 @@ function moveClick(q,r){
 var BREAK_COST=2;
 function breakBridge(q,r){
   var pl=me(), c=cellOf(q,r);
-  if(c.t!==RIVER || !c.o) return say('Click a bridge &mdash; a river cell someone has built across.');
+  if(c.t!==RIVER || !c.o) return nope('Click a bridge &mdash; a river cell someone has built across.');
   var mine=[];
   for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)) mine.push({q:nq,r:nr,n:n.b}); }
   mine.sort(function(a,b){ return b.n-a.n; });
-  if(!mine.length) return say('<span class="bad">No soldiers beside that bridge.</span> A band of yours has to be standing next to it. Use <b>Move soldiers</b> to bring one up.');
-  if(pl.squares<BREAK_COST) return say('Breaking a bridge costs '+BREAK_COST+' marches. You have '+pl.squares+'.');
+  if(!mine.length) return nope('<span class="bad">No soldiers beside that bridge.</span> A band of yours has to be standing next to it. Use <b>Move soldiers</b> to bring one up.');
+  if(pl.squares<BREAK_COST) return nope('Breaking a bridge costs '+BREAK_COST+' marches. You have '+pl.squares+'.');
   var victim=c.o!==ME?c.o:null;
   var guns=victim?coverOn(q,r,ME):0, guard=victim?guardOn(q,r,victim):{n:0,cells:[]}, need=guns+guard.n;
   var band=mine[0];
-  if(band.n<need+1) return say('<span class="bad">That band is too small.</span> Breaking this bridge costs '+need+' soldier'+(need>1?'s':'')+' to its defenders and one more to do the work. Your band beside it has '+band.n+'.');
+  if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> Breaking this bridge costs '+need+' soldier'+(need>1?'s':'')+' to its defenders and one more to do the work. Your band beside it has '+band.n+'.');
   pl.squares-=BREAK_COST;
   guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ delete gc.b; pushCell(g[0],g[1]); } });
   var from=G.cells[key(band.q,band.r)]; from.b=band.n-need; if(!from.b) delete from.b;
@@ -1614,6 +1773,7 @@ function readTokens(){
   ['--paper','--surface','--sink','--ink','--ink-2','--rule','--p0','--p1','--p2','--p3','--brass','--steel','--water'].forEach(function(k){ T[k]=tok(k); });
   var dk=!!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
   if(dk!==NAT_DARK) natPalette(dk);
+  palDark=dk; refreshColors();
 }
 function layout(){
   W=canvas.parentElement.clientWidth;
@@ -1634,7 +1794,7 @@ function setZoom(next){                              // zoom about the middle of
   S=next; centreOn(mid[0],mid[1]);
 }
 function hexPath(cx,cy,s){ ctx.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180,x=cx+s*Math.cos(a),y=cy+s*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.closePath(); }
-function colorFor(pid){ return pid&&G.players[pid] ? T[seatColor(G.players[pid].seat)] : T['--ink-2']; }
+function colorFor(pid){ return pColor(pid); }
 function mark(t,cx,cy,s,col){
   ctx.fillStyle=col; ctx.strokeStyle=col; ctx.lineWidth=1;
   var m=s*0.36;
@@ -1754,7 +1914,7 @@ function draw(){
       ctx.stroke(); ctx.restore();
     }
     if(haveMarch&&c.o!==ME&&!c.k&&(mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
-      ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=T[seatColor(me().seat)]; ctx.globalAlpha=.8; ctx.lineWidth=1.3;
+      ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=pColor(ME); ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
       hexPath(p[0],p[1],S*0.94);
     }
@@ -1807,7 +1967,7 @@ function draw(){
     var cx=W/2, cy=H/2, dx=sp[0]-cx, dy=sp[1]-cy, len=Math.hypot(dx,dy)||1;
     var t=Math.min((W/2-pad)/Math.abs(dx||1e-6), (H/2-pad)/Math.abs(dy||1e-6));
     var ax=cx+dx*t, ay=cy+dy*t, ang=Math.atan2(dy,dx);
-    var col=T[seatColor(p.seat)];
+    var col=pColor(pid);
     ctx.save();
     ctx.translate(ax,ay); ctx.rotate(ang);
     ctx.fillStyle=col;
@@ -1994,7 +2154,7 @@ function renderDaily(){
   var sum=rows.reduce(function(a,r){ return a+r.n; },0);
   document.getElementById('daily').innerHTML='<b>Steps claimed in the last 24 hours</b> &middot; '+sum.toLocaleString()+' together<br>'
     +rows.map(function(r){
-      return '<span style="white-space:nowrap;margin-right:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var('+seatColor(r.p.seat)+');margin-right:5px"></span>'
+      return '<span style="white-space:nowrap;margin-right:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pColor(r.pid)+';margin-right:5px"></span>'
         +esc(r.p.name)+' <b class="n" style="font-family:var(--mono)">'+r.n.toLocaleString()+'</b></span>';
     }).join('');
 }
@@ -2029,27 +2189,28 @@ function render(){
   if(ups.length) document.getElementById('bankinfo').textContent += ups.length>1
     ? ' · '+ups.length+' bridges building, first ready in '+hoursLeft(ups[0])
     : ' · bridge ready in '+hoursLeft(ups[0]);
-  document.getElementById('collect').disabled = done;
+  lock('collect',done);
   var rows=Object.keys(G.players).map(function(pid){
     var p=G.players[pid];
     return {pid:pid,name:p.name,cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
   }).sort(function(a,b){ return b.cells-a.cells; });
   document.getElementById('standings').innerHTML=rows.map(function(r,i){
     return '<tr><td class="n">'+(i+1)+'</td>'
-      +'<td><span class="dot" style="background:var('+seatColor(r.seat)+')"></span>'+esc(r.name)+(r.pid===ME?' — you':'')+'</td>'
+      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span>'+esc(r.name)+(r.pid===ME?' — you':'')+'</td>'
       +'<td class="n">'+r.cells+'</td><td class="n">'+r.steps.toLocaleString()+'</td>'
       +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
   }).join('');
-  document.getElementById('m-wall').disabled=pl.res.stone<30;
-  document.getElementById('m-bridge').disabled=!(pl.res.timber>=BRIDGE_COST.timber&&pl.res.stone>=BRIDGE_COST.stone);
-  document.getElementById('m-tower').disabled=!(pl.res.stone>=40&&pl.res.timber>=30);
+  lock('m-wall',pl.res.stone<30);
+  lock('m-bridge',!(pl.res.timber>=BRIDGE_COST.timber&&pl.res.stone>=BRIDGE_COST.stone));
+  lock('m-tower',!(pl.res.stone>=40&&pl.res.timber>=30));
   var cc=castleCost(ME);
-  document.getElementById('m-castle').disabled=!(pl.res.timber>=cc.timber&&pl.res.stone>=cc.stone&&pl.res.iron>=cc.iron);
+  lock('m-castle',!(pl.res.timber>=cc.timber&&pl.res.stone>=cc.stone&&pl.res.iron>=cc.iron));
   var ccLabel=document.querySelector('#m-castle .cost');
   if(ccLabel) ccLabel.textContent=cc.timber+' tm · '+cc.stone+' st · '+cc.iron+' ir';
-  document.getElementById('m-move').disabled=!fieldOf(ME);
-  document.getElementById('m-break').disabled=!fieldOf(ME);
-  document.getElementById('m-troop').disabled=!(pl.res.iron>=25&&pl.res.grain>=40);
+  lock('m-move',!fieldOf(ME));
+  lock('m-break',!fieldOf(ME));
+  lock('m-troop',!(pl.res.iron>=25&&pl.res.grain>=40));
+  document.getElementById('mydot').style.background=pColor(ME);
   renderClaims();
   draw();
 }
@@ -2074,7 +2235,7 @@ function renderClaims(){
   }
   var shown=showAllClaims?list:list.slice(0,LOG_SHORT);
   log.innerHTML=shown.map(function(e){
-    var c=e.c, st=e.st, p=G.players[c.pid], col=p?'var('+seatColor(p.seat)+')':'var(--ink-2)';
+    var c=e.c, st=e.st, p=G.players[c.pid], col=p?pColor(c.pid):'var(--ink-2)';
     var meta=[since(c.t)];
     if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
     if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
@@ -2160,7 +2321,7 @@ function renderChart(list){
   var dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   el.innerHTML='<div class="axisnote">Steps claimed per day · last 14 days, today at the right · one scale for everyone (tallest bar '+max.toLocaleString()+') · voided claims left out</div>'
     +pids.map(function(pid){
-      var p=G.players[pid], col='var('+seatColor(p.seat)+')', tot=0, bars='';
+      var p=G.players[pid], col=pColor(pid), tot=0, bars='';
       sums[pid].forEach(function(v,i){
         tot+=v;
         var x=i*(BW+GAP), h=v?Math.max(2,Math.round(v/max*VH)):0, d=new Date(first+i*864e5);
@@ -2217,6 +2378,7 @@ function endPointer(ev){
     if(wasDragging && !moved && G && me() && replaying){ endReplay(); dragged=false; return; }
     if(wasDragging && !moved && G && me()){
       var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top); h=[wrapC(h[0]),wrapC(h[1])];
+      lastTap={x:ev.clientX-b.left, y:ev.clientY-b.top, t:Date.now()};      // so a refusal can mark the spot
       if(mode==='claim') spendMarch(h[0],h[1]);
       else if(mode==='bridge') bridge(h[0],h[1]);
       else if(mode==='wall') wall(h[0],h[1]);
@@ -2226,6 +2388,7 @@ function endPointer(ev){
       else if(mode==='troop') muster(h[0],h[1]);
       else if(mode==='move') moveClick(h[0],h[1]);
       else if(mode==='break') breakBridge(h[0],h[1]);
+      lastTap=null;
     }
     dragged=false;
   }
@@ -2248,13 +2411,38 @@ var HINTS={
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
   move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground, and costs 1 march per '+MOVE_PER_MARCH+' cells. A band also guards the cells around it: taking one costs the attacker a soldier for each of yours.'
 };
+var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
+function whyLocked(m){
+  var head='<span class="bad">You can&rsquo;t '+NAMES[m]+' yet.</span> ';
+  if(m==='move'||m==='break'){
+    var pl=me(), canM=pl.res.iron>=25&&pl.res.grain>=40;
+    return head+'You have no soldiers on the map. Switch to <b>Muster</b> and click one of your castles to raise one (25 iron, 40 grain)'
+      +(canM?'.':'. '+shortBy({iron:25,grain:40}));
+  }
+  var cost = m==='wall'?{stone:30} : m==='bridge'?BRIDGE_COST : m==='tower'?SPEC[TOWER].cost : m==='castle'?castleCost(ME) : {iron:25,grain:40};
+  return head+'It costs '+costLine(cost)+'. '+shortBy(cost);
+}
 Object.keys(MODES).forEach(function(m){
   document.getElementById(MODES[m]).addEventListener('click',function(){
+    if(locked(this)) return nope(whyLocked(m),this);
     mode=m; sel=null;
     Object.keys(MODES).forEach(function(k){ document.getElementById(MODES[k]).setAttribute('aria-pressed',String(k===m)); });
     say(HINTS[m]); draw();
   });
 });
+document.getElementById('why').addEventListener('click',function(){
+  var st=document.getElementById('status');
+  hideWhy();
+  try{ st.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){ st.scrollIntoView(); }
+  st.classList.remove('nope'); void st.offsetWidth; st.classList.add('nope');
+});
+/* the pointer goes away by itself once the explanation is on screen */
+(function(){
+  var st=document.getElementById('status');
+  if('IntersectionObserver' in window){
+    new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting && e.intersectionRatio>0.9) hideWhy(); }); },{threshold:[0.9,1]}).observe(st);
+  } else window.addEventListener('scroll',function(){ if(statusInView().seen) hideWhy(); },{passive:true});
+})();
 document.getElementById('status').addEventListener('click',function(ev){
   var b=ev.target.closest('button[data-send]'); if(!b||!sel) return;
   sendN=parseInt(b.getAttribute('data-send'),10)||0; sayMove();
@@ -2318,12 +2506,13 @@ function enterGame(isNew){
   document.getElementById('setup-panel').classList.add('hide');
   document.getElementById('game').classList.remove('hide');
   document.getElementById('myname').textContent=me()?me().name:'—';
-  document.getElementById('mydot').style.background='var('+seatColor(me()?me().seat:0)+')';
+  document.getElementById('mydot').style.background=pColor(ME);
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render();
   if(isNew) say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.');
   else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
+  chatStart();
 }
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
@@ -2397,6 +2586,139 @@ document.getElementById('leave').addEventListener('click',function(){
   // forget the name on this device so the next person can type theirs
   push().then(function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); });
 });
+
+/* ═══ chat ═════════════════════════════════════════════════════════════
+   One shared feed for everyone on the board. It lives beside the board, at
+   /marchland/chat_<code>, not inside it, so the board download every move
+   triggers never drags the chat along, and sending a message never makes the
+   others re-download the board. Like the board, it is polled through a tiny
+   revision key: messages are fetched only when that key has moved. A hidden
+   tab polls nothing. Messages older than 30 days are tidied away.          */
+var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
+var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, peekT:0, toEnd:true};
+function chatUrl(sub,query){ return window.DB_URL.replace(/\/$/,'')+'/marchland/chat_'+GAME_CODE+sub+'.json'+(query||''); }
+function chatGet(sub,query){
+  return fetch(chatUrl(sub,query),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+function chatPut(sub,val){
+  return fetch(chatUrl(sub),{method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json'}})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+function q36(t){ var s=Math.max(0,Math.floor(t)).toString(36); while(s.length<9) s='0'+s; return s; }   // keys sort by time
+function chatSeenKey(){ return 'marchland.chatSeen.'+ME; }
+function chatList(){
+  return Object.keys(chat.msgs).sort().map(function(k){ var m=chat.msgs[k]; m.id=k; return m; })
+    .filter(function(m){ return m && typeof m.m==='string' && m.t; }).slice(-CHAT_SHOW);
+}
+function chatUnread(){ var n=0; chatList().forEach(function(m){ if(m.pid!==ME && m.t>chat.seen && !m.pending) n++; }); return n; }
+function chatMarkSeen(){
+  var l=chatList(), t=l.length?l[l.length-1].t:0;
+  if(t>chat.seen){ chat.seen=t; try{ localStorage.setItem(chatSeenKey(),String(t)); }catch(e){} }
+}
+function chatBadge(){
+  var n=chat.open?0:chatUnread(), b=document.getElementById('chat-badge');
+  b.textContent=n>9?'9+':String(n); b.classList.toggle('hide',!n);
+  document.getElementById('chat-btn').setAttribute('aria-label',n?'Chat, '+n+' new message'+(n>1?'s':''):'Chat');
+}
+function chatWho(m){ var p=G&&G.players[m.pid]; return p?p.name:(m.n||'someone'); }
+function chatRender(){
+  var feed=document.getElementById('chat-feed'), l=chatList();
+  if(!chat.open){ chatBadge(); return; }
+  var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
+  if(!l.length) feed.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it.</p>';
+  else feed.innerHTML=l.map(function(m){
+    return '<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
+      +esc(chatWho(m))+(m.pid===ME?' <span class="muted" style="font-weight:400">&mdash; you</span>':'')
+      +'<span class="when">'+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span></div>'
+      +'<div class="txt">'+esc(String(m.m).slice(0,CHAT_MAX))+'</div></div>';
+  }).join('');
+  if(atEnd||chat.toEnd){ feed.scrollTop=feed.scrollHeight; chat.toEnd=false; }
+  chatMarkSeen(); chatBadge();
+}
+function chatPeek(m){
+  if(chat.open || !m) return;
+  var el=document.getElementById('chat-peek'), txt=String(m.m);
+  el.innerHTML='<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+'</b>: '+esc(txt.length>90?txt.slice(0,88)+'…':txt);
+  el.classList.remove('hide');
+  clearTimeout(chat.peekT); chat.peekT=setTimeout(function(){ el.classList.add('hide'); },7000);
+}
+function chatFetch(){
+  return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+CHAT_SHOW).catch(function(){ return chatGet('/m'); }).then(function(d){
+    var fresh=[], old=Date.now()-CHAT_KEEP_MS;
+    Object.keys(chat.msgs).forEach(function(k){ if(chat.msgs[k].t<old) delete chat.msgs[k]; });
+    if(d) Object.keys(d).forEach(function(k){
+      var m=d[k]; if(!m||typeof m!=='object') return;
+      if(!chat.msgs[k] || chat.msgs[k].pending){ if(!chat.msgs[k] && m.pid!==ME) fresh.push(m); chat.msgs[k]=m; }
+    });
+    return fresh;
+  });
+}
+function chatPoll(force){
+  if(!chat.on || chat.busy) return;
+  if(!force && document.hidden) return;
+  chat.busy=true;
+  chatGet('/rev').then(function(rev){
+    if(!force && rev===chat.rev){ chat.busy=false; return; }
+    return chatFetch().then(function(fresh){
+      chat.rev=rev; chat.busy=false;
+      chatRender();
+      fresh=fresh.filter(function(m){ return m.t>chat.seen; }).sort(function(a,b){ return a.t-b.t; });
+      if(fresh.length) chatPeek(fresh[fresh.length-1]);
+    });
+  }).catch(function(){ chat.busy=false; });
+}
+function chatTidy(){                                  // anyone's tab may clear out messages past 30 days
+  var cut=q36(Date.now()-CHAT_KEEP_MS);
+  chatGet('/m','?orderBy=%22%24key%22&endAt=%22'+cut+'%22&limitToFirst=40').then(function(d){
+    if(!d) return;
+    Object.keys(d).forEach(function(k){ if(k<cut) chatPut('/m/'+k,null).catch(function(){}); });
+  }).catch(function(){});
+}
+function chatSend(){
+  var inp=document.getElementById('chat-in'), txt=(inp.value||'').replace(/\s+/g,' ').trim().slice(0,CHAT_MAX);
+  if(!txt||!me()) return;
+  if(Date.now()-chat.lastSend<1200) return;          // one message at a time
+  chat.lastSend=Date.now();
+  var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
+  var m={pid:ME, n:me().name, t:t, m:txt};
+  chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, pending:true};
+  inp.value=''; chatRender();
+  var feed=document.getElementById('chat-feed'); feed.scrollTop=feed.scrollHeight;
+  chatPut('/m/'+id,m).then(function(){
+    chat.msgs[id]=m;
+    return chatPut('/rev',t);
+  }).then(function(){ chatRender(); chatPoll(true); }, function(){
+    if(chat.msgs[id]){ chat.msgs[id].failed=true; }
+    chatRender();
+    if(!inp.value) inp.value=txt;
+    document.getElementById('chat-note').textContent='That message did not send — check your connection and press Send again.';
+    setTimeout(function(){ delete chat.msgs[id]; chatRender(); document.getElementById('chat-note').textContent='Messages are kept for 30 days.'; },6000);
+  });
+}
+function chatToggle(open){
+  chat.open=open;
+  document.getElementById('chat').classList.toggle('hide',!open);
+  document.getElementById('chat-btn').setAttribute('aria-expanded',String(open));
+  document.getElementById('chat-peek').classList.add('hide');
+  if(open){ chat.toEnd=true; chatRender(); chatPoll(true); var inp=document.getElementById('chat-in'); if(window.matchMedia && !window.matchMedia('(pointer:coarse)').matches) inp.focus(); }
+  chatBadge();
+}
+function chatStart(){
+  if(!online || chat.on) return;                      // a local-only board has nobody to talk to
+  chat.on=true;
+  var s=0; try{ s=parseInt(localStorage.getItem(chatSeenKey())||'0',10)||0; }catch(e){}
+  chat.seen=s||Date.now()-864e5;                      // first time here: the last day counts as new
+  document.getElementById('chat-btn').classList.remove('hide');
+  chatPoll(true);
+  setTimeout(chatTidy,15000);
+  setInterval(function(){ chat.tick++; if(chat.open || chat.tick%4===0) chatPoll(false); },5000);   // every 5 s while open, 20 s while closed
+}
+document.getElementById('chat-btn').addEventListener('click',function(){ chatToggle(!chat.open); });
+document.getElementById('chat-peek').addEventListener('click',function(){ chatToggle(true); });
+document.getElementById('chat-close').addEventListener('click',function(){ chatToggle(false); });
+document.getElementById('chat-form').addEventListener('submit',function(e){ e.preventDefault(); chatSend(); });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape' && chat.open) chatToggle(false); });
+document.addEventListener('visibilitychange',function(){ if(!document.hidden && chat.on) chatPoll(false); });
 
 /* ═══ boot ═════════════════════════════════════════════════════════════ */
 readTokens();
