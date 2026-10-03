@@ -170,37 +170,44 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 .tapx{ position:absolute; width:30px; height:30px; border-radius:50%; border:2px solid var(--p1); color:var(--p1); background:var(--surface);
   display:flex; align-items:center; justify-content:center; font:700 15px/1 var(--body); pointer-events:none; animation:tapx 1.3s ease-out forwards; }
 
-/* chat */
-.chat-btn{ position:fixed; right:10px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); z-index:100000; font:600 12px/1 system-ui,sans-serif; letter-spacing:.04em;
-  padding:8px 12px; border-radius:999px; border:1px solid rgba(120,130,140,.55); background:rgba(20,26,32,.82); color:#e8efe8; backdrop-filter:blur(4px); gap:7px; }
-.chat-btn:hover:not(:disabled){ border-color:#e8efe8; }
-.chat-btn svg{ width:14px; height:14px; display:block; }
-.chat-badge{ min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#E2705B; color:#fff; font:700 11px/18px system-ui,sans-serif; text-align:center; }
-.chat-peek{ position:fixed; right:10px; bottom:calc(52px + env(safe-area-inset-bottom, 0px)); z-index:100000; max-width:min(300px, calc(100% - 20px));
-  background:var(--surface); color:var(--ink); border:1px solid var(--rule); border-radius:10px; padding:8px 11px; font-size:13px; line-height:1.35;
-  box-shadow:0 6px 20px rgba(0,0,0,.18); text-align:left; display:block; }
-.chat-peek b{ font-weight:600; }
-.chat{ position:fixed; right:10px; bottom:calc(52px + env(safe-area-inset-bottom, 0px)); z-index:100001; width:min(360px, calc(100% - 20px));
-  height:min(470px, calc(100vh - 90px)); display:flex; flex-direction:column; background:var(--surface); border:1px solid var(--rule);
-  border-radius:6px; box-shadow:0 10px 32px rgba(0,0,0,.24); overflow:hidden; }
-.chat-head{ display:flex; align-items:center; gap:8px; padding:9px 10px 9px 14px; border-bottom:1px solid var(--rule); background:var(--paper); }
-.chat-head h2{ font-family:var(--display); font-size:17px; margin:0; font-weight:700; }
-.chat-head .muted{ font-size:12px; }
-.chat-head button{ padding:4px 9px; }
-.chat-feed{ flex:1 1 auto; overflow-y:auto; padding:6px 0; overscroll-behavior:contain; }
-.chat-feed .empty{ padding:14px; }
-.msg{ padding:6px 14px; font-size:14px; line-height:1.4; }
+/* chat bar: docked along the bottom of the screen while you play, so it is always in reach */
+:root{ --cbh:0px; --cb-flash:rgba(143,111,28,.18); }
+@media (prefers-color-scheme: dark){ :root{ --cb-flash:rgba(210,165,68,.20); } }
+body.has-chatbar{ padding-bottom:var(--cbh); }
+body.has-chatbar #music-btn{ bottom:calc(var(--cbh) + 10px) !important; }
+body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
+.chatbar{ position:fixed; left:0; right:0; bottom:0; z-index:100001; background:var(--surface); border-top:1px solid var(--rule);
+  box-shadow:0 -6px 20px rgba(0,0,0,.10); padding-bottom:env(safe-area-inset-bottom, 0px); }
+.cb-in{ max-width:1000px; margin:0 auto; padding:0 16px; }
+.cb-feed{ max-height:min(46vh, 420px); overflow-y:auto; overscroll-behavior:contain; border-bottom:1px solid var(--rule); padding:4px 0; }
+.cb-feed .empty{ padding:12px 0; }
+.cb-row{ display:flex; align-items:center; gap:10px; padding:8px 0; }
+.cb-last{ flex:1 1 42%; min-width:0; justify-content:flex-start; border:0; background:transparent; padding:7px 6px; text-align:left; gap:8px; font-size:13.5px; font-weight:400; border-radius:3px; }
+.cb-last:hover:not(:disabled){ border-color:transparent; background:var(--paper); }
+.cb-last svg{ width:16px; height:16px; flex:0 0 auto; color:var(--ink-2); }
+.cb-label{ font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-2); flex:0 0 auto; }
+.cb-preview{ flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cb-preview b{ font-weight:600; }
+.cb-preview .muted{ font-size:12px; }
+.cb-preview .dot{ width:8px; height:8px; margin-right:5px; vertical-align:0; }
+.cb-caret{ flex:0 0 auto; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); white-space:nowrap; }
+.cb-form{ flex:1 1 58%; display:flex; gap:6px; min-width:0; margin:0; }
+.cb-form input{ flex:1 1 auto; min-width:0; font-size:16px; padding:7px 9px; }
+.chat-badge{ min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#C9503B; color:#fff; font:700 11px/18px system-ui,sans-serif; text-align:center; flex:0 0 auto; }
+@keyframes cbflash{ 0%,45%{ background:var(--cb-flash); } 100%{ background:transparent; } }
+.cb-last.flash{ animation:cbflash 2.2s ease-out; }
+.chat-note{ font-family:var(--mono); font-size:10.5px; color:var(--p1); padding:0 0 8px; }
+.msg{ padding:6px 10px; margin:0 -10px; font-size:14px; line-height:1.4; border-radius:3px; }
 .msg .who{ font-size:12.5px; font-weight:600; }
 .msg .when{ font-family:var(--mono); font-size:10.5px; color:var(--ink-2); margin-left:6px; font-weight:400; }
 .msg .txt{ overflow-wrap:anywhere; white-space:pre-wrap; }
 .msg.mine{ background:var(--paper); }
 .msg.pending .txt{ opacity:.55; }
 .msg .dot{ width:8px; height:8px; margin-right:6px; vertical-align:0; }
-.chat-form{ display:flex; gap:6px; padding:8px; border-top:1px solid var(--rule); background:var(--paper); }
-.chat-form input{ flex:1 1 auto; min-width:0; font-size:16px; padding:7px 9px; }
-.chat-note{ font-family:var(--mono); font-size:10.5px; color:var(--ink-2); padding:0 10px 7px; background:var(--paper); }
-@media (max-width:560px){
-  .chat{ right:8px; left:8px; width:auto; height:min(440px, calc(100vh - 120px)); }
+@media (max-width:640px){
+  .cb-row{ flex-wrap:wrap; gap:2px 8px; padding:4px 0 8px; }
+  .cb-last{ flex:1 1 100%; padding:5px 2px; }
+  .cb-form{ flex:1 1 100%; }
 }
 </style>
 </head>
@@ -349,14 +356,16 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 <!-- ── pointer to the reason an action was refused (shown only when that reason is off screen) ── -->
 <button type="button" id="why" class="why hide" aria-live="polite"><span class="why-x" aria-hidden="true">&#10005;</span><span class="why-msg" id="why-msg"></span><span class="why-go"><span id="why-word">Why</span><span class="why-arrow" id="why-arrow" aria-hidden="true">&darr;</span></span></button>
 
-<!-- ── chat ───────────────────────────────────────────────────────── -->
-<button type="button" id="chat-btn" class="chat-btn hide" aria-expanded="false" aria-controls="chat"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3.2 2.6V11.5H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>Chat<span id="chat-badge" class="chat-badge hide">0</span></button>
-<button type="button" id="chat-peek" class="chat-peek hide"></button>
-<section id="chat" class="chat hide" aria-label="Chat with the other players">
-  <div class="chat-head"><h2>Chat</h2><span class="muted">everyone on the board sees this</span><span class="spacer"></span><button type="button" id="chat-close" aria-label="Close chat">&#10005;</button></div>
-  <div class="chat-feed" id="chat-feed" aria-live="polite"></div>
-  <form class="chat-form" id="chat-form" autocomplete="off"><input id="chat-in" maxlength="280" placeholder="Say something to everyone…" aria-label="Message"><button type="submit" class="go" id="chat-send">Send</button></form>
-  <div class="chat-note" id="chat-note">Messages are kept for 30 days.</div>
+<!-- ── chat bar ───────────────────────────────────────────────────── -->
+<section id="chatbar" class="chatbar hide" aria-label="Chat with the other players">
+  <div class="cb-feed hide" id="chat-feed" aria-live="polite"><div class="cb-in" id="chat-list"></div></div>
+  <div class="cb-in">
+    <div class="cb-row">
+      <button type="button" class="cb-last" id="chat-toggle" aria-expanded="false" aria-controls="chat-feed"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3h11a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H7l-3.2 2.6V11.5H2.5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg><span class="cb-label">Chat</span><span id="chat-badge" class="chat-badge hide">0</span><span class="cb-preview" id="chat-preview"></span><span class="cb-caret" id="chat-caret">&#9650; all</span></button>
+      <form class="cb-form" id="chat-form" autocomplete="off"><input id="chat-in" maxlength="280" placeholder="Message everyone on the board…" aria-label="Message everyone on the board"><button type="submit" class="go" id="chat-send">Send</button></form>
+    </div>
+    <div class="chat-note hide" id="chat-note"></div>
+  </div>
 </section>
 
 <script>
@@ -2595,7 +2604,7 @@ document.getElementById('leave').addEventListener('click',function(){
    revision key: messages are fetched only when that key has moved. A hidden
    tab polls nothing. Messages older than 30 days are tidied away.          */
 var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
-var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, peekT:0, toEnd:true};
+var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, toEnd:true};
 function chatUrl(sub,query){ return window.DB_URL.replace(/\/$/,'')+'/marchland/chat_'+GAME_CODE+sub+'.json'+(query||''); }
 function chatGet(sub,query){
   return fetch(chatUrl(sub,query),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
@@ -2618,15 +2627,24 @@ function chatMarkSeen(){
 function chatBadge(){
   var n=chat.open?0:chatUnread(), b=document.getElementById('chat-badge');
   b.textContent=n>9?'9+':String(n); b.classList.toggle('hide',!n);
-  document.getElementById('chat-btn').setAttribute('aria-label',n?'Chat, '+n+' new message'+(n>1?'s':''):'Chat');
+  document.getElementById('chat-toggle').setAttribute('aria-label',(chat.open?'Hide':'Show')+' the chat history'+(n?', '+n+' new message'+(n>1?'s':''):''));
 }
 function chatWho(m){ var p=G&&G.players[m.pid]; return p?p.name:(m.n||'someone'); }
+/* the bar always shows the newest message; the history opens above it */
+function chatPreview(){
+  var l=chatList(), m=l[l.length-1], el=document.getElementById('chat-preview');
+  if(!m){ el.innerHTML='<span class="muted">No messages yet &mdash; say hello to everyone on the board</span>'; return; }
+  var txt=String(m.m).slice(0,CHAT_MAX);
+  el.innerHTML='<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
+    +' <span class="muted">&middot; '+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span>';
+}
 function chatRender(){
-  var feed=document.getElementById('chat-feed'), l=chatList();
+  chatPreview();
   if(!chat.open){ chatBadge(); return; }
+  var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
-  if(!l.length) feed.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it.</p>';
-  else feed.innerHTML=l.map(function(m){
+  if(!l.length) list.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it. Messages are kept for 30 days.</p>';
+  else list.innerHTML=l.map(function(m){
     return '<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
       +esc(chatWho(m))+(m.pid===ME?' <span class="muted" style="font-weight:400">&mdash; you</span>':'')
       +'<span class="when">'+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span></div>'
@@ -2635,12 +2653,21 @@ function chatRender(){
   if(atEnd||chat.toEnd){ feed.scrollTop=feed.scrollHeight; chat.toEnd=false; }
   chatMarkSeen(); chatBadge();
 }
-function chatPeek(m){
-  if(chat.open || !m) return;
-  var el=document.getElementById('chat-peek'), txt=String(m.m);
-  el.innerHTML='<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+'</b>: '+esc(txt.length>90?txt.slice(0,88)+'…':txt);
-  el.classList.remove('hide');
-  clearTimeout(chat.peekT); chat.peekT=setTimeout(function(){ el.classList.add('hide'); },7000);
+function chatFlash(){                                 // a new message from someone else: the bar lights up
+  var el=document.getElementById('chat-toggle');
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+}
+/* how much of the screen the bar covers, so the page, the music button and the
+   "why" pointer all sit above it rather than under it */
+function chatMeasure(){
+  var bar=document.getElementById('chatbar'), feed=document.getElementById('chat-feed');
+  if(bar.classList.contains('hide')) return;
+  var h=bar.offsetHeight-(feed.classList.contains('hide')?0:feed.offsetHeight);
+  document.documentElement.style.setProperty('--cbh',h+'px');
+}
+function chatNote(t){
+  var n=document.getElementById('chat-note');
+  n.textContent=t||''; n.classList.toggle('hide',!t); chatMeasure();
 }
 function chatFetch(){
   return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+CHAT_SHOW).catch(function(){ return chatGet('/m'); }).then(function(d){
@@ -2662,8 +2689,7 @@ function chatPoll(force){
     return chatFetch().then(function(fresh){
       chat.rev=rev; chat.busy=false;
       chatRender();
-      fresh=fresh.filter(function(m){ return m.t>chat.seen; }).sort(function(a,b){ return a.t-b.t; });
-      if(fresh.length) chatPeek(fresh[fresh.length-1]);
+      if(fresh.some(function(m){ return m.t>chat.seen; })) chatFlash();
     });
   }).catch(function(){ chat.busy=false; });
 }
@@ -2682,8 +2708,7 @@ function chatSend(){
   var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
   var m={pid:ME, n:me().name, t:t, m:txt};
   chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, pending:true};
-  inp.value=''; chatRender();
-  var feed=document.getElementById('chat-feed'); feed.scrollTop=feed.scrollHeight;
+  inp.value=''; chatNote(''); chat.toEnd=true; chatRender();
   chatPut('/m/'+id,m).then(function(){
     chat.msgs[id]=m;
     return chatPut('/rev',t);
@@ -2691,34 +2716,36 @@ function chatSend(){
     if(chat.msgs[id]){ chat.msgs[id].failed=true; }
     chatRender();
     if(!inp.value) inp.value=txt;
-    document.getElementById('chat-note').textContent='That message did not send — check your connection and press Send again.';
-    setTimeout(function(){ delete chat.msgs[id]; chatRender(); document.getElementById('chat-note').textContent='Messages are kept for 30 days.'; },6000);
+    chatNote('That message did not send — check your connection and press Send again.');
+    setTimeout(function(){ delete chat.msgs[id]; chatRender(); chatNote(''); },6000);
   });
 }
 function chatToggle(open){
   chat.open=open;
-  document.getElementById('chat').classList.toggle('hide',!open);
-  document.getElementById('chat-btn').setAttribute('aria-expanded',String(open));
-  document.getElementById('chat-peek').classList.add('hide');
-  if(open){ chat.toEnd=true; chatRender(); chatPoll(true); var inp=document.getElementById('chat-in'); if(window.matchMedia && !window.matchMedia('(pointer:coarse)').matches) inp.focus(); }
-  chatBadge();
+  document.getElementById('chat-feed').classList.toggle('hide',!open);
+  document.getElementById('chat-toggle').setAttribute('aria-expanded',String(open));
+  document.getElementById('chat-caret').innerHTML=open?'&#9660; hide':'&#9650; all';
+  if(open){ chat.toEnd=true; chatRender(); chatPoll(true); }
+  chatBadge(); chatMeasure();
 }
 function chatStart(){
   if(!online || chat.on) return;                      // a local-only board has nobody to talk to
   chat.on=true;
   var s=0; try{ s=parseInt(localStorage.getItem(chatSeenKey())||'0',10)||0; }catch(e){}
   chat.seen=s||Date.now()-864e5;                      // first time here: the last day counts as new
-  document.getElementById('chat-btn').classList.remove('hide');
+  document.getElementById('chatbar').classList.remove('hide');
+  document.body.classList.add('has-chatbar');
+  chatRender(); chatMeasure();
   chatPoll(true);
   setTimeout(chatTidy,15000);
-  setInterval(function(){ chat.tick++; if(chat.open || chat.tick%4===0) chatPoll(false); },5000);   // every 5 s while open, 20 s while closed
+  setInterval(function(){ chat.tick++; if(chat.open || chat.tick%2===0) chatPoll(false); },5000);   // every 5 s with the history open, 10 s otherwise
+  setInterval(function(){ if(!document.hidden) chatPreview(); },30000);                              // keeps "2m ago" honest
 }
-document.getElementById('chat-btn').addEventListener('click',function(){ chatToggle(!chat.open); });
-document.getElementById('chat-peek').addEventListener('click',function(){ chatToggle(true); });
-document.getElementById('chat-close').addEventListener('click',function(){ chatToggle(false); });
+document.getElementById('chat-toggle').addEventListener('click',function(){ chatToggle(!chat.open); });
 document.getElementById('chat-form').addEventListener('submit',function(e){ e.preventDefault(); chatSend(); });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape' && chat.open) chatToggle(false); });
 document.addEventListener('visibilitychange',function(){ if(!document.hidden && chat.on) chatPoll(false); });
+window.addEventListener('resize',function(){ if(chat.on) chatMeasure(); });
 
 /* ═══ boot ═════════════════════════════════════════════════════════════ */
 readTokens();
