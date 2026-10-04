@@ -297,7 +297,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <input type="file" accept="image/*" id="shotlate" class="hide">
 
       <div class="coach hide" id="coach" role="status" aria-live="polite">
-        <span class="coach-tag">Next step</span>
+        <span class="coach-tag">Need an idea?</span>
         <span class="coach-txt" id="coach-txt"></span>
         <button type="button" id="coach-go" class="go">Show me</button>
         <button type="button" id="coach-x" class="coach-x" aria-label="Hide these tips" title="Hide these tips (the ? on the map brings them back)">&#10005;</button>
@@ -1089,7 +1089,6 @@ function collect(){
   if(capped) m+=' <span class="bad">Trimmed to '+MAX_STEPS_DAY.toLocaleString()+'</span> — that is the most one day can count.';
   say(m);
   coach.nopes=0;
-  setTimeout(function(){ if(!replaying) coachShow('stuck'); },3000);   // and now where to spend them
 }
 
 var armed=null;                                     // dispute needs a second tap to confirm
@@ -2117,9 +2116,12 @@ function logMove(k,q,r,from,prev,loss,extra){
   putPath('/events/'+id,ev);
   play(ev);
   coach.nopes=0;
-  if(coach.following){                                // they are following the arrow: once this move has played, point at the next good cell
+  if(coach.following){
+    var took=coach.target && coach.target.q===wrapC(q) && coach.target.r===wrapC(r);
     coach.target=null;
-    setTimeout(function(){ renderCoach(); var p=coach.plan; if(p && p.key==='march') coachShow('stuck'); else coach.following=false; },1300);
+    if(took) setTimeout(function(){ renderCoach(); var p=coach.plan; if(p && p.key==='march') coachShow('stuck'); else coach.following=false; },1300);   // they took the idea: offer another
+    else coach.following=false;                       // they chose their own move, so they know what they are doing: the idea bubble goes away
+    draw();
   }
 }
 function describe(e){
@@ -2848,6 +2850,7 @@ function whyLocked(m){
 Object.keys(MODES).forEach(function(m){
   document.getElementById(MODES[m]).addEventListener('click',function(){
     if(locked(this)) return nope(whyLocked(m),this);
+    if(coach.target){ coach.target=null; coach.following=false; }   // they picked a tool themselves: the idea bubble steps aside (Suggest re-adds it)
     mode=m; sel=null;
     Object.keys(MODES).forEach(function(k){ document.getElementById(MODES[k]).setAttribute('aria-pressed',String(k===m)); });
     say(HINTS[m]); draw();
@@ -3015,15 +3018,16 @@ document.getElementById('leave').addEventListener('click',function(){
    A strip above the map always names one good next move, worked out from the
    player's own position: vote on a disputed claim, man a castle before it
    crumbles, spend marches on a cell that will pay, claim the day's steps,
-   build with spare stone. "Show me" (or the ? on the map) switches to the
+   build with spare stone. Its button (or the ? on the map) switches to the
    right tool, brings the spot into view, lights up every cell you can take and
-   points at the best one. It also steps in by itself when someone seems stuck:
-   after a little while with nothing done, or after two refused taps in a row.
-   And while you follow its arrow it keeps pointing at the next good cell.  */
-var IDLE_HELP_MS=20000;
+   floats one suggestion over a good one, as an idea rather than an order. It
+   only offers that by itself when someone seems lost: a brand-new player, two
+   refused taps in a row, or half a minute with nothing done. Take the idea and
+   it offers another; make your own move and it steps aside.               */
+var IDLE_HELP_MS=30000;
 var coach={plan:null, target:null, raf:0, lastAct:Date.now(), nopes:0, auto:{}, hidden:false, following:false};
 try{ coach.hidden=localStorage.getItem('marchland.tips')==='off'; }catch(e){}
-var KIND_NAME={}; KIND_NAME[FOREST]='a forest, for timber'; KIND_NAME[QUARRY]='a quarry, for stone'; KIND_NAME[IRON]='an iron mine, for iron'; KIND_NAME[FARM]='a farm, for grain'; KIND_NAME[PLAIN]='open ground';
+var KIND_NAME={}; KIND_NAME[FOREST]='a forest (timber)'; KIND_NAME[QUARRY]='a quarry (stone)'; KIND_NAME[IRON]='an iron mine (iron)'; KIND_NAME[FARM]='a farm (grain)'; KIND_NAME[PLAIN]='some open ground';
 function coachTargets(){
   var pl=me(), sup=supplied(ME), R=ratesFor(ME), seen={}, out=[];
   for(var k in G.cells){
@@ -3063,7 +3067,7 @@ function coachPlan(){
   if(need) return {key:'vote', txt:'<b>'+esc(nameOf(G.claims[need].pid))+'</b>&rsquo;s step claim has been disputed and needs your vote.', el:'claims-panel', go:'Take me there'};
   if(R.gar[0]<R.gar[1] && !fieldOf(ME) && pl.res.iron>=25 && pl.res.grain>=40){
     var cs=myCastleCells(ME)[0];
-    if(cs) return {key:'muster', txt:'One of your towers or castles is short of men and will crumble. <b>Muster</b> a soldier at your castle to man it.', mode:'troop', target:cs, label:'Tap your castle'};
+    if(cs) return {key:'muster', txt:'Worth knowing: one of your towers or castles is short of men and will crumble. Mustering a soldier at your castle would man it.', mode:'troop', target:cs, label:'Idea: muster here'};
   }
   var extra=(R.own>R.sup?' Hatched cells are cut off from your castles and produce nothing &mdash; link them back up.':'')
     +(!done?' Don&rsquo;t forget to claim today&rsquo;s steps once you&rsquo;ve walked.':'');
@@ -3071,14 +3075,14 @@ function coachPlan(){
     var ts=coachTargets();
     if(ts.length){
       var b=ts[0];
-      return {key:'march', txt:'You have <b>'+pl.squares+' march'+(pl.squares>1?'es':'')+'</b> to spend. Tap a <b>glowing cell</b> beside your land to take it &mdash; the arrow points at a good one, '+KIND_NAME[b.t]+'.'
+      return {key:'march', txt:'You have <b>'+pl.squares+' march'+(pl.squares>1?'es':'')+'</b> to spend, on any cell beside your land you like. If you&rsquo;re not sure where, '+KIND_NAME[b.t]+' is a good choice.'
         +(R.net<0?' Your soldiers eat more grain than you grow, so farms (&equiv;) matter most.':'')+extra,
-        mode:'claim', target:[b.q,b.r], glow:true, label:'Tap here'};
+        mode:'claim', target:[b.q,b.r], glow:true, label:'Not sure? Try here', go:'Suggest a move'};
     }
   }
   if(!done && pl.squares<1) return {key:'claim', txt:'You&rsquo;re out of marches. After you walk, type <b>today&rsquo;s step count</b> from the Health app in the box above the map and press <b>Claim</b> to get more.', el:'stepsin'};
-  if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? Raise a <b>watchtower</b> on your border &mdash; while a soldier mans it, attackers lose men taking ground near it.'+extra, mode:'tower', target:bt, label:'Build here'}; }
-  if(pl.res.stone>=30){ var bw=borderCell(); if(bw) return {key:'wall', txt:'Spare stone? <b>Wall</b> a border cell so it costs attackers more to take.'+extra, mode:'wall', target:bw, label:'Wall here'}; }
+  if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? A <b>watchtower</b> on your border is one way to use them &mdash; while a soldier mans it, attackers lose men taking ground near it.'+extra, mode:'tower', target:bt, label:'Idea: a tower here', go:'Suggest a spot'}; }
+  if(pl.res.stone>=30){ var bw=borderCell(); if(bw) return {key:'wall', txt:'Spare stone? A <b>wall</b> on a border cell makes it cost attackers more to take.'+extra, mode:'wall', target:bw, label:'Idea: a wall here', go:'Suggest a spot'}; }
   return {key:'rest', txt:(done?'That&rsquo;s everything for today &mdash; tomorrow&rsquo;s steps bring new marches.':'Nothing to spend until you claim some steps.')+' Say hello in the chat at the bottom of the screen.', el:'chat-in', go:'Open the chat'};
 }
 function renderCoach(){
@@ -3110,7 +3114,7 @@ function coachShow(how){                             // how: false = asked for i
     if(auto && !mapInView()) return;
     var nc=nearCopy(p.target[0],p.target[1],viewQ,viewR), sp=toScreen(nc[0],nc[1]);
     if(sp[0]<S*1.5 || sp[0]>W-S*1.5 || sp[1]<S*2.2 || sp[1]>H-S*1.5){ centreOn(nc[0],nc[1]); }
-    coach.target={q:p.target[0], r:p.target[1], glow:!!p.glow, label:p.label||'Tap here', until:clock()+15};
+    coach.target={q:wrapC(p.target[0]), r:wrapC(p.target[1]), glow:!!p.glow, label:p.label||'Not sure? Try here', until:clock()+15};
     coach.following=true;
     coachKick();
     if(!auto) say(p.txt);
@@ -3131,30 +3135,34 @@ function coachTick(){
   if(!animRaf) draw();
   coachKick();
 }
-/* the arrow on the map: rings pulsing round the cell, a bouncing arrow and a label */
+/* the idea on the map. It is drawn as a thought, not an order: a dashed ring that
+   breathes round the cell, and a thought bubble ("Not sure? Try here") floating
+   above it on a trail of little bubbles. Every glowing cell can be taken; this
+   is only one suggestion, and it drifts away on its own after a few seconds. */
 function drawCoach(now){
   var c=coach.target; if(!c || now>c.until) return;
-  var P=toNear(c.q,c.r), x=P[0], y=P[1], s=S, bob=REDUCE?0:(Math.sin(now*5)*0.5+0.5), fade=Math.min(1,(c.until-now)/0.6);
-  ctx.save(); ctx.globalAlpha=fade;
-  for(var i=0;i<2;i++){
-    var ph=REDUCE?0.35:((now*0.8+i*0.5)%1);
-    ctx.globalAlpha=fade*0.85*(1-ph); ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,s*0.09);
-    hexPath(x,y,s*(0.9+ph*0.55)); ctx.stroke();
-  }
+  var P=toNear(c.q,c.r), x=P[0], y=P[1], s=S, fade=Math.min(1,(c.until-now)/0.8)*Math.min(1,(now-(c.until-15))/0.4);
+  var bob=REDUCE?0:Math.sin(now*1.8)*s*0.06, br=REDUCE?0:Math.sin(now*2.2)*0.04;
+  ctx.save();
+  ctx.globalAlpha=fade*0.9; ctx.setLineDash([Math.max(3,s*0.16),Math.max(3,s*0.12)]); ctx.lineDashOffset=REDUCE?0:-now*6;
+  ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,s*0.08);
+  hexPath(x,y,s*(0.98+br)); ctx.stroke(); ctx.setLineDash([]);
+  var fs=Math.max(11,Math.min(14,s*0.4)), lab=c.label, padX=fs*0.85, bh=fs+fs*0.95;
+  ctx.font='italic 500 '+Math.round(fs)+'px '+getComputedStyle(document.body).fontFamily;
+  var tw=ctx.measureText(lab).width, bw=tw+padX*2, side=(x+s*0.3+bw>W-4)?-1:1;     // the bubble rises up and to one side, like a thought
+  var u=Math.max(9,s*0.32);                                                          // spacing of the trail, never too cramped when zoomed out
+  var t1=[x+side*u*0.45, y-s*0.62-u*0.25+bob*0.4], t2=[x+side*u*1.0, y-s*0.62-u*1.05+bob*0.7];
+  var by=t2[1]-u*0.55-bh+bob*0.3, bx=side>0 ? t2[0]-bw*0.22 : t2[0]-bw*0.78;
+  bx=Math.max(4,Math.min(W-bw-4,bx)); by=Math.max(4,by);
   ctx.globalAlpha=fade;
-  var tip=y-s*0.55-bob*s*0.35, aw=Math.max(16,s*0.62), ah=Math.max(18,s*0.7);
+  ctx.fillStyle=T['--surface']; ctx.strokeStyle=T['--brass']; ctx.lineWidth=1.5;
+  [[t1,Math.max(2.4,s*0.07)],[t2,Math.max(3.6,s*0.11)]].forEach(function(d){        // the trail of little thought-bubbles
+    ctx.beginPath(); ctx.arc(d[0][0],d[0][1],d[1],0,6.284); ctx.fill(); ctx.stroke();
+  });
   ctx.beginPath();
-  ctx.moveTo(x,tip); ctx.lineTo(x-aw*0.6,tip-ah*0.55); ctx.lineTo(x-aw*0.22,tip-ah*0.55); ctx.lineTo(x-aw*0.22,tip-ah*1.1);
-  ctx.lineTo(x+aw*0.22,tip-ah*1.1); ctx.lineTo(x+aw*0.22,tip-ah*0.55); ctx.lineTo(x+aw*0.6,tip-ah*0.55); ctx.closePath();
-  ctx.fillStyle=T['--brass']; ctx.fill(); ctx.lineWidth=2; ctx.strokeStyle=T['--surface']; ctx.stroke();
-  var fs=Math.max(11,Math.min(15,s*0.42)), lab=c.label;
-  ctx.font='600 '+Math.round(fs)+'px '+getComputedStyle(document.body).fontFamily;
-  var tw=ctx.measureText(lab).width, bx=x-tw/2-8, by=tip-ah*1.1-fs-12;
-  bx=Math.max(4,Math.min(W-tw-20,bx)); by=Math.max(4,by);
-  ctx.fillStyle=T['--ink']; ctx.beginPath();
-  if(ctx.roundRect) ctx.roundRect(bx,by,tw+16,fs+10,(fs+10)/2); else ctx.rect(bx,by,tw+16,fs+10);
-  ctx.fill();
-  ctx.fillStyle=T['--paper']; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(lab,bx+8,by+(fs+10)/2+0.5);
+  if(ctx.roundRect) ctx.roundRect(bx,by,bw,bh,bh/2); else ctx.rect(bx,by,bw,bh);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle=T['--ink']; ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(lab,bx+padX,by+bh/2+0.5);
   ctx.restore();
 }
 document.getElementById('coach-go').addEventListener('click',function(){ coachShow(false); });
