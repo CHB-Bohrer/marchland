@@ -176,7 +176,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
     <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
-    <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 6 minutes a cell between the two keeps (half an hour at least, 8 hours at most). Goods wait at the gate if the receiver is away</dd>
+    <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 20 minutes a cell between the two keeps (2 hours at least, a day at most). Goods wait at the gate if the receiver is away</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
   </dl>
@@ -1443,7 +1443,7 @@ function artCaravan(g,x,y,s,col,t,face){
 var CV_HOME=[-2,0], CV_KIT=[5,-1], CV_GO=6.4, CV_ROAD=9.0, CV_BACK=18.6;
 scene({
   tag:'Caravans', title:'Send goods as a gift',
-  body:'A caravan carries a gift to another player: any stone, timber, iron or grain you hold. It costs no marches. The goods leave your stores at once and travel by wagon from your keep to theirs, so the farther apart you are, the longer the journey (a few hours across a typical board). When it arrives the goods are theirs to spend, and if they are away they wait at the gate. Send one to help a friend at the front, or settle a trade by sending caravans both ways.',
+  body:'A caravan carries a gift to another player: any stone, timber, iron or grain you hold. It costs no marches. The goods leave your stores at once and travel by wagon from your keep to theirs, so the farther apart you are, the longer the journey (several hours across a typical board, up to a full day). When it arrives the goods are theirs to spend, and if they are away they wait at the gate. Send one to help a friend at the front, or settle a trade by sending caravans both ways.',
   dur:24,
   init:function(){
     M=blank(); M.card=null; M.loaded=null; M.arrived=null; M.back=null;
@@ -1470,7 +1470,8 @@ scene({
     if(now>=CV_GO && now<CV_GO+CV_ROAD){
       var k=(now-CV_GO)/CV_ROAD, x=ax+(bx-ax)*k, y=ay+(by-ay)*k+S*0.25;
       artCaravan(ctx,x,y,S,T.p0,anim,1);
-      artLabel(ctx,x,y+S*0.55,'arrives in '+Math.floor(192*(1-k)/60)+'h '+Math.round((192*(1-k))%60)+'m',13,T.p0,1);
+      var left=Math.round(560*(1-k));                 // a 9h 20m road, sped up
+      artLabel(ctx,x,y+S*0.55,'arrives in '+Math.floor(left/60)+'h '+(left%60)+'m',13,T.p0,1);
     }
     if(M.back!=null){
       var k2=Math.min(1,(now-M.back)/7.5), x2=bx+(ax-bx)*k2, y2=by+(ay-by)*k2+S*0.25;
