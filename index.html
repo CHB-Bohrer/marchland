@@ -170,6 +170,19 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 .tapx{ position:absolute; width:30px; height:30px; border-radius:50%; border:2px solid var(--p1); color:var(--p1); background:var(--surface);
   display:flex; align-items:center; justify-content:center; font:700 15px/1 var(--body); pointer-events:none; animation:tapx 1.3s ease-out forwards; }
 
+/* caravans */
+.cvbtn{ border-style:dashed; }
+.cvbtn[aria-expanded="true"]{ background:var(--ink); color:var(--paper); border-color:var(--ink); border-style:solid; }
+.cvbtn[aria-expanded="true"] .cost{ color:var(--paper); opacity:.75; }
+.caravan{ border-top:1px solid var(--rule); padding:12px 12px 10px; background:var(--paper); }
+.cv-head{ font-size:14px; margin-bottom:8px; } .cv-head .muted{ font-size:13px; }
+.cv-row{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; }
+.cv-row input{ width:88px; } .cv-row select{ min-width:170px; }
+.cv-row label i{ font-style:normal; text-transform:none; letter-spacing:0; opacity:.8; }
+.cv-eta{ margin:8px 0 0; font-size:13px; }
+.cv-list{ margin-top:6px; font-size:13px; }
+.cv-list div{ padding:5px 0; border-top:1px dashed var(--rule); }
+.cv-list .muted{ font-size:12px; }
 /* the next-step coach: always says what a good next move is, and can point at it */
 .coach{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--rule); background:var(--surface); box-shadow:inset 3px 0 0 var(--brass); font-size:14px; line-height:1.4; }
 .coach-tag{ font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--brass); white-space:nowrap; flex:0 0 auto; }
@@ -326,6 +339,21 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
         <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">1 march / 3 cells</span></button>
         <button id="m-break" aria-pressed="false">Break bridge <span class="cost">2 marches</span></button>
+        <button id="m-caravan" class="cvbtn" aria-expanded="false" aria-controls="caravan">Caravan <span class="cost">gift goods · no marches</span></button>
+      </div>
+
+      <div class="caravan hide" id="caravan">
+        <div class="cv-head"><b>Send a caravan</b> <span class="muted">A gift of any goods you hold. It costs no marches, but the wagon takes time on the road.</span></div>
+        <div class="cv-row">
+          <div class="field"><label for="cv-to">Send to</label><select id="cv-to"></select></div>
+          <div class="field"><label for="cv-stone">Stone <i id="cvh-stone"></i></label><input id="cv-stone" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label for="cv-timber">Timber <i id="cvh-timber"></i></label><input id="cv-timber" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label for="cv-iron">Iron <i id="cvh-iron"></i></label><input id="cv-iron" type="number" min="0" step="5" inputmode="numeric" placeholder="0"></div>
+          <div class="field"><label for="cv-grain">Grain <i id="cvh-grain"></i></label><input id="cv-grain" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
+          <button id="cv-send" class="go">Send caravan</button>
+        </div>
+        <p class="muted cv-eta" id="cv-eta"></p>
+        <div class="cv-list" id="cv-list"></div>
       </div>
 
       <div class="status" id="status"><span>Loading…</span></div>
@@ -560,7 +588,7 @@ var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pull
 var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
-  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{}, events:{} };
+  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{}, events:{}, caravans:{} };
 }
 function cellOf(q,r){
   var c=G.cells[key(q,r)];
@@ -842,10 +870,11 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},othersOf(G.players)]);
+  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},othersOf(G.players)]);
   G.cells=remote.cells||{}; tidyBoard(G);
   G.claims=remote.claims||{};
   G.events=remote.events||{};
+  G.caravans=remote.caravans||{};
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -855,7 +884,7 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,G.events,othersOf(G.players)])!==before;
+  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,othersOf(G.players)])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -2009,6 +2038,7 @@ function draw(){
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
+  drawCaravans(now,amb);
   if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
@@ -2135,6 +2165,7 @@ function describe(e){
   if(e.k==='br') return who+' started a bridge.';
   if(e.k==='mv') return who+' moved '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' up.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
+  if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
   if(e.k==='m') return who+' marched into new ground.';
   var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
   return e.prev===ME ? who+' <span class="bad">took one of your cells</span>'+lost+'.' : who+' took a cell from '+esc(nameOf(e.prev))+lost+'.';
@@ -2586,6 +2617,7 @@ function render(){
   if(!G||!me()) return;
   G.claims=G.claims||{};
   settleMine();
+  settleCaravans();
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
   document.getElementById('v-timber').textContent=Math.round(pl.res.timber);
@@ -2637,6 +2669,7 @@ function render(){
   document.getElementById('mydot').style.background=pColor(ME);
   renderClaims();
   renderCoach();
+  if(!document.getElementById('caravan').classList.contains('hide')) cvPanel();
   draw();
 }
 
@@ -2724,6 +2757,7 @@ function renderNotice(list){
       lines.push('<span><b>'+esc(nameOf(c.pid))+'</b>&rsquo;s claim of '+c.steps.toLocaleString()+' steps is disputed and needs your vote — it&rsquo;s in the claim log below.</span>');
     }
   });
+  caravanNotices(lines);
   var n=document.getElementById('claimnote');
   n.innerHTML=lines.join('');
   n.classList.toggle('hide',!lines.length);
@@ -2950,7 +2984,7 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; myRev=remote.rev||0; tidyBoard(G); }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; myRev=remote.rev||0; tidyBoard(G); }
     else G=blankGame(gameCode);
     var ex=G.players[tryPid];
     if(ex && ex.pin && ex.pin!==tryHash){
@@ -3013,6 +3047,157 @@ document.getElementById('leave').addEventListener('click',function(){
   // forget the name on this device so the next person can type theirs
   push().then(function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); });
 });
+
+/* ═══ caravans ═════════════════════════════════════════════════════════
+   A caravan is a gift: any of your stone, timber, iron or grain, sent to
+   another player. It costs no marches. The goods leave your stores at once and
+   travel by wagon from your keep to theirs, six minutes a cell (half an hour at
+   least, eight hours at most), and everyone can watch it roll across the map.
+   The sender's tab writes the caravan; the receiver's tab, the first time it
+   sees one that has arrived, adds the goods to its own stores and marks it
+   delivered, so the goods wait at the gate if the receiver is away.        */
+var CV_MS_CELL=6*60000, CV_MIN=30*60000, CV_MAX=8*36e5, GOODS=['stone','timber','iron','grain'];
+function goodsLine(g){
+  var p=[]; GOODS.forEach(function(k){ if(g[k]>0) p.push(g[k]+' '+k); });
+  if(!p.length) return 'nothing';
+  return p.length<2 ? p[0] : p.slice(0,-1).join(', ')+' and '+p[p.length-1];
+}
+function cvTravel(fromPid,toPid){
+  var a=G.players[fromPid], b=G.players[toPid]; if(!a||!b) return CV_MIN;
+  return Math.max(CV_MIN,Math.min(CV_MAX,hexDist(a.q,a.r,b.q,b.r)*CV_MS_CELL));
+}
+function fmtDur(ms){
+  var m=Math.max(1,Math.round(ms/60000));
+  return m<60 ? m+' min' : Math.floor(m/60)+'h'+(m%60?' '+(m%60)+'m':'');
+}
+function cvPanel(){
+  var pl=me(); if(!pl) return;
+  var sel=document.getElementById('cv-to'), keep=sel.value;
+  var others=Object.keys(G.players).filter(function(p){ return p!==ME; })
+    .sort(function(a,b){ return G.players[a].name.toLowerCase().localeCompare(G.players[b].name.toLowerCase()); });
+  var opts=others.length ? others.map(function(p){ return '<option value="'+p+'">'+esc(G.players[p].name)+'</option>'; }).join('') : '<option value="">nobody else yet</option>';
+  if(sel.getAttribute('data-sig')!==opts){ sel.innerHTML=opts; sel.setAttribute('data-sig',opts); if(keep && G.players[keep]) sel.value=keep; }   // rebuilt only when the list changes, so an open menu isn't snatched away
+  GOODS.forEach(function(k){ document.getElementById('cvh-'+k).textContent='· '+Math.floor(pl.res[k]||0); });
+  var to=sel.value, eta=document.getElementById('cv-eta');
+  if(to){ var a=G.players[ME], b=G.players[to], d=hexDist(a.q,a.r,b.q,b.r);
+    eta.innerHTML='The road to <b>'+esc(b.name)+'</b>&rsquo;s keep is '+d+' cells, so a caravan arrives in about <b>'+fmtDur(cvTravel(ME,to))+'</b>.'; }
+  else eta.textContent='Once someone else joins, you can send them goods.';
+  var mine=Object.keys(G.caravans||{}).map(function(id){ var c=G.caravans[id]; return c; })
+    .filter(function(c){ return (c.from===ME||c.to===ME) && !c.got && c.eta>Date.now()-60000; })
+    .sort(function(a,b){ return a.eta-b.eta; });
+  document.getElementById('cv-list').innerHTML=mine.map(function(c){
+    var out=c.from===ME, who=esc(nameOf(out?c.to:c.from));
+    return '<div>'+(out?'&rarr; To <b>'+who+'</b>':'&larr; From <b>'+who+'</b>')+': '+goodsLine(c.g||{})+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
+  }).join('');
+}
+function sendCaravan(){
+  var pl=me(), btn=document.getElementById('cv-send'), to=document.getElementById('cv-to').value;
+  if(!to||!G.players[to]) return nope('There&rsquo;s nobody to send a caravan to yet &mdash; once someone else joins, you can.',btn);
+  var g={}, any=false, short=[];
+  GOODS.forEach(function(k){
+    var v=Math.floor(parseFloat(document.getElementById('cv-'+k).value)||0);
+    if(v<0) v=0;
+    if(v>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')');
+    g[k]=v; if(v>0) any=true;
+  });
+  if(!any) return nope('Put something in the wagon first &mdash; type how much stone, timber, iron or grain to send.',btn);
+  if(short.length) return nope('<span class="bad">Not enough to send.</span> You&rsquo;re short of '+short.join(' and ')+'.',btn);
+  var now=Date.now(), id=ME+'-'+now.toString(36), them=G.players[to];
+  GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
+  var c={from:ME, to:to, g:g, t:now, eta:now+cvTravel(ME,to), fq:pl.q, fr:pl.r, tq:them.q, tr:them.r};
+  G.caravans=G.caravans||{}; G.caravans[id]=c;
+  GOODS.forEach(function(k){ document.getElementById('cv-'+k).value=''; });
+  pushMe().then(function(){ return putPath('/caravans/'+id,c); });
+  logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g});
+  render();
+  say('Caravan on its way to <b>'+esc(them.name)+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map.');
+}
+/* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
+function settleCaravans(){
+  if(!G||!me()) return;
+  var pl=me(), now=Date.now(), mine=false, writes=[];
+  pl.cvGot=pl.cvGot||{};
+  Object.keys(G.caravans||{}).forEach(function(id){
+    var c=G.caravans[id]; if(!c) return;
+    if(c.to===ME && !c.got && c.eta<=now && !pl.cvGot[id]){
+      GOODS.forEach(function(k){ pl.res[k]=(pl.res[k]||0)+((c.g&&c.g[k])||0); });
+      pl.cvGot[id]=now; c.got=now; mine=true;
+      writes.push(['/caravans/'+id+'/got',now]);
+      var line=goodsLine(c.g||{}), from=esc(nameOf(c.from));
+      play({pid:ME,k:'claim',q:pl.q,r:pl.r,n:3,label:'Caravan: +'+line});
+      setTimeout(function(){ say('A caravan from <b>'+from+'</b> has arrived at your keep: <span class="good">'+line+'</span>.'); },50);
+    }
+    if(c.got && now-c.got>3*864e5){ delete G.caravans[id]; writes.push(['/caravans/'+id,null]); }
+    else if(!c.got && now-c.eta>14*864e5){ delete G.caravans[id]; writes.push(['/caravans/'+id,null]); }   // the receiver left the game
+  });
+  for(var k in pl.cvGot) if(now-pl.cvGot[k]>20*864e5){ delete pl.cvGot[k]; mine=true; }
+  if(!mine && !writes.length) return;
+  var chain=mine?pushMe():Promise.resolve();
+  if(writes.length) chain.then(function(){
+    if(!online) return pushAll();
+    return Promise.all(writes.map(function(w){ return dbPut('/marchland/'+gameCode+w[0],w[1]); })).then(bumpRev).then(ok,fail);
+  });
+}
+function caravanNotices(lines){
+  Object.keys(G.caravans||{}).forEach(function(id){
+    var c=G.caravans[id]; if(!c||c.to!==ME||c.got||c.eta<=Date.now()) return;
+    lines.push('<span>A caravan from <b>'+esc(nameOf(c.from))+'</b> is on its way to you with '+goodsLine(c.g||{})+'. It arrives in '+fmtDur(c.eta-Date.now())+'.</span>');
+  });
+}
+/* the wagon on the road: drawn even with animations off, since it shows where your goods are */
+function drawCaravans(now,amb){
+  var list=Object.keys(G.caravans||{}), t=Date.now();
+  if(!list.length) return;
+  list.forEach(function(id){
+    var c=G.caravans[id]; if(!c||c.got||t>=c.eta||t<c.t) return;
+    var k=(t-c.t)/(c.eta-c.t);
+    var A=nearCopy(c.fq,c.fr,viewQ,viewR), B=nearCopy(c.tq,c.tr,A[0],A[1]);
+    var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
+    if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
+    var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1;
+    artCaravan(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face);
+    if((c.from===ME||c.to===ME) && S>=12){
+      var lab=(c.from===ME?'to '+nameOf(c.to):'from '+nameOf(c.from))+' · '+fmtDur(c.eta-t);
+      artLabel(ctx,P[0],P[1]+S*0.2+Math.max(10,S)*0.42,lab,Math.max(10,S*0.3),pColor(c.from),1);
+    }
+  });
+}
+function artCaravan(g,x,y,s,col,t,face){
+  var z=s*0.62, walk=t?Math.sin(t*6):0;
+  g.save(); g.translate(x,y); g.scale(face,1);
+  blob(g,0,z*0.36,z*1.25,z*0.16,NAT.shadow);
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.8,z*0.07); g.lineCap='round';    // the ox, leaning into the yoke
+  g.beginPath(); [0.55,0.75,0.98,1.12].forEach(function(o,i){ var sw=(i%2?1:-1)*walk*z*0.06; g.moveTo(z*o,z*0.05); g.lineTo(z*o+sw,z*0.32); }); g.stroke();
+  blob(g,z*0.85,-z*0.02,z*0.33,z*0.17,NAT_DARK?'#8C6A4A':'#7A5B3E');
+  blob(g,z*1.22,-z*0.08+walk*z*0.015,z*0.12,z*0.1,NAT_DARK?'#7A5B3E':'#6A4E34');
+  g.beginPath(); g.moveTo(z*1.18,-z*0.17); g.lineTo(z*1.1,-z*0.27); g.moveTo(z*1.27,-z*0.17); g.lineTo(z*1.34,-z*0.27); g.stroke();
+  g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.8,z*0.05);
+  g.beginPath(); g.moveTo(z*0.32,-z*0.02); g.lineTo(z*0.6,-z*0.04); g.stroke();
+  poly(g,[[-z*0.72,-z*0.18],[z*0.32,-z*0.18],[z*0.32,z*0.12],[-z*0.72,z*0.12]],NAT.wood,NAT.wood2,Math.max(0.6,z*0.04));   // the wagon bed
+  g.beginPath(); g.moveTo(-z*0.68,-z*0.18); g.bezierCurveTo(-z*0.68,-z*0.78,z*0.28,-z*0.78,z*0.28,-z*0.18); g.closePath();   // its canvas cover
+  g.fillStyle=NAT_DARK?'#E4DCC6':'#FBF6E8'; g.fill(); g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.6,z*0.035); g.stroke();
+  g.strokeStyle=col; g.lineWidth=Math.max(1.2,z*0.09);
+  g.beginPath(); g.moveTo(-z*0.58,-z*0.34); g.bezierCurveTo(-z*0.5,-z*0.62,z*0.12,-z*0.62,z*0.18,-z*0.34); g.stroke();
+  [-z*0.48,z*0.12].forEach(function(wx){                                         // wheels, turning as it rolls
+    g.beginPath(); g.arc(wx,z*0.14,z*0.17,0,6.284); g.fillStyle=NAT.wood2; g.fill();
+    g.beginPath(); g.arc(wx,z*0.14,z*0.12,0,6.284); g.fillStyle=NAT.wood; g.fill();
+    g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath();
+    for(var i=0;i<4;i++){ var a=i*Math.PI/4+(t||0)*3; g.moveTo(wx+Math.cos(a)*z*0.12,z*0.14+Math.sin(a)*z*0.12); g.lineTo(wx-Math.cos(a)*z*0.12,z*0.14-Math.sin(a)*z*0.12); }
+    g.stroke();
+  });
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04);                       // a pennant in the sender's colour
+  g.beginPath(); g.moveTo(-z*0.2,-z*0.62); g.lineTo(-z*0.2,-z*0.98); g.stroke();
+  poly(g,[[-z*0.2,-z*0.98],[-z*0.2+z*0.3,-z*0.9+walk*z*0.02],[-z*0.2,-z*0.82]],col,NAT.line,Math.max(0.5,z*0.025));
+  g.restore();
+  if(s>=18) artPerson(g,x+face*(-z*0.95),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});   // the carter walking alongside
+}
+document.getElementById('m-caravan').addEventListener('click',function(){
+  var box=document.getElementById('caravan'), open=box.classList.contains('hide');
+  box.classList.toggle('hide',!open); this.setAttribute('aria-expanded',String(open));
+  if(open){ cvPanel(); say('Choose who the caravan goes to and what to load. Sending it costs no marches.'); }
+});
+document.getElementById('cv-to').addEventListener('change',cvPanel);
+document.getElementById('cv-send').addEventListener('click',sendCaravan);
 
 /* ═══ the next-step coach ════════════════════════════════════════════
    A strip above the map always names one good next move, worked out from the
