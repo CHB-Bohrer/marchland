@@ -3051,12 +3051,12 @@ document.getElementById('leave').addEventListener('click',function(){
 /* ═══ caravans ═════════════════════════════════════════════════════════
    A caravan is a gift: any of your stone, timber, iron or grain, sent to
    another player. It costs no marches. The goods leave your stores at once and
-   travel by wagon from your keep to theirs, twenty minutes a cell (two hours at
-   least, a full day at most), and everyone can watch it roll across the map.
+   travel by wagon from your keep to theirs, forty minutes a cell (six hours at
+   least, two days at most), and everyone can watch it roll across the map.
    The sender's tab writes the caravan; the receiver's tab, the first time it
    sees one that has arrived, adds the goods to its own stores and marks it
    delivered, so the goods wait at the gate if the receiver is away.        */
-var CV_MS_CELL=20*60000, CV_MIN=2*36e5, CV_MAX=24*36e5, GOODS=['stone','timber','iron','grain'];
+var CV_MS_CELL=40*60000, CV_MIN=6*36e5, CV_MAX=48*36e5, GOODS=['stone','timber','iron','grain'];
 function goodsLine(g){
   var p=[]; GOODS.forEach(function(k){ if(g[k]>0) p.push(g[k]+' '+k); });
   if(!p.length) return 'nothing';
@@ -3068,7 +3068,10 @@ function cvTravel(fromPid,toPid){
 }
 function fmtDur(ms){
   var m=Math.max(1,Math.round(ms/60000));
-  return m<60 ? m+' min' : Math.floor(m/60)+'h'+(m%60?' '+(m%60)+'m':'');
+  if(m<60) return m+' min';
+  if(m<24*60) return Math.floor(m/60)+'h'+(m%60?' '+(m%60)+'m':'');
+  var h=Math.round(m/60), d=Math.floor(h/24);                       // a long road reads better in days
+  return d+(d>1?' days':' day')+(h%24?' '+(h%24)+'h':'');
 }
 function cvPanel(){
   var pl=me(); if(!pl) return;
