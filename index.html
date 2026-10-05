@@ -3051,12 +3051,12 @@ document.getElementById('leave').addEventListener('click',function(){
 /* ═══ caravans ═════════════════════════════════════════════════════════
    A caravan is a gift: any of your stone, timber, iron or grain, sent to
    another player. It costs no marches. The goods leave your stores at once and
-   travel by wagon from your keep to theirs, six minutes a cell (half an hour at
-   least, eight hours at most), and everyone can watch it roll across the map.
+   travel by wagon from your keep to theirs, twenty minutes a cell (two hours at
+   least, a full day at most), and everyone can watch it roll across the map.
    The sender's tab writes the caravan; the receiver's tab, the first time it
    sees one that has arrived, adds the goods to its own stores and marks it
    delivered, so the goods wait at the gate if the receiver is away.        */
-var CV_MS_CELL=6*60000, CV_MIN=30*60000, CV_MAX=8*36e5, GOODS=['stone','timber','iron','grain'];
+var CV_MS_CELL=20*60000, CV_MIN=2*36e5, CV_MAX=24*36e5, GOODS=['stone','timber','iron','grain'];
 function goodsLine(g){
   var p=[]; GOODS.forEach(function(k){ if(g[k]>0) p.push(g[k]+' '+k); });
   if(!p.length) return 'nothing';
