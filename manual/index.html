@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
 <meta property="og:title" content="Marchland Field Manual">
-<meta property="og:description" content="Twelve chapters on how Marchland works, with narration.">
+<meta property="og:description" content="Thirteen chapters on how Marchland works, with narration.">
 <meta property="og:type" content="website">
 <style>
   html,body{margin:0;padding:0}
@@ -133,7 +133,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">A short opening, then twelve chapters — about five minutes in all, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
+  <p class="standfirst">A short opening, then thirteen chapters — about five and a half minutes in all, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -141,7 +141,7 @@ footer a:hover{ color:var(--ink); }
 <div class="stage">
   <div class="stagewrap">
     <canvas id="stage" width="760" height="470" role="img" aria-label="Animated diagram of the current rule"></canvas>
-    <button id="start" class="start">&#9654;&ensp;Start the tour <span>narrated &middot; about 3&frac12; minutes</span></button>
+    <button id="start" class="start">&#9654;&ensp;Start the tour <span>narrated &middot; about 4 minutes</span></button>
   </div>
   <div class="bar"><i id="bar"></i></div>
   <div class="hud" id="hud"></div>
@@ -176,6 +176,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
     <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
+    <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 6 minutes a cell between the two keeps (half an hour at least, 8 hours at most). Goods wait at the gate if the receiver is away</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
   </dl>
@@ -1409,7 +1410,92 @@ scene({
   }
 });
 
-/* 8 ── one claim a day */
+/* 8 ── caravans: gifts of goods between players */
+function artCaravan(g,x,y,s,col,t,face){
+  var z=s*0.62, walk=t?Math.sin(t*6):0;
+  g.save(); g.translate(x,y); g.scale(face,1);
+  blob(g,0,z*0.36,z*1.25,z*0.16,NAT.shadow);
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.8,z*0.07); g.lineCap='round';
+  g.beginPath(); [0.55,0.75,0.98,1.12].forEach(function(o,i){ var sw=(i%2?1:-1)*walk*z*0.06; g.moveTo(z*o,z*0.05); g.lineTo(z*o+sw,z*0.32); }); g.stroke();
+  blob(g,z*0.85,-z*0.02,z*0.33,z*0.17,NAT_DARK?'#8C6A4A':'#7A5B3E');
+  blob(g,z*1.22,-z*0.08+walk*z*0.015,z*0.12,z*0.1,NAT_DARK?'#7A5B3E':'#6A4E34');
+  g.beginPath(); g.moveTo(z*1.18,-z*0.17); g.lineTo(z*1.1,-z*0.27); g.moveTo(z*1.27,-z*0.17); g.lineTo(z*1.34,-z*0.27); g.stroke();
+  g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.8,z*0.05);
+  g.beginPath(); g.moveTo(z*0.32,-z*0.02); g.lineTo(z*0.6,-z*0.04); g.stroke();
+  poly(g,[[-z*0.72,-z*0.18],[z*0.32,-z*0.18],[z*0.32,z*0.12],[-z*0.72,z*0.12]],NAT.wood,NAT.wood2,Math.max(0.6,z*0.04));
+  g.beginPath(); g.moveTo(-z*0.68,-z*0.18); g.bezierCurveTo(-z*0.68,-z*0.78,z*0.28,-z*0.78,z*0.28,-z*0.18); g.closePath();
+  g.fillStyle=NAT_DARK?'#E4DCC6':'#FBF6E8'; g.fill(); g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.6,z*0.035); g.stroke();
+  g.strokeStyle=col; g.lineWidth=Math.max(1.2,z*0.09);
+  g.beginPath(); g.moveTo(-z*0.58,-z*0.34); g.bezierCurveTo(-z*0.5,-z*0.62,z*0.12,-z*0.62,z*0.18,-z*0.34); g.stroke();
+  [-z*0.48,z*0.12].forEach(function(wx){
+    g.beginPath(); g.arc(wx,z*0.14,z*0.17,0,6.284); g.fillStyle=NAT.wood2; g.fill();
+    g.beginPath(); g.arc(wx,z*0.14,z*0.12,0,6.284); g.fillStyle=NAT.wood; g.fill();
+    g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath();
+    for(var i=0;i<4;i++){ var a=i*Math.PI/4+(t||0)*3; g.moveTo(wx+Math.cos(a)*z*0.12,z*0.14+Math.sin(a)*z*0.12); g.lineTo(wx-Math.cos(a)*z*0.12,z*0.14-Math.sin(a)*z*0.12); }
+    g.stroke();
+  });
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04);
+  g.beginPath(); g.moveTo(-z*0.2,-z*0.62); g.lineTo(-z*0.2,-z*0.98); g.stroke();
+  poly(g,[[-z*0.2,-z*0.98],[-z*0.2+z*0.3,-z*0.9+walk*z*0.02],[-z*0.2,-z*0.82]],col,NAT.line,Math.max(0.5,z*0.025));
+  g.restore();
+  artPerson(g,x+face*(-z*0.95),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});
+}
+var CV_HOME=[-2,0], CV_KIT=[5,-1], CV_GO=6.4, CV_ROAD=9.0, CV_BACK=18.6;
+scene({
+  tag:'Caravans', title:'Send goods as a gift',
+  body:'A caravan carries a gift to another player: any stone, timber, iron or grain you hold. It costs no marches. The goods leave your stores at once and travel by wagon from your keep to theirs, so the farther apart you are, the longer the journey (a few hours across a typical board). When it arrives the goods are theirs to spend, and if they are away they wait at the gate. Send one to help a friend at the front, or settle a trade by sending caravans both ways.',
+  dur:24,
+  init:function(){
+    M=blank(); M.card=null; M.loaded=null; M.arrived=null; M.back=null;
+    put(CV_HOME[0],CV_HOME[1],{o:'you',k:'castle'});
+    [[-1,0],[-1,-1],[-2,-1],[-3,0],[-3,1],[-2,1],[0,-1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    put(CV_KIT[0],CV_KIT[1],{o:'rival',k:'castle'});
+    [[4,-1],[6,-1],[5,-2],[6,-2],[4,0],[5,0]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    M.hud=[['Marches','8'],['Your stone','120'],['Your grain','100']];
+  },
+  beats:[
+    [0.8,function(n){ M.card=n; M.note='A caravan carries a gift to another player — any goods you hold.'; }],
+    [3.8,function(n){ M.loaded=n; M.note='Loading it costs no marches, only the goods themselves.'; M.hud=[['Marches','8 — none spent'],['Your stone','80'],['Your grain','40']]; }],
+    [CV_GO,function(){ M.note='The wagon takes time on the road: the farther apart your keeps, the longer the journey.'; M.hud=[['Marches','8'],['Caravan','on the road to Kit']]; }],
+    [CV_GO+CV_ROAD-0.05,function(n){ M.arrived=n; grab('claim',CV_KIT,null,n,{n:3,label:'+40 stone · +60 grain',col:T.p0}); }],
+    [CV_GO+CV_ROAD+0.2,function(){ M.note='It arrives. The goods are Kit’s to spend — and if Kit is away, they wait at the gate.'; M.hud=[['Kit’s stone','+40'],['Kit’s grain','+60']]; }],
+    [CV_BACK,function(n){ M.back=n; M.note='Trading works the same way: Kit sends iron back by return caravan.'; M.hud=[['Kit’s reply','30 iron, on its way to you']]; }]
+  ],
+  draw:function(now){
+    drawBoard(now);
+    var ax=hx(CV_HOME[0],CV_HOME[1]), ay=hy(CV_HOME[0],CV_HOME[1]), bx=hx(CV_KIT[0],CV_KIT[1]), by=hy(CV_KIT[0],CV_KIT[1]);
+    ctx.save(); ctx.setLineDash([3,7]); ctx.lineCap='round'; ctx.strokeStyle=rgba(T.brass,0.6); ctx.lineWidth=2.2;   // the road
+    ctx.beginPath(); ctx.moveTo(ax,ay+S*0.25); ctx.lineTo(bx,by+S*0.25); ctx.stroke(); ctx.restore();
+    var anim=REDUCED?0:now;
+    if(now>=CV_GO && now<CV_GO+CV_ROAD){
+      var k=(now-CV_GO)/CV_ROAD, x=ax+(bx-ax)*k, y=ay+(by-ay)*k+S*0.25;
+      artCaravan(ctx,x,y,S,T.p0,anim,1);
+      artLabel(ctx,x,y+S*0.55,'arrives in '+Math.floor(192*(1-k)/60)+'h '+Math.round((192*(1-k))%60)+'m',13,T.p0,1);
+    }
+    if(M.back!=null){
+      var k2=Math.min(1,(now-M.back)/7.5), x2=bx+(ax-bx)*k2, y2=by+(ay-by)*k2+S*0.25;
+      artCaravan(ctx,x2,y2,S,T.p1,anim,-1);
+      artLabel(ctx,x2,y2+S*0.55,'30 iron for you',13,T.p1,1);
+    }
+    if(M.card!=null && now<CV_GO+0.6){                 // the loading slip
+      var kc=ease((now-M.card)/0.5)*(1-ease((now-CV_GO)/0.6)), kl=M.loaded!=null?ease((now-M.loaded)/1.2):0;
+      ctx.save(); ctx.globalAlpha=kc;
+      var cx=W-262, cy=H-154;                       // bottom right, clear of both keeps
+      ctx.fillStyle=T.surface; ctx.strokeStyle=T.rule; ctx.lineWidth=1;
+      ctx.fillRect(cx,cy,236,128); ctx.strokeRect(cx+0.5,cy+0.5,235,127);
+      labelText('CARAVAN TO KIT', cx+16, cy+20, 12, T['ink-2'],'left');
+      [['Stone',40],['Grain',60]].forEach(function(row,i){
+        labelText(row[0], cx+16, cy+50+i*26, 15, T.ink,'left');
+        bigText(String(Math.round(row[1]*kl)), cx+216, cy+50+i*26, 22, T.ink,'right');
+      });
+      labelText('Marches', cx+16, cy+102, 15, T.ink,'left');
+      bigText('0', cx+216, cy+102, 22, T.p0,'right');
+      ctx.restore();
+    }
+  }
+});
+
+/* 9 ── one claim a day */
 scene({
   tag:'One a day', title:'One claim a day, for that day',
   body:'Once a day, read that day’s step total off the Health app and claim it. Steps only count on the day they were walked: a day you don’t claim is gone, and nothing carries over to the next. A single day counts for 30,000 steps at most.',
@@ -1453,7 +1539,7 @@ scene({
   }
 });
 
-/* 9 ── claims and disputes */
+/* 10 ── claims and disputes */
 scene({
   tag:'Claims', title:'Every claim can be challenged',
   body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For a full day anyone else may dispute it, and the other players then vote for up to a day more. Voiding needs a majority of the other players who have logged in within the last 24 hours; anyone who has been away does not count. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
@@ -2083,6 +2169,7 @@ var NARRATION=[
  [[1.2, "n5_1", 2.74, "Stone builds walls, up to three courses deep."], [4.39, "n5_2", 2.16, "A tower covers every cell around it."], [7.0, "n5_3", 3.48, "Neither one stops an attack. They just make it cost soldiers."], [10.93, "n5_4", 3.07, "The cell falls, and four of your six soldiers fall with it."], [14.45, "n5_5", 3.65, "Towers need men inside them, and soldiers eat grain, forever."]],
  [[1.4, "n6_1", 2.18, "Land doesn't produce anything on its own."], [4.03, "n6_2", 4.49, "A cell only pays if there's an unbroken path from it, back to one of your castles."], [8.97, "n6_3", 3.36, "Now red takes a single cell, the neck of your eastern arm."], [12.78, "n6_4", 4.32, "Those four cells are still yours. But they're cut off, so they yield nothing."], [17.55, "n6_5", 2.66, "You didn't lose the ground. You lost the road to it."], [20.66, "n6_6", 4.2, "Cutting a supply line is usually cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 2.93, "A second castle is a campaign, not a purchase."], [4.78, "n7_2", 3.31, "No two of your keeps can stand within seven cells of each other."], [8.54, "n7_3", 2.71, "So building one means pushing your border out first."], [11.7, "n7_4", 3.29, "Now the eastern arm draws its supply from the new keep."], [15.44, "n7_5", 2.54, "And every castle costs more than the one before."], [18.43, "n7_6", 2.71, "And soldiers mustered there are already at the front."]],
+ [],   /* Caravans: not yet recorded, so this chapter shows its captions without a voice */
  [[0.8, "n8_1", 2.52, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.34, "Read the total off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.22, "Miss a day, and those steps are gone. They don't carry over."], [12.4, "n8_4", 3.05, "And one day counts for thirty thousand steps, at most."]],
  [[0.6, "n9_1", 4.39, "Every claim goes up on a public log, and its marches can be spent straight away."], [5.44, "n9_7", 3.94, "For a full day, anyone else can dispute it. Then the other players vote."], [9.95, "n9_3", 4.58, "It takes a majority of them to void a claim. Here, both of them vote to void it."], [14.98, "n9_4", 4.03, "Kit keeps what he has. But the fifteen marches come off his next claim."], [19.46, "n9_5", 4.85, "The next day he earns twenty. Fifteen pay off the debt, and five are his to spend."], [24.76, "n9_6", 4.27, "A screenshot from the Health app is the easiest way to avoid an argument."]],
  [[0.8, "b_1", 4.49, "Four keeps. One world. And every step you take is a soldier on the march."], [6.09, "b_2", 3.91, "Borders will meet. Bridges will fall. Towers will hold the line."], [10.8, "b_3", 3.7, "So walk far, choose your ground, and never leave a tower empty."], [17.2, "b_4", 1.18, "Prepare for battle."]]
