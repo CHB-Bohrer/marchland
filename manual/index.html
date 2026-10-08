@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
 <meta property="og:title" content="Marchland Field Manual">
-<meta property="og:description" content="Fourteen chapters on how Marchland works, with narration.">
+<meta property="og:description" content="Fifteen chapters on how Marchland works, with narration.">
 <meta property="og:type" content="website">
 <style>
   html,body{margin:0;padding:0}
@@ -133,7 +133,7 @@ footer a:hover{ color:var(--ink); }
 <header>
   <p class="eyebrow">Marchland · rules of play</p>
   <h1>Marchland Field Manual</h1>
-  <p class="standfirst">A short opening, then thirteen chapters — about five and a half minutes in all, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
+  <p class="standfirst">A short opening, then fourteen chapters — about six minutes in all, read aloud as it plays — mute your device if you would rather read along. Walking is the only currency in this game; everything below follows from that one rule.</p>
 </header>
 
 <nav class="rail" id="rail" aria-label="Chapters"></nav>
@@ -176,6 +176,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
     <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
+    <dt>Castle upkeep</dt><dd>A castle can&rsquo;t be built on a grain square and must be linked to one by an unbroken road of your own ground. With no farm connected it loses health every tick and falls after 5 days; reconnecting a farm heals it at the same rate. A fallen castle gives no supply and can be seized by a band beside it, destroying it and paying 50 marches</dd>
     <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 40 minutes a cell between the two keeps (6 hours at least, 2 days at most). Goods wait at the gate if the receiver is away</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
@@ -1190,7 +1191,7 @@ scene({
       M.take.forEach(function(e){ grab('battle',[e[0],e[1]],nearOwn(e[0],e[1],'you'),e[2]); });
     }],
     [8.0,function(){ M.note='Two cells taken, four marches gone. Doubling the price is what stops a border from collapsing in one evening.'; }],
-    [9.6,function(){ M.note='A keep can never be taken outright — it has to be starved out by cutting the ground around it. A tower can be torn down by a big enough band.'; }]
+    [9.6,function(){ M.note='A healthy castle can never be taken outright — cut it off from every farm and after five days it falls, and then it can be seized. A tower can be torn down by a big enough band.'; }]
   ],
   draw:function(now){
     if(M.take){
@@ -1364,23 +1365,23 @@ scene({
 /* 7 ── castles */
 scene({
   tag:'Castles', title:'Castles are meant to be rare',
-  body:'A second castle is a campaign, not a purchase. Each one costs more than the last, and no two of yours may stand within seven cells of each other — so a new keep means pushing the border a long way out first. Supply runs back to castles and soldiers are mustered at them, so where you put one shapes everything after.',
+  body:'A second castle is a campaign, not a purchase. Each one costs more than the last, and no two of yours may stand within seven cells of each other — so a new keep means pushing the border a long way out first. A castle can never stand on a grain square, and it must be linked to one by an unbroken road of your own ground — otherwise it starves. Supply runs back to castles and soldiers are mustered at them, so where you put one shapes everything after.',
   dur:22,
   init:function(){
     M=blank();
     put(0,0,{o:'you',k:'castle'});
-    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],[2,1],[3,-1],[3,0],[4,-1],[4,0],[4,1],[3,2],[5,0],[5,-1],[2,-2],[3,-2]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    [[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1],[2,-1],[2,0],[1,1],[2,1],[3,-1],[3,0],[4,-1],[4,0],[4,1],[3,2],[5,0],[5,-1],[2,-2],[3,-2],[6,-1],[6,0]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
     markSupply('you');
     M.hud=[['Castles','1'],['Next castle','more timber, stone and iron than the first']];
   },
   beats:[
     [1.4,function(){ M.ring=true; M.note='No second keep may stand inside seven cells of the first.'; }],
-    [5.2,function(n){ M.ring=false; grab('raise',[5,0],[4,0],n+2.35,{bk:'castle'});
-      M.note='Seven cells out, at the far edge of your ground — the first spot that qualifies.'; }],
-    [7.55,function(n){ put(5,0,{o:'you',k:'castle'},n); markSupply('you'); M.hud=[['Castles','2'],['Third castle','dearer again']]; }],
+    [5.2,function(n){ M.ring=false; grab('raise',[7,-1],[6,-1],n+2.35,{bk:'castle'});
+      M.note='Seven cells out, beside the fields and linked to them by your own ground — the first spot that qualifies.'; }],
+    [7.55,function(n){ put(7,-1,{o:'you',k:'castle'},n); markSupply('you'); M.hud=[['Castles','2'],['Third castle','dearer again']]; }],
     [8.0,function(){ M.note='Now the eastern arm draws supply from the new keep instead of the old one. Cutting you in half has become much harder.'; }],
     [10.6,function(){ M.note='Each castle after this costs more than the last, so most games are decided with two or three.'; }],
-    [18.4,function(n){ put(5,0,{o:'you',k:'castle',b:2},n); grab('muster',[5,0],null,n+0.05,{n:1}); M.note='And soldiers mustered at the new keep are already at the front — no long walk, no marches spent getting there.'; }]
+    [18.4,function(n){ put(7,-1,{o:'you',k:'castle',b:2},n); grab('muster',[7,-1],null,n+0.05,{n:1}); M.note='And soldiers mustered at the new keep are already at the front — no long walk, no marches spent getting there.'; }]
   ],
   draw:function(now){
     drawBoard(now);
@@ -1409,6 +1410,60 @@ scene({
     }
   }
 });
+
+/* 7b ── castle upkeep: a castle that loses its farm starves and can be seized.
+   No recorded narration yet — this chapter runs on captions alone, and the
+   lines to record are in NARRATION_TODO below. */
+scene({
+  tag:'Upkeep', title:'A castle must be fed',
+  body:'A castle can never stand on a grain square, and it must be linked to one by an unbroken road of your own ground. Cut that road, or take the farm, and the castle starts to starve: a little health every few hours, and after five days it falls. Reconnect a farm and it heals just as fast. A fallen castle gives no supply and holds no garrison — a band standing beside it can seize it, destroying it and earning fifty marches. This is what stops anyone from dropping a castle inside another player\'s land.',
+  dur:28,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    [[-1,0],[-1,1],[0,1],[1,1],[2,1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    [[0,2],[1,2],[2,2],[-1,2]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    put(1,2,{o:'rival',k:'castle'});
+    put(0,2,{o:'rival',b:3});
+    markSupply('you');
+    M.hud=[['Castle','fed'],['Farm','connected']];
+  },
+  beats:[
+    [1.4,function(){ M.note='Your castle is fed: a road of your own ground leads from it to a field.'; }],
+    [5.0,function(n){ grab('battle',[0,1],[0,2],n+2.35,{col:T.p1,dcol:T.p0}); M.note='Red takes the one cell that joined them — the road is cut.'; }],
+    [7.35,function(n){ put(0,1,{o:'rival',b:3},n); put(0,2,{b:0},n); markSupply('you'); }],
+    [9.0,function(){ M.hud=[['Castle','starving'],['Time left','5 days']]; M.note='No farm is connected now. The castle begins to starve — a little health every few hours.'; }],
+    [12.0,function(){ M.hud=[['Castle','starving'],['Time left','2 days']]; M.note='You can still save it: retake the cell, or link another farm to it.'; }],
+    [15.6,function(){ M.hud=[['Castle','fallen'],['Supply','none']]; M.note='Five days with no farm, and it falls. It gives no supply now, and its garrison walks out.'; }],
+    [18.0,function(n){ grab('battle',[0,0],[0,1],n+2.35,{col:T.p1,dcol:T.p0}); M.note='A band beside the ruin can seize it.'; }],
+    [20.35,function(n){ put(0,0,{o:'rival',k:null,b:2},n); put(0,1,{b:0},n); markSupply('you'); M.hud=[['Red','+50 marches'],['The castle','destroyed']]; }],
+    [21.0,function(){ M.note='Seizing a fallen castle destroys it and pays the captor fifty marches. A castle you keep fed is never at risk.'; }],
+    [24.6,function(){ M.note='Had a farm stayed connected, it would have healed as fast as it was losing health.'; }]
+  ],
+  draw:function(now){
+    drawBoard(now);
+    var c0=M.cells['0_0'];
+    if(c0 && c0.o==='you' && c0.k==='castle'){
+      var hp = now<9 ? 1 : Math.max(0,1-(now-9)/6.6);
+      var x=hx(0,0), y=hy(0,0), bw=S*0.8, bh=Math.max(3,S*0.1), by=y-S*0.7;
+      ctx.save();
+      if(hp<=0){ ctx.globalAlpha=0.5; ctx.fillStyle=T.paper; hexPath(x,y,S*0.92); ctx.fill(); }
+      ctx.globalAlpha=0.92; ctx.fillStyle=T.sink; ctx.fillRect(x-bw/2,by,bw,bh);
+      ctx.fillStyle = hp>0.34 ? T.p0 : T.p1; ctx.fillRect(x-bw/2,by,bw*hp,bh);
+      ctx.globalAlpha=0.7; ctx.strokeStyle=T.ink; ctx.lineWidth=1; ctx.strokeRect(x-bw/2,by,bw,bh);
+      ctx.restore();
+      if(hp<=0) labelText('FALLEN',x,y+S*0.02,Math.max(10,S*0.28),T.p1);
+    }
+  }
+});
+
+/* lines to record for the Upkeep chapter, in the same gruff voice as the rest:
+   [0.8]  A castle must be fed, warrior. Build it beside a field, and keep a road to that field.
+   [5.0]  Red cuts the road!
+   [9.0]  No farm, no food. The castle starves, a little every few hours.
+   [15.6] Five days. The castle falls.
+   [18.0] And a band beside the ruin can seize it. Fifty marches to the victor!
+   [24.4] Keep your fields. Keep your roads. */
 
 /* 8 ── caravans: gifts of goods between players */
 function artCaravan(g,x,y,s,col,t,face){
@@ -1440,7 +1495,7 @@ function artCaravan(g,x,y,s,col,t,face){
   g.restore();
   artPerson(g,x+face*(-z*0.95),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});
 }
-var CV_HOME=[-2,0], CV_KIT=[5,-1], CV_GO=6.4, CV_ROAD=9.0, CV_BACK=18.6;
+var CV_HOME=[-2,0], CV_KIT=[6,-1], CV_GO=6.4, CV_ROAD=9.0, CV_BACK=18.6;
 scene({
   tag:'Caravans', title:'Send goods as a gift',
   body:'A caravan carries a gift to another player: any stone, timber, iron or grain you hold. It costs no marches. The goods leave your stores at once and travel by wagon from your keep to theirs, so the farther apart you are, the longer the journey (around half a day across a typical board, and up to two days). When it arrives the goods are theirs to spend, and if they are away they wait at the gate. Send one to help a friend at the front, or settle a trade by sending caravans both ways.',
@@ -2170,6 +2225,7 @@ var NARRATION=[
  [[1.2, "n5_1", 2.81, "Stone builds walls, three courses deep."], [4.39, "n5_2", 2.42, "A tower covers every cell around it."], [7.0, "n5_3", 3.19, "Neither stops an attack. They make it cost soldiers."], [10.93, "n5_4", 2.88, "The cell falls. Four of your six fall with it."], [14.45, "n5_5", 4.1, "Towers need men inside. And soldiers eat grain, forever!"]],
  [[1.4, "n6_1", 2.23, "Land gives nothing on its own."], [4.03, "n6_2", 4.34, "A cell pays only if an unbroken road leads home to your castle."], [8.97, "n6_3", 3.6, "Now Red seizes one cell. The neck of your eastern arm!"], [12.78, "n6_4", 4.03, "Those four cells are still yours. But cut off, they yield nothing."], [17.55, "n6_5", 2.35, "You kept the land. You lost the road."], [20.66, "n6_6", 5.93, "Remember this, warrior. Cutting a supply line is often cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 3.38, "A second castle is won by campaign, not bought."], [4.78, "n7_2", 3.22, "No two of your keeps may stand within seven cells."], [8.54, "n7_3", 2.42, "So first, push your border far out."], [11.7, "n7_4", 3.36, "Now the eastern arm draws supply from the new keep."], [15.44, "n7_5", 2.45, "Every castle costs more than the last."], [18.43, "n7_6", 3.36, "And soldiers mustered there stand already at the front!"]],
+ [],
  [[0.8, "cv_1", 2.78, "A caravan carries gifts to another warrior."], [3.8, "cv_2", 2.71, "It costs no marches. Only the goods."], [6.4, "cv_3", 5.11, "The wagon takes time on the road. The farther apart your keeps, the longer the journey."], [11.9, "cv_4", 3.55, "If Kit is away when it comes, the goods wait at his gate."], [15.6, "cv_5", 2.52, "It arrives! The goods are his to spend."], [18.6, "cv_6", 4.66, "Trade works the same way. Kit sends iron back, by return caravan!"]],
  [[0.8, "n8_1", 2.86, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.7, "Read the count off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.79, "Miss a day, and those steps are lost. Nothing carries over."], [12.4, "n8_4", 3.22, "And no day counts for more than thirty thousand steps."]],
  [[0.6, "n9_1", 4.13, "Every claim goes on a public log, and its marches spend at once."], [5.44, "n9_7", 4.22, "For a full day, any warrior may dispute it. Then the others vote."], [9.95, "n9_3", 4.61, "A majority must vote to void a claim. Here, both vote to void it."], [14.98, "n9_4", 4.34, "Kit keeps what he has. But fifteen marches come off his next claim."], [19.46, "n9_5", 4.87, "Next day he earns twenty. Fifteen pay the debt. Five are his to spend."], [24.76, "n9_6", 4.3, "A screenshot from the Health app ends most quarrels before they start."]],

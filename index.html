@@ -150,6 +150,19 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 .status.nope{ animation:nopeflash 2.4s ease-out; }
 @keyframes nudge{ 0%,100%{ transform:none; } 50%{ transform:translateX(4px); } }
 .status.nope::before{ content:"\279C"; color:var(--p1); font-size:15px; margin-right:9px; display:inline-block; animation:nudge .7s ease-in-out 4; }
+/* one-time announcement of a rules change */
+.notice{ position:fixed; inset:0; z-index:100010; background:rgba(10,17,20,.62); display:flex; align-items:center; justify-content:center;
+  padding:max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px)); overflow-y:auto; }
+.notice-card{ background:var(--surface); color:var(--ink); border:1px solid var(--rule); border-top:5px solid var(--p1); border-radius:3px;
+  max-width:600px; width:100%; max-height:calc(100vh - 32px); overflow-y:auto; padding:26px 28px 24px; box-shadow:0 18px 60px rgba(0,0,0,.4); }
+.notice-eyebrow{ font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--p1); margin:0 0 8px; }
+.notice-card h2{ font-family:var(--display); font-size:30px; line-height:1.1; margin:0 0 10px; font-weight:700; }
+.notice-card h3{ font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2); margin:18px 0 6px; font-weight:500; }
+.notice-card p{ font-size:15px; line-height:1.5; margin:0 0 8px; }
+.notice-card ul{ margin:0; padding-left:20px; } .notice-card li{ font-size:15px; line-height:1.5; margin:0 0 6px; }
+.notice-mine{ background:var(--paper); border-left:4px solid var(--p1); padding:10px 13px; margin:16px 0 0; font-size:14.5px; line-height:1.45; }
+.notice-go{ margin-top:20px; width:100%; justify-content:center; font-size:15px; padding:12px 16px; background:var(--ink); color:var(--paper); border-color:var(--ink); }
+@media (max-width:480px){ .notice-card{ padding:20px 18px 18px; } .notice-card h2{ font-size:25px; } }
 /* the pointer to the explanation, when it is off screen */
 .why{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(58px + env(safe-area-inset-bottom, 0px)); z-index:100002;
   max-width:min(560px, calc(100% - 32px)); background:var(--ink); color:var(--paper); border:0; border-radius:999px;
@@ -404,6 +417,25 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     </div>
   </div>
 
+</div>
+
+<!-- ── one-time announcement: castle rules (shown once per player, see showNotice) ── -->
+<div id="notice" class="notice hide" role="dialog" aria-modal="true" aria-labelledby="notice-h">
+  <div class="notice-card">
+    <p class="notice-eyebrow">Rules change &middot; read this</p>
+    <h2 id="notice-h">Castles now need farms</h2>
+    <p>A castle can no longer be planted anywhere you like, and a castle with no food will fall.</p>
+    <h3>What changed</h3>
+    <ul>
+      <li><b>Where you can build one.</b> Never on a grain square (&equiv;), and only where your own unbroken ground links it to a farm you hold &mdash; the same kind of road that carries supply.</li>
+      <li><b>Keeping it standing.</b> If no farm is connected to a castle, it loses health every 4 hours and <b>falls after 5 days</b>. Reconnect a farm and it heals at exactly the rate it was losing health.</li>
+      <li><b>When it falls.</b> A fallen castle gives no supply, no grain and holds no garrison. A band standing beside it can <b>seize it</b>, which destroys it &mdash; and the captor gets <b>50 marches</b>. Healthy castles still cannot be stormed.</li>
+    </ul>
+    <h3>Why</h3>
+    <p>Before this, you could march into another player&rsquo;s land and drop a castle right there, with soldiers mustering at their border within a day. Now a castle has to be connected to your own farms &mdash; so a keep planted inside enemy ground starves as soon as the road to it is cut, and then it can be taken.</p>
+    <div class="notice-mine hide" id="notice-mine"></div>
+    <button type="button" class="notice-go" id="notice-go">Got it &mdash; let&rsquo;s play</button>
+  </div>
 </div>
 
 <!-- ── pointer to the reason an action was refused (shown only when that reason is off screen) ── -->
@@ -1958,11 +1990,12 @@ function drawBuilding(c,cx,cy,r,col,detail){
     }
   }
   if(c.k===CASTLE && c.h!=null){                      // health bar (only while below full) and a faded wash once it has fallen
-    var hf=Math.max(0,c.h)/CASTLE_MAX_H, bw=r*1.0, bh=Math.max(2,r*0.09), bx=cx-bw/2, by=cy-r*0.86;
+    var hf=Math.max(0,c.h)/CASTLE_MAX_H, bw=r*0.8, bh=Math.max(2,r*0.09), bx=cx-bw/2, by=cy-r*0.7;
     ctx.save();
     if(hf<=0){ ctx.globalAlpha=.5; ctx.fillStyle=T['--paper']; hexPath(cx,cy,r*0.92); ctx.fill(); }
     ctx.globalAlpha=.9; ctx.fillStyle=T['--sink']; ctx.fillRect(bx,by,bw,bh);
-    ctx.fillStyle=hf>0.34?T['--steel']:T['--p1']; ctx.fillRect(bx,by,bw*hf,bh);
+    ctx.fillStyle=hf>0.34?T['--p0']:T['--p1']; ctx.fillRect(bx,by,bw*hf,bh);
+    ctx.globalAlpha=.7; ctx.strokeStyle=T['--ink']; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,bh);
     ctx.restore();
   }
   var need=SPEC[c.k].gar[c.l];
@@ -3059,10 +3092,42 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew){ say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
-  else { settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
+  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
+  else { setTimeout(showNotice,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
+/* ── one-time announcements ──
+   Each notice is shown once per player. "Seen" is kept on the player's own record (so it
+   follows them to another device) and in this browser as a backup. */
+var NOTICE_ID='castles1';
+function noticeSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[NOTICE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+NOTICE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markNoticeSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[NOTICE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+NOTICE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeNotice(){
+  var n=document.getElementById('notice'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',noticeKey,true);
+  markNoticeSeen();
+}
+function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
+function showNotice(){
+  var n=document.getElementById('notice'); if(!n||noticeSeen()) return;
+  settleCastles();
+  var ca=castleAlert(ME), mine=document.getElementById('notice-mine');
+  if(ca){ mine.innerHTML='<b>Your castles right now:</b> '+ca.long; mine.classList.remove('hide'); } else mine.classList.add('hide');
+  n.classList.remove('hide');
+  n.scrollTop=0;
+  document.addEventListener('keydown',noticeKey,true);
+  var b=document.getElementById('notice-go'); b.onclick=closeNotice; try{ b.focus(); }catch(e){}
+}
+
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
   if(!name) { document.getElementById('join-hint').textContent='Type a name first — it is how the others know which border is yours.'; return; }
