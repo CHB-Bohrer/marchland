@@ -628,11 +628,10 @@ function building(c){ return !!(c && c.f && c.f>Date.now()); }
 function castleH(c){ return c.h==null?CASTLE_MAX_H:c.h; }
 function isRuin(c){ return !!c && c.k===CASTLE && c.h!=null && c.h<=0; }
 function isFarmCell(c,q,r){ return !!c && !building(c) && (c.f?groundAt(q,r):terrainAt(q,r))===FARM; }
-/* attached = the castle stands on a grain square, or one of the six cells touching it is a
-   finished farm held by the castle's owner */
+/* attached = one of the six cells touching the castle is a finished farm held by the castle's
+   owner. A castle never stands on a grain square itself. */
 function castleFed(q,r,pid){
   q=wrapC(q); r=wrapC(r);
-  if(isFarmCell(G.cells[key(q,r)],q,r)) return true;
   for(var i=0;i<6;i++){
     var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[key(nq,nr)];
     if(n && n.o===pid && isFarmCell(n,nq,nr)) return true;
@@ -1284,6 +1283,8 @@ function build(q,r,kind){
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
+    if(isFarmCell(c,wrapC(q),wrapC(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, right beside a farm (&equiv;) you hold.');
+    if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square touching it.</span> Hold a farm (&equiv;) next to this cell first &mdash; a castle with no farm beside it would starve and fall within 5 days.');
     var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
     if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
@@ -1293,14 +1294,12 @@ function build(q,r,kind){
   var from=fromFor(q,r,ME), pw=c.w||0;
   var sent=drawSoldiers(ME,q,r,1);                   // the nearest band sends a man
   c=cellOf(q,r); c.k=kind; c.l=1; c.g=1; c.w=0; delete c.h; delete c.ht;
-  var unfed = kind===CASTLE && !castleFed(q,r,ME);
   writeCell(q,r,c); logMove(kind===TOWER?'tw':'cs',q,r,from,null,0,pw?{pw:pw}:null);
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
     ? 'Watchtower raised. Keep a soldier in it and its guns cost attackers soldiers.'
-    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.'
-      + (unfed ? ' <span class="bad">No grain square touches it, though</span> &mdash; a castle with no farm beside it starts losing health and falls in 5 days. Hold a farm next to it to keep it standing.' : ''));
+    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep the farm beside it: if no grain square touches it, it loses health and falls in 5 days.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 /* what is missing for a cost, and where it comes from */
@@ -2945,7 +2944,7 @@ var HINTS={
   bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. While a soldier is inside, its guns cost attackers soldiers.',
-  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle needs a grain square (a farm) touching it: without one it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
+  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle must be built beside a grain square (a farm you hold), never on one: if no farm touches it, it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
