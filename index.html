@@ -475,6 +475,9 @@ var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
    is attached it heals at exactly the rate it was losing. A fallen castle is a ruin that
    gives no supply and holds no garrison; whoever seizes it destroys it and gets the bounty. */
 var CASTLE_MAX_H=30, CASTLE_BOUNTY=50;
+/* Soldiers who fall are marked by little crosses in the cell where they died. Each cross is a
+   timestamp (cell.gv, newest last) and disappears 5 days after the soldier fell. */
+var GRAVE_MS=5*864e5, GRAVE_MAX=12;
 var BRIDGE_MS=24*36e5, BRIDGE_COST={timber:40,stone:20};   // plus one march; ready a day later
 var SPEC={};
 SPEC[TOWER] ={range:[0,1,2,3],volley:[0,2,4,6],gar:[0,1,2,4],cost:{stone:40,timber:30}};   // towers hit hard
@@ -635,10 +638,11 @@ function cellOf(q,r){
 }
 function writeCell(q,r,c){
   var k=key(q,r);
-  if(!c.o && !c.k){ delete G.cells[k]; return; }
+  if(!c.o && !c.k && !(c.gv && c.gv.length)){ delete G.cells[k]; return; }   // (a cell with crosses stays until they fade)
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
   if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
   if(c.f) G.cells[k].f=c.f;
+  if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
   if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
 }
 
@@ -650,6 +654,12 @@ function tidyBoard(g){
     if(c.b>1e9){ c.f=c.b; delete c.b; }
     if(c.x && !c.o && !c.k){ delete g.cells[k]; continue; }
     if(c.x) delete c.x;
+    if(c.gv){                                         // crosses: keep only those under 5 days old
+      var gl=Array.isArray(c.gv)?c.gv:Object.keys(c.gv).map(function(i){ return c.gv[i]; }), nowT=Date.now();
+      gl=gl.filter(function(t){ return nowT-t<GRAVE_MS; });
+      if(gl.length) c.gv=gl; else delete c.gv;
+    }
+    if(!c.o && !c.k && !c.gv){ delete g.cells[k]; continue; }   // nothing left on it
   }
 }
 /* a bridge that is still going up: owned, but nothing crosses it or draws supply through it yet.
@@ -700,6 +710,19 @@ function settleCastles(){
     pushCell(q,r); changed++;
   }
   return changed;
+}
+/* ── crosses for fallen soldiers ── */
+function addGraves(c,n){
+  if(!c||!(n>0)) return;
+  var now=Date.now(), a=(c.gv||[]).filter(function(t){ return now-t<GRAVE_MS; });
+  for(var i=0;i<n && a.length<GRAVE_MAX;i++) a.push(now);
+  c.gv=a;
+}
+function gravesOf(c){
+  if(!c||!c.gv) return 0;
+  var now=Date.now(), n=0, g=c.gv;
+  for(var i=0;i<g.length;i++) if(now-g[i]<GRAVE_MS) n++;
+  return n;
 }
 /* what the player should know about their own castles right now */
 function castleAlert(pid){
@@ -1268,9 +1291,10 @@ function spendMarch(q,r){
   if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> '+(tow?'Tearing the tower down':keep?'Seizing the castle':'Taking the cell')+' costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
   var victim=c.o;
   pl.squares-=cost; c.w=0; c.o=ME;
+  addGraves(c,need+(tow?tg:0));                       // attackers who fell here, and the men inside a tower that was torn down
   if(tow){ c.k=null; c.l=0; c.g=0; c.d=0; }           // the tower falls, and the men inside it with it
   if(keep){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; pl.squares+=CASTLE_BOUNTY; }   // the ruin is razed, and the captor is paid
-  guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ delete gc.b; pushCell(g[0],g[1]); } });
+  guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ addGraves(gc,gc.b||0); delete gc.b; pushCell(g[0],g[1]); } });   // defenders fall where they stood
   var fromCell=G.cells[key(band.q,band.r)]; delete fromCell.b;
   c.b=band.n-need;                                   // the survivors march in
   writeCell(q,r,c);
@@ -1278,7 +1302,7 @@ function spendMarch(q,r){
   render(); pushCell(band.q,band.r); pushCell(q,r); pushMe();
   var m=(tow?'Tower torn down for <b>':keep?'Castle seized for <b>':'Cell taken for <b>')+cost+'</b> marches.';
   if(keep) m+=' <span class="good">+'+CASTLE_BOUNTY+' marches for taking the castle!</span>';
-  if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost.</span>';
+  if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost</span> &mdash; their crosses will stand there for 5 days.';
   if(tow && tg) m+=' <span class="good">The '+tg+' defender'+(tg>1?'s':'')+' inside fell with it.</span>';
   if(guard.n) m+=' <span class="good">'+esc(nameOf(victim))+'&rsquo;s band of '+guard.n+' fell defending it.</span>';
   say(m+' '+c.b+' soldier'+(c.b>1?'s march':' marches')+' in to hold it. <b>'+avail()+'</b> marches left.');
@@ -1449,7 +1473,8 @@ function breakBridge(q,r){
   var band=mine[0];
   if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> Breaking this bridge costs '+need+' soldier'+(need>1?'s':'')+' to its defenders and one more to do the work. Your band beside it has '+band.n+'.');
   pl.squares-=BREAK_COST;
-  guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ delete gc.b; pushCell(g[0],g[1]); } });
+  addGraves(c,need);
+  guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ addGraves(gc,gc.b||0); delete gc.b; pushCell(g[0],g[1]); } });   // defenders fall where they stood
   var from=G.cells[key(band.q,band.r)]; from.b=band.n-need; if(!from.b) delete from.b;
   c.o=null; c.b=0; c.w=0; c.f=0; writeCell(q,r,c);
   logMove('brk',q,r,[band.q,band.r],victim,need);
@@ -2018,6 +2043,21 @@ function waves(cx,cy,s){
 }
 /* a bridge: a deck laid between two dry banks where there are any; dashed while it is going up */
 /* a band: up to three small soldiers in the owner's colour, with the head-count on a shield */
+/* little crosses where soldiers fell: a dark outline under a pale cross, so they read on any ground */
+function drawGraves(x,y,s,n,q,r){
+  if(n<1||s<9) return;
+  var m=Math.min(n,8), ks=s*(s>=18?0.17:0.15);
+  ctx.save(); ctx.lineCap='round';
+  for(var i=0;i<m;i++){
+    var gx=x+(artHash(wrapC(q),wrapC(r),90+i)-0.5)*s*1.3, gy=y+s*(-0.12+artHash(wrapC(q),wrapC(r),120+i)*0.5);
+    ctx.globalAlpha=.3; ctx.fillStyle='#14100A'; ctx.beginPath(); ctx.ellipse(gx,gy+ks*1.2,ks*0.95,ks*0.28,0,0,6.284); ctx.fill();
+    ctx.globalAlpha=.9; ctx.strokeStyle='rgba(20,16,10,.7)'; ctx.lineWidth=Math.max(2.6,s*0.1);
+    ctx.beginPath(); ctx.moveTo(gx,gy-ks*1.2); ctx.lineTo(gx,gy+ks*1.1); ctx.moveTo(gx-ks*0.7,gy-ks*0.5); ctx.lineTo(gx+ks*0.7,gy-ks*0.5); ctx.stroke();
+    ctx.strokeStyle='#ECE6D6'; ctx.lineWidth=Math.max(1.4,s*0.055);
+    ctx.beginPath(); ctx.moveTo(gx,gy-ks*1.2); ctx.lineTo(gx,gy+ks*1.1); ctx.moveTo(gx-ks*0.7,gy-ks*0.5); ctx.lineTo(gx+ks*0.7,gy-ks*0.5); ctx.stroke();
+  }
+  ctx.restore();
+}
 function drawBand(c,cx,cy,col,detail){
   var s=Math.max(11,S*0.5), x=cx+(c.k?S*0.34:0), y=cy+(c.k?-S*0.30:0);
   var isSel = sel && key(sel.q,sel.r)===key(c.q,c.r);
@@ -2115,6 +2155,7 @@ function draw(){
     }
     else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
+    if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
