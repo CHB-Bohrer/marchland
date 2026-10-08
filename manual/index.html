@@ -176,7 +176,6 @@ footer a:hover{ color:var(--ink); }
     <dt>Wall</dt><dd>30 stone a course, three courses</dd>
     <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
-    <dt>Fallen soldiers</dt><dd>Each soldier killed — attackers lost taking a cell, defenders who fall guarding it, the garrison of a tower torn down, men lost breaking a bridge — leaves a small cross in the cell where he fell. Crosses disappear 5 days after the soldier fell</dd>
     <dt>Castle upkeep</dt><dd>A castle can&rsquo;t be built on a grain square and must be linked to one by an unbroken road of your own ground. With no farm connected it loses health every tick and falls after 5 days; reconnecting a farm heals it at the same rate. A fallen castle gives no supply and can be seized by a band beside it, destroying it and paying 50 marches</dd>
     <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 40 minutes a cell between the two keeps (6 hours at least, 2 days at most). Goods wait at the gate if the receiver is away</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
@@ -1225,7 +1224,7 @@ function drawWalk(now){
 }
 scene({
   tag:'Soldiers', title:'Soldiers stand on the map',
-  body:'Soldiers are mustered at a castle and stand on your ground in bands. Walking a band over your own land costs a march for every three cells. To take someone else\'s cell a band must stand beside it, and it pays a soldier for every wall course, every gun covering the cell, and every enemy soldier guarding it — with at least one left over to walk in. A band standing still guards the cells around it the same way. Every soldier who falls leaves a little cross in the cell where he died, and it stays there for five days.',
+  body:'Soldiers are mustered at a castle and stand on your ground in bands. Walking a band over your own land costs a march for every three cells. To take someone else\'s cell a band must stand beside it, and it pays a soldier for every wall course, every gun covering the cell, and every enemy soldier guarding it — with at least one left over to walk in. A band standing still guards the cells around it the same way.',
   dur:30,
   init:function(){
     M=blank();
