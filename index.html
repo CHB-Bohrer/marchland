@@ -2217,6 +2217,7 @@ function draw(){
     ctx.fillStyle=col;
     ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath(); ctx.fill();
     ctx.restore();
+    if(S>=TRIBE_LABEL_MAX_S) return;                    // zoomed in: just the arrow, the name labels would crowd the map
     var label=p.name+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
     ctx.font='500 11px ui-monospace, monospace';
     var tw=ctx.measureText(label).width;
@@ -2407,6 +2408,7 @@ document.getElementById('skipreplay').addEventListener('click',endReplay);
    enough to see it. It runs at a modest frame rate, stops when the tab is
    hidden or the map is scrolled away, and rests after a few idle minutes. */
 var AMB_MIN_S=14, AMB_IDLE_MS=3*60000;
+var TRIBE_LABEL_MAX_S=30;                         // zoomed in past this, the off-screen tribe name labels disappear (one zoom-in tap from the default)
 var ambRaf=0, ambLast=0, ambSeen=true, ambActive=Date.now();
 var AMB_FPS=(window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ? 15 : 22;
 var flock={next:clock()+6+Math.random()*8, f:null};
