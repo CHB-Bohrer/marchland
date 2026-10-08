@@ -438,6 +438,11 @@ function wrapC(x){ return ((x+HALF)%WORLD+WORLD)%WORLD-HALF; }
 var YIELD={}; YIELD[FOREST]={r:'timber',n:2}; YIELD[QUARRY]={r:'stone',n:2};
 YIELD[IRON]={r:'iron',n:1}; YIELD[FARM]={r:'grain',n:3};
 var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
+/* A castle lives off the land beside it: if no grain square (a farm) is attached to it,
+   it loses a tick of health every tick and falls after 5 days (30 ticks). While a farm
+   is attached it heals at exactly the rate it was losing. A fallen castle is a ruin that
+   gives no supply and holds no garrison; whoever seizes it destroys it and gets the bounty. */
+var CASTLE_MAX_H=30, CASTLE_BOUNTY=50;
 var BRIDGE_MS=24*36e5, BRIDGE_COST={timber:40,stone:20};   // plus one march; ready a day later
 var SPEC={};
 SPEC[TOWER] ={range:[0,1,2,3],volley:[0,2,4,6],gar:[0,1,2,4],cost:{stone:40,timber:30}};   // towers hit hard
@@ -602,6 +607,7 @@ function writeCell(q,r,c){
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
   if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
   if(c.f) G.cells[k].f=c.f;
+  if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
 }
 
 /* Boards written by other builds: a bridge's finish time used to live in b (now f),
@@ -617,6 +623,56 @@ function tidyBoard(g){
 /* a bridge that is still going up: owned, but nothing crosses it or draws supply through it yet.
    A held river cell with no finish time is a bridge that was already there. */
 function building(c){ return !!(c && c.f && c.f>Date.now()); }
+
+/* ── castle health ── */
+function castleH(c){ return c.h==null?CASTLE_MAX_H:c.h; }
+function isRuin(c){ return !!c && c.k===CASTLE && c.h!=null && c.h<=0; }
+function isFarmCell(c,q,r){ return !!c && !building(c) && (c.f?groundAt(q,r):terrainAt(q,r))===FARM; }
+/* attached = the castle stands on a grain square, or one of the six cells touching it is a
+   finished farm held by the castle's owner */
+function castleFed(q,r,pid){
+  q=wrapC(q); r=wrapC(r);
+  if(isFarmCell(G.cells[key(q,r)],q,r)) return true;
+  for(var i=0;i<6;i++){
+    var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[key(nq,nr)];
+    if(n && n.o===pid && isFarmCell(n,nq,nr)) return true;
+  }
+  return false;
+}
+/* Brings every castle's health up to date. Anyone's screen does this for every castle, so a
+   keep still starves while its owner is away. Health is only stored while it is below full:
+   the clock starts the first time a castle is seen cut off. */
+function settleCastles(){
+  if(!G) return 0;
+  var now=Date.now(), changed=0;
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.k!==CASTLE||!c.o) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), fed=castleFed(q,r,c.o);
+    if(c.ht==null){
+      if(fed && castleH(c)>=CASTLE_MAX_H){ delete c.h; continue; }
+      c.ht=now; if(c.h==null) c.h=CASTLE_MAX_H;
+      pushCell(q,r); changed++; continue;
+    }
+    var n=Math.floor((now-c.ht)/TICK_MS); if(n<1) continue;
+    var h=castleH(c), nh=fed?Math.min(CASTLE_MAX_H,h+n):Math.max(0,h-n);
+    if(nh>=CASTLE_MAX_H){ delete c.h; delete c.ht; }
+    else { c.h=nh; c.ht+=n*TICK_MS; }
+    if(h>0 && nh<=0){ c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; }   // it falls: the garrison walks out into the open
+    pushCell(q,r); changed++;
+  }
+  return changed;
+}
+/* what the player should know about their own castles right now */
+function castleAlert(pid){
+  var out=null, now=Date.now();
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.k!==CASTLE||c.o!==pid||c.h==null) continue;
+    var p=k.split('_'), fed=castleFed(parseInt(p[0],10),parseInt(p[1],10),pid);
+    if(isRuin(c)){ out={ruin:true, short:'castle fallen', long:'<span class="bad">One of your castles has fallen</span> and can be seized for '+CASTLE_BOUNTY+' marches. '+(fed?'It is reconnecting to a farm and is healing.':'Take a farm beside it to bring it back.')}; break; }
+    if(!fed){ var dl=c.ht+c.h*TICK_MS; if(!out||dl<out.dl) out={dl:dl, short:'castle starving — '+hoursLeft(dl), long:'<span class="bad">A castle of yours has no farm beside it</span> and falls in '+hoursLeft(dl)+'. Hold a grain square next to it to stop that.'}; }
+  }
+  return out;
+}
 function eachCell(fn){ for(var k in G.cells){ var p=k.split('_'); fn(cellOf(parseInt(p[0],10),parseInt(p[1],10))); } }
 function me(){ return G.players[ME]; }
 /* Player colours. Four colours were not enough once more than four people joined,
@@ -672,7 +728,7 @@ function supplied(pid){
   var set={}, stack=[];
   for(var k in G.cells){
     var c=G.cells[k];
-    if(c.o===pid && c.k===CASTLE){ set[k]=1; var p=k.split('_'); stack.push([parseInt(p[0],10),parseInt(p[1],10)]); }
+    if(c.o===pid && c.k===CASTLE && !isRuin(c)){ set[k]=1; var p=k.split('_'); stack.push([parseInt(p[0],10),parseInt(p[1],10)]); }
   }
   while(stack.length){
     var cur=stack.pop();
@@ -687,7 +743,7 @@ function supplied(pid){
 }
 function garrisonNeed(pid){
   var have=0,need=0;
-  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k) continue; have+=c.g||0; need+=SPEC[c.k].gar[c.l]; }
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=SPEC[c.k].gar[c.l]; }
   return [have,need];
 }
 function ratesFor(pid){
@@ -699,7 +755,7 @@ function ratesFor(pid){
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
     if(y) out[y.r]+=y.n;
-    if(c.k===CASTLE) out.grain+=2;
+    if(c.k===CASTLE && !isRuin(c)) out.grain+=2;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
   var f=fieldOf(pid);
@@ -808,7 +864,7 @@ function catchUp(pid){
     }
     // garrison top-up then decay
     for(var k in G.cells){
-      var c=G.cells[k]; if(c.o!==pid||!c.k) continue;
+      var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue;
       var need=SPEC[c.k].gar[c.l];
       if(c.g<need && fieldOf(pid)>0){         // the nearest band sends men in
         var p=k.split('_'), want=need-c.g, before=fieldOf(pid);
@@ -1144,13 +1200,16 @@ function vote(id,v){
 
 function spendMarch(q,r){
   var pl=me(); if(!pl) return;
+  settleCastles();                                   // bring every castle's health up to date before judging this move
   var c=cellOf(q,r);
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
   if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Switch to <b>Bridge</b> to build across; it takes a day.');
   if(!adjacentTo(q,r,ME)) return nope('Marches extend a border — pick a cell touching your own ground.');
-  if(c.k===CASTLE) return nope('A keep has to be starved out. Take the ground around it and cut its supply.');
+  if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Take the grain squares beside it and cut it off &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
   var cost=c.o?2:1, prev=c.o, pw=c.w||0;
-  var tow=c.k===TOWER, tl=tow?c.l:0, tg=tow?(c.g||0):0;   // a tower can be torn down; a keep cannot
+  var keep=isRuin(c);                                 // a fallen castle can be seized
+  var tow=c.k===TOWER, tl=tow?c.l:(keep?c.l:0), tg=tow?(c.g||0):0;   // a tower can be torn down; a castle only once it has fallen
+  var razed=tow||keep;
   if(pl.squares<cost) return nope('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
   if(!c.o){
     var from0=fromFor(q,r,ME);
@@ -1165,19 +1224,21 @@ function spendMarch(q,r){
   for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)) mine.push({q:nq,r:nr,n:n.b}); }
   mine.sort(function(a,b){ return b.n-a.n; });
   var why=[]; if(guns) why.push(guns+' to cross the guns'); if(c.w) why.push(c.w+' to break the wall'); if(guard.n) why.push(guard.n+' to beat the band guarding it');
-  if(!mine.length) return nope('<span class="bad">No soldiers next to that '+(tow?'tower':'cell')+'.</span> '+(tow?'Tearing down a tower':'Taking someone else&rsquo;s ground')+' needs one of your bands standing beside it'+(need?' with at least '+(need+1)+' in it ('+why.join(', ')+', and one to hold it)':'')+'. Use <b>Move soldiers</b> to bring a band up.');
+  if(!mine.length) return nope('<span class="bad">No soldiers next to that '+(tow?'tower':keep?'fallen castle':'cell')+'.</span> '+(tow?'Tearing down a tower':keep?'Seizing a fallen castle':'Taking someone else&rsquo;s ground')+' needs one of your bands standing beside it'+(need?' with at least '+(need+1)+' in it ('+why.join(', ')+', and one to hold it)':'')+'. Use <b>Move soldiers</b> to bring a band up.');
   var band=mine[0];
-  if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> '+(tow?'Tearing the tower down':'Taking the cell')+' costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
+  if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> '+(tow?'Tearing the tower down':keep?'Seizing the castle':'Taking the cell')+' costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
   var victim=c.o;
   pl.squares-=cost; c.w=0; c.o=ME;
   if(tow){ c.k=null; c.l=0; c.g=0; c.d=0; }           // the tower falls, and the men inside it with it
+  if(keep){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; pl.squares+=CASTLE_BOUNTY; }   // the ruin is razed, and the captor is paid
   guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ delete gc.b; pushCell(g[0],g[1]); } });
   var fromCell=G.cells[key(band.q,band.r)]; delete fromCell.b;
   c.b=band.n-need;                                   // the survivors march in
   writeCell(q,r,c);
-  logMove('b',q,r,[band.q,band.r],prev,need,(pw||tow)?{pw:pw||null,pk:tow?TOWER:null,pl:tow?tl:null,pg:tow?tg:null}:null);
+  logMove('b',q,r,[band.q,band.r],prev,need,(pw||razed)?{pw:pw||null,pk:tow?TOWER:(keep?CASTLE:null),pl:razed?tl:null,pg:razed?tg:null}:null);
   render(); pushCell(band.q,band.r); pushCell(q,r); pushMe();
-  var m=(tow?'Tower torn down for <b>':'Cell taken for <b>')+cost+'</b> marches.';
+  var m=(tow?'Tower torn down for <b>':keep?'Castle seized for <b>':'Cell taken for <b>')+cost+'</b> marches.';
+  if(keep) m+=' <span class="good">+'+CASTLE_BOUNTY+' marches for taking the castle!</span>';
   if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost.</span>';
   if(tow && tg) m+=' <span class="good">The '+tg+' defender'+(tg>1?'s':'')+' inside fell with it.</span>';
   if(guard.n) m+=' <span class="good">'+esc(nameOf(victim))+'&rsquo;s band of '+guard.n+' fell defending it.</span>';
@@ -1209,7 +1270,7 @@ function bridge(q,r){
 var CASTLE_SPACING=7;
 function myCastleCells(pid){
   var out=[];
-  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&c.k===CASTLE){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&c.k===CASTLE&&!isRuin(c)){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }   // a fallen castle no longer counts
   return out;
 }
 function castleCost(pid){
@@ -1231,13 +1292,15 @@ function build(q,r,kind){
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   var from=fromFor(q,r,ME), pw=c.w||0;
   var sent=drawSoldiers(ME,q,r,1);                   // the nearest band sends a man
-  c=cellOf(q,r); c.k=kind; c.l=1; c.g=1; c.w=0;
+  c=cellOf(q,r); c.k=kind; c.l=1; c.g=1; c.w=0; delete c.h; delete c.ht;
+  var unfed = kind===CASTLE && !castleFed(q,r,ME);
   writeCell(q,r,c); logMove(kind===TOWER?'tw':'cs',q,r,from,null,0,pw?{pw:pw}:null);
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
     ? 'Watchtower raised. Keep a soldier in it and its guns cost attackers soldiers.'
-    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.');
+    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.'
+      + (unfed ? ' <span class="bad">No grain square touches it, though</span> &mdash; a castle with no farm beside it starts losing health and falls in 5 days. Hold a farm next to it to keep it standing.' : ''));
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 /* what is missing for a cost, and where it comes from */
@@ -1260,6 +1323,7 @@ function locked(b){ return b && b.getAttribute('aria-disabled')==='true'; }
 function upgrade(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME||!c.k) return nope('Click one of your own towers or castles.');
+  if(isRuin(c)) return nope('That castle has fallen &mdash; it cannot be upgraded until a farm beside it brings its health back.');
   if(c.l>=3) return nope('Already at level III.');
   var lvl=c.l+1, cost=SPEC[c.k].cost, extra=SPEC[c.k].gar[lvl]-c.g;
   for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return nope('Upgrade needs '+cost[k]*lvl+' '+k+'. You have '+Math.floor(pl.res[k])+'.'); }
@@ -1288,6 +1352,7 @@ function wall(q,r){
 function muster(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!(c.o===ME&&c.k===CASTLE)) return nope('Soldiers muster at your castles.');
+  if(isRuin(c)) return nope('That castle has fallen &mdash; nobody musters at a ruin. A farm beside it will heal it, or muster at another castle.');
   if(pl.res.iron<25||pl.res.grain<40) return nope('Not enough iron and grain — a soldier takes 25 iron and 40 grain. '+shortBy({iron:25,grain:40}));
   pl.res.iron-=25; pl.res.grain-=40; c.b=(c.b||0)+1;
   writeCell(q,r,c); logMove('ms',q,r,null,null,0);
@@ -1885,6 +1950,14 @@ function drawBuilding(c,cx,cy,r,col,detail){
       ctx.fillRect(cx-b*.7,cy-b,b*1.4,b*.45);
     }
   }
+  if(c.k===CASTLE && c.h!=null){                      // health bar (only while below full) and a faded wash once it has fallen
+    var hf=Math.max(0,c.h)/CASTLE_MAX_H, bw=r*1.0, bh=Math.max(2,r*0.09), bx=cx-bw/2, by=cy-r*0.86;
+    ctx.save();
+    if(hf<=0){ ctx.globalAlpha=.5; ctx.fillStyle=T['--paper']; hexPath(cx,cy,r*0.92); ctx.fill(); }
+    ctx.globalAlpha=.9; ctx.fillStyle=T['--sink']; ctx.fillRect(bx,by,bw,bh);
+    ctx.fillStyle=hf>0.34?T['--steel']:T['--p1']; ctx.fillRect(bx,by,bw*hf,bh);
+    ctx.restore();
+  }
   var need=SPEC[c.k].gar[c.l];
   for(var i=0;i<c.l;i++){
     var px=cx-(c.l-1)*r*0.13+i*r*0.26, py=cy+r*(detail?0.7:0.62);
@@ -2171,6 +2244,7 @@ function describe(e){
   if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
   if(e.k==='m') return who+' marched into new ground.';
   var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
+  if(e.pk===CASTLE) return e.prev===ME ? who+' <span class="bad">seized your fallen castle</span> and took '+CASTLE_BOUNTY+' marches'+lost+'.' : who+' seized a fallen castle of '+esc(nameOf(e.prev))+lost+'.';
   if(e.pk) return e.prev===ME ? who+' <span class="bad">tore down one of your towers</span>'+lost+'.' : who+' tore down a tower of '+esc(nameOf(e.prev))+lost+'.';
   return e.prev===ME ? who+' <span class="bad">took one of your cells</span>'+lost+'.' : who+' took a cell from '+esc(nameOf(e.prev))+lost+'.';
 }
@@ -2622,6 +2696,7 @@ function render(){
   G.claims=G.claims||{};
   settleMine();
   settleCaravans();
+  settleCastles();
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
   document.getElementById('v-timber').textContent=Math.round(pl.res.timber);
@@ -2639,6 +2714,8 @@ function render(){
   document.getElementById('v-gar').textContent=R.gar[0]+'/'+R.gar[1];
   document.getElementById('u-gar').textContent=R.gar[0]<R.gar[1]?(R.gar[1]-R.gar[0])+' short — decaying':'manned';
   document.getElementById('s-gar').classList.toggle('warn',R.gar[0]<R.gar[1]);
+  var ca=castleAlert(ME);
+  if(ca){ document.getElementById('u-gar').textContent=ca.short; document.getElementById('s-gar').classList.add('warn'); }
   renderDaily();
   var done=claimedToday(pl);
   document.getElementById('bankinfo').textContent =
@@ -2868,7 +2945,7 @@ var HINTS={
   bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. While a soldier is inside, its guns cost attackers soldiers.',
-  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing.',
+  castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle needs a grain square (a farm) touching it: without one it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
@@ -2976,7 +3053,7 @@ function enterGame(isNew){
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
   if(isNew){ say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
-  else say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.');
+  else { settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
 function join(){
@@ -3545,7 +3622,7 @@ if(!online){
 // a returning player on this device goes straight to the board
 if(myName && myPin && online) join();
 else loadKnownNames();
-setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); flushTouched(); } } },60000);
+setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); flushTouched(); } else if(settleCastles()>0) render(); } },60000);
 setInterval(function(){ if(G&&online) pull(); },20000);          // a walk-paced game needs no more
 setInterval(function(){                                 // presence: counted as active for the 24-hour vote
   if(G&&me()&&online&&Date.now()-(me().seen||0)>15*60000){ me().seen=Date.now(); putPath('/players/'+ME+'/seen',me().seen); }
