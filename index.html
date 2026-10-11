@@ -40,6 +40,9 @@ var DB_URL = "https://marchland-352fc-default-rtdb.firebaseio.com";
 html,body{ margin:0; padding:0; }
 body{ background:var(--paper); color:var(--ink); font-family:var(--body); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased; }
 .wrap{ max-width:1000px; margin:0 auto; padding-inline:16px; padding-block:20px 60px; }
+body.hallo h1::after{ content:"\1F383"; font-size:.55em; margin-left:.3em; vertical-align:.18em; display:inline-block; animation:hallobob 3.2s ease-in-out infinite; }
+@keyframes hallobob{ 0%,100%{ transform:translateY(0) rotate(-6deg); } 50%{ transform:translateY(-3px) rotate(6deg); } }
+@media (prefers-reduced-motion: reduce){ body.hallo h1::after{ animation:none; } }
 h1{ font-family:var(--display); font-weight:700; font-size:clamp(30px,7vw,48px); margin:0 0 2px; letter-spacing:-.02em; }
 .sub{ font-family:var(--mono); font-size:11px; letter-spacing:.13em; text-transform:uppercase; color:var(--ink-2); margin:0 0 16px; }
 .panel{ border:1px solid var(--rule); background:var(--surface); margin-bottom:14px; }
@@ -360,6 +363,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="home" aria-label="Centre on your keep" title="Centre on your keep">◎</button>
           <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
+          <button id="hallobtn" class="hide" aria-label="Halloween decorations" title="Halloween on/off">&#127875;</button>
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
       </div>
@@ -2439,7 +2443,7 @@ function draw(){
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
   var guns=[], walls=[], builds=[], spans=[], bands=[], detail=S>=7, now=clock();
-  var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
+  var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[], spook=[], HW=amb&&hallo();   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
@@ -2478,6 +2482,7 @@ function draw(){
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
+    if(HW && !wet && !vl) spook.push([c,p,q,r]);
     if(amb){
       if(wet){ if(!c.o) waters.push([p,q,r]); }
       else if(c.o){
@@ -2490,6 +2495,7 @@ function draw(){
     }
   }
   if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
+  if(HW) halloGround(ctx,spook,now);
   ctx.setLineDash([3,4]);
   if(amb) ctx.lineDashOffset=-(now*3)%7;             // the fields of fire turn slowly, like a watch being kept
   guns.forEach(function(e){
@@ -2513,12 +2519,14 @@ function draw(){
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
+  if(HW) halloKeeps(ctx,builds,now);
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
   drawCaravans(now,amb);
   drawTreks(now,amb);
   if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
+  if(HW) halloSky(ctx,spook,now);
   drawCoach(now);
   placeSendMenu();
   placeCellMenu();
@@ -3078,6 +3086,166 @@ function ambBirds(g,now){
   }
   g.restore();
 }
+
+/* ═══ Halloween ════════════════════════════════════════════════════════
+   A seasonal layer drawn over the living map, never into the artwork: jack-o'-
+   lanterns glowing beside the castles and growing in patches on open fields,
+   eyes blinking in the unclaimed forests, ghosts rising over the crosses where
+   soldiers fell, swarms of bats crossing, low violet mist and a dusky edge to
+   the light. It switches itself on from 1 October to 2 November, and the
+   pumpkin button beside the map turns it off for anyone who would rather not.
+   Add ?halloween=1 to the address to see it out of season. */
+var HALLO_OK=(function(){ var d=new Date(), m=d.getMonth(), day=d.getDate(); return m===9 || (m===10 && day<=2); })();
+try{ if(/[?&]halloween=1/.test(location.search)) HALLO_OK=true; }catch(e){}
+var HALLO_ON=true; try{ HALLO_ON=localStorage.getItem('marchland.hallo')!=='0'; }catch(e){}
+function hallo(){ return HALLO_OK && HALLO_ON; }
+var hbats={next:clock()+4, s:null};
+function halloPumpkin(g,x,y,r,lit,f){                 // x,y: middle of the pumpkin; r: half its width
+  g.save();
+  if(lit) ambGlow(g,x,y,r*2.6,0.9*f);
+  g.globalAlpha=0.3; g.fillStyle='#14100A'; g.beginPath(); g.ellipse(x,y+r*0.66,r*1.05,r*0.24,0,0,6.284); g.fill();
+  g.globalAlpha=1;
+  g.fillStyle='#C45A14'; g.beginPath(); g.ellipse(x-r*0.5,y,r*0.58,r*0.66,0,0,6.284); g.fill();
+  g.beginPath(); g.ellipse(x+r*0.5,y,r*0.58,r*0.66,0,0,6.284); g.fill();
+  g.fillStyle='#EC7C1F'; g.beginPath(); g.ellipse(x,y,r*0.64,r*0.72,0,0,6.284); g.fill();
+  g.strokeStyle='#9C4409'; g.lineWidth=Math.max(0.8,r*0.08); g.lineCap='round';
+  g.beginPath(); g.moveTo(x-r*0.27,y-r*0.6); g.quadraticCurveTo(x-r*0.4,y,x-r*0.27,y+r*0.6);
+  g.moveTo(x+r*0.27,y-r*0.6); g.quadraticCurveTo(x+r*0.4,y,x+r*0.27,y+r*0.6); g.stroke();
+  g.strokeStyle='#55652A'; g.lineWidth=Math.max(1.2,r*0.2);
+  g.beginPath(); g.moveTo(x,y-r*0.68); g.quadraticCurveTo(x+r*0.04,y-r*0.95,x+r*0.2,y-r*1.02); g.stroke();
+  if(lit && r>=5){                                     // the carved face, lit from inside
+    g.fillStyle='rgba(255,226,120,'+(0.78+0.22*f).toFixed(3)+')';
+    g.beginPath(); g.moveTo(x-r*0.46,y-r*0.02); g.lineTo(x-r*0.14,y-r*0.02); g.lineTo(x-r*0.3,y-r*0.34); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(x+r*0.46,y-r*0.02); g.lineTo(x+r*0.14,y-r*0.02); g.lineTo(x+r*0.3,y-r*0.34); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(x-r*0.46,y+r*0.2);
+    for(var i=1;i<=6;i++) g.lineTo(x-r*0.46+i*r*0.92/6, y+r*(i%2?0.46:0.2));
+    g.lineTo(x+r*0.46,y+r*0.2); g.closePath(); g.fill();
+  }
+  g.restore();
+}
+function halloGhost(g,x,y,sz,now,h){
+  var bob=Math.sin(now*1.6+h*9)*sz*0.16, dx=Math.sin(now*0.7+h*5)*sz*0.3, a=0.5+0.14*Math.sin(now*1.1+h*7);
+  x+=dx; y+=bob;
+  g.save();
+  var gr=g.createRadialGradient(x,y,0,x,y,sz*1.5); gr.addColorStop(0,'rgba(190,210,255,'+(a*0.35).toFixed(3)+')'); gr.addColorStop(1,'rgba(190,210,255,0)');
+  g.fillStyle=gr; g.beginPath(); g.arc(x,y,sz*1.5,0,6.284); g.fill();
+  g.globalAlpha=a; g.fillStyle='#F1F4FB';
+  g.beginPath(); g.moveTo(x-sz*0.45,y+sz*0.55); g.lineTo(x-sz*0.45,y-sz*0.05); g.arc(x,y-sz*0.05,sz*0.45,Math.PI,0); g.lineTo(x+sz*0.45,y+sz*0.55);
+  var w=Math.sin(now*3+h*6)*sz*0.06;
+  g.quadraticCurveTo(x+sz*0.3,y+sz*0.38+w,x+sz*0.15,y+sz*0.55); g.quadraticCurveTo(x,y+sz*0.72-w,x-sz*0.15,y+sz*0.55); g.quadraticCurveTo(x-sz*0.3,y+sz*0.38+w,x-sz*0.45,y+sz*0.55);
+  g.closePath(); g.fill();
+  g.globalAlpha=Math.min(1,a+0.3); g.fillStyle='#232A40';
+  g.beginPath(); g.ellipse(x-sz*0.16,y-sz*0.1,sz*0.07,sz*0.1,0,0,6.284); g.fill();
+  g.beginPath(); g.ellipse(x+sz*0.16,y-sz*0.1,sz*0.07,sz*0.1,0,0,6.284); g.fill();
+  g.beginPath(); g.ellipse(x,y+sz*0.14,sz*0.07,sz*0.1,0,0,6.284); g.fill();
+  g.restore();
+}
+function halloBat(g,x,y,sz,ph){
+  var fl=Math.sin(ph);
+  g.save(); g.translate(x,y); g.fillStyle=NAT_DARK?'#2C2040':'#17101F';
+  for(var sg=-1;sg<=1;sg+=2){
+    g.save(); g.scale(sg,1); g.beginPath(); g.moveTo(sz*0.1,-sz*0.05);
+    g.quadraticCurveTo(sz*0.5,-sz*(0.55+0.5*fl),sz*1.15,-sz*(0.05+0.75*fl));
+    g.quadraticCurveTo(sz*0.95,sz*0.05,sz*0.8,sz*0.08);
+    g.quadraticCurveTo(sz*0.62,sz*0.3,sz*0.45,sz*0.1);
+    g.quadraticCurveTo(sz*0.3,sz*0.32,sz*0.12,sz*0.14); g.closePath(); g.fill(); g.restore();
+  }
+  g.beginPath(); g.ellipse(0,sz*0.05,sz*0.17,sz*0.26,0,0,6.284); g.fill();
+  g.beginPath(); g.moveTo(-sz*0.15,-sz*0.14); g.lineTo(-sz*0.1,-sz*0.4); g.lineTo(-sz*0.02,-sz*0.17); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(sz*0.15,-sz*0.14); g.lineTo(sz*0.1,-sz*0.4); g.lineTo(sz*0.02,-sz*0.17); g.closePath(); g.fill();
+  if(sz>=6){ g.fillStyle='#FF9A3D'; g.fillRect(-sz*0.1,-sz*0.08,sz*0.05,sz*0.05); g.fillRect(sz*0.05,-sz*0.08,sz*0.05,sz*0.05); }
+  g.restore();
+}
+/* under the buildings: pumpkin patches on open fields, eyes in the unclaimed woods */
+function halloGround(g,spook,now){
+  var s=S;
+  g.save();
+  spook.forEach(function(e){
+    var c=e[0], p=e[1], wq=wrapC(e[2]), wr=wrapC(e[3]);
+    if(c.o||c.k) return;
+    var h=artHash(wq,wr,211);
+    if(c.t===PLAIN && h<0.075){                                  // a pumpkin patch
+      var n=1+Math.floor(artHash(wq,wr,212)*3);
+      for(var i=0;i<n;i++){
+        var px=p[0]+(artHash(wq,wr,213+i)-0.5)*s*0.8, py=p[1]+(artHash(wq,wr,223+i)-0.35)*s*0.55, rr=s*(0.12+0.06*artHash(wq,wr,233+i));
+        var lit=artHash(wq,wr,243+i)<0.45, f=0.75+0.25*Math.sin(now*9+h*40+i)*Math.sin(now*5.3+h*17);
+        halloPumpkin(g,px,py,rr,lit,f);
+      }
+    } else if(c.t===FOREST && h<0.16 && s>=16){                   // two yellow eyes that open and shut
+      var ph=(now*0.35+h*60)%7;
+      if(ph<2.2){
+        var al=Math.min(1,ph*3,(2.2-ph)*3), ex=p[0]+(artHash(wq,wr,251)-0.5)*s*0.6, ey=p[1]+(artHash(wq,wr,252)-0.5)*s*0.4, d=s*0.07;
+        var blink=(Math.sin(now*2.3+h*30)>0.93)?0.15:1;
+        g.globalAlpha=al; g.fillStyle='rgba(255,214,70,1)';
+        g.beginPath(); g.ellipse(ex-d,ey,d*0.75,d*0.5*blink,0,0,6.284); g.fill();
+        g.beginPath(); g.ellipse(ex+d,ey,d*0.75,d*0.5*blink,0,0,6.284); g.fill();
+        var eg=g.createRadialGradient(ex,ey,0,ex,ey,d*3); eg.addColorStop(0,'rgba(255,214,70,0.32)'); eg.addColorStop(1,'rgba(255,214,70,0)');
+        g.globalAlpha=al; g.fillStyle=eg; g.beginPath(); g.arc(ex,ey,d*3,0,6.284); g.fill();
+        g.globalAlpha=1;
+      }
+    }
+  });
+  g.restore();
+}
+/* over the buildings: a jack-o'-lantern by every castle gate */
+function halloKeeps(g,builds,now){
+  var s=S;
+  builds.forEach(function(e){
+    var c=e[0]; if(c.k!==CASTLE) return;
+    var h=artHash(wrapC(c.q),wrapC(c.r),261), f=0.74+0.26*Math.sin(now*10+h*30)*Math.sin(now*6.1+h*11);
+    halloPumpkin(g,e[1][0]+s*0.5,e[1][1]+s*0.4,s*0.13,true,f);
+    if(s>=22) halloPumpkin(g,e[1][0]-s*0.52,e[1][1]+s*0.43,s*0.09,h>0.4,0.9*f);
+  });
+}
+/* above everything: ghosts over the fallen, bats, mist and a dusky edge to the light */
+function halloSky(g,spook,now){
+  var s=S;
+  spook.forEach(function(e){
+    var c=e[0]; if(!c.gv || !gravesOf(c)) return;
+    var h=artHash(wrapC(e[2]),wrapC(e[3]),271);
+    halloGhost(g,e[1][0],e[1][1]-s*0.3,s*0.3,now,h);
+  });
+  // mist: a few wide pale violet banks sliding over the land, moving with the map when it is dragged
+  var b=hexPx(viewQ,viewR), ox=W/2-b[0]+panX, oy=H/2-b[1]+panY, R=s*5, ma=NAT_DARK?0.11:0.13;
+  g.save();
+  for(var k=0;k<4;k++){
+    var spanX=W+2*R, spanY=H+2*R;
+    var x=((k*0.29*spanX-now*s*(0.1+0.03*k)+ox)%spanX+spanX)%spanX-R;
+    var y=((k*0.53*spanY+Math.sin(now*0.07+k)*s*2+oy)%spanY+spanY)%spanY-R;
+    g.save(); g.translate(x,y); g.scale(1.9,0.55);
+    var gr=g.createRadialGradient(0,0,0,0,0,R);
+    gr.addColorStop(0,'rgba(196,176,226,'+ma+')'); gr.addColorStop(0.6,'rgba(196,176,226,'+(ma*0.5).toFixed(3)+')'); gr.addColorStop(1,'rgba(196,176,226,0)');
+    g.fillStyle=gr; g.beginPath(); g.arc(0,0,R,0,6.284); g.fill(); g.restore();
+  }
+  g.restore();
+  // dusk: the edge of the board darkens towards plum, leaving the middle clear to play on
+  var vg=g.createRadialGradient(W/2,H/2,Math.min(W,H)*0.32,W/2,H/2,Math.hypot(W,H)*0.55);
+  var va=NAT_DARK?0.34:0.2;
+  vg.addColorStop(0,'rgba(44,14,56,0)'); vg.addColorStop(0.4,'rgba(44,14,56,'+(va*0.1).toFixed(3)+')'); vg.addColorStop(0.7,'rgba(44,14,56,'+(va*0.42).toFixed(3)+')'); vg.addColorStop(1,'rgba(44,14,56,'+va+')');
+  g.fillStyle=vg; g.fillRect(0,0,W,H);
+  // bats: a swarm crosses every so often
+  if(!hbats.s && now>hbats.next){
+    var ltr=Math.random()<0.5, n=5+Math.floor(Math.random()*5);
+    hbats.s={t0:now, dur:8+Math.random()*4, ltr:ltr, y0:H*(0.12+Math.random()*0.55), dy:(Math.random()-0.5)*H*0.3, seed:Math.random()*10,
+      bats:Array.apply(null,Array(n)).map(function(){ return {o:Math.random()*s*7, y:(Math.random()-0.5)*s*2.2, p:Math.random()*6, z:0.7+Math.random()*0.6}; })};
+  }
+  var f=hbats.s; if(!f) return;
+  var kk=(now-f.t0)/f.dur;
+  if(kk>=1){ hbats.s=null; hbats.next=now+14+Math.random()*20; return; }
+  var lead=f.ltr?-80+(W+160+s*7)*kk:W+80-(W+160+s*7)*kk, dir=f.ltr?1:-1, sz=Math.max(5,s*0.2);
+  g.save();
+  f.bats.forEach(function(bt,i){
+    var bx=lead-dir*bt.o, by=f.y0+f.dy*kk+bt.y+Math.sin(now*2.1+bt.p)*sz*0.9;
+    g.globalAlpha=0.88; halloBat(g,bx,by,sz*bt.z,now*13+bt.p);
+  });
+  g.restore();
+}
+(function(){ var b=document.getElementById('hallobtn'); if(!b) return;
+  if(!HALLO_OK) return;                                   // out of season the button never shows
+  b.classList.remove('hide');
+  function paint(){ b.style.opacity=HALLO_ON?1:0.5; b.title=HALLO_ON?'Halloween is on - tap to switch off':'Halloween is off - tap to switch on'; document.body.classList.toggle('hallo',hallo()); }
+  b.addEventListener('click',function(){ HALLO_ON=!HALLO_ON; try{ localStorage.setItem('marchland.hallo',HALLO_ON?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); });
+  paint(); })();
 
 /* ═══ render ═══════════════════════════════════════════════════════════ */
 function renderDaily(){
