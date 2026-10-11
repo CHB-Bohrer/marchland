@@ -83,6 +83,22 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .sendmenu.hide{ display:none; }
 .sendmenu label{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2); }
 .sendmenu select{ padding:4px 6px; font-family:var(--mono); font-size:14px; font-weight:600; min-width:78px; }
+.cellmenu{ position:absolute; z-index:5; left:0; top:0; width:250px; max-width:calc(100% - 12px); background:var(--surface); border:1px solid var(--ink); border-radius:3px; box-shadow:0 4px 16px rgba(0,0,0,.3); will-change:transform; overflow:hidden; }
+.cellmenu.hide{ display:none; }
+.cm-title{ padding:7px 10px; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); border-bottom:1px solid var(--rule); background:var(--paper); }
+.cm-items{ display:flex; flex-direction:column; max-height:60vh; overflow:auto; }
+.cm-item{ display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:2px 10px; width:100%; text-align:left; padding:9px 10px; border:0; border-bottom:1px solid var(--rule); border-radius:0; background:var(--surface); font-size:14px; }
+.cm-item:last-child{ border-bottom:0; }
+.cm-item:hover:not(.off){ background:var(--paper); }
+.cm-l{ font-weight:600; }
+.cm-c{ font-family:var(--mono); font-size:11px; color:var(--ink-2); }
+.cm-w{ flex:1 0 100%; font-size:12px; color:var(--ink-2); }
+.cm-item.off{ opacity:1; cursor:pointer; }
+.cm-item.off .cm-l,.cm-item.off .cm-c{ opacity:.45; }
+@media (max-width:520px){ .cellmenu{ left:6px !important; right:6px; bottom:6px; top:auto !important; width:auto; max-width:none; transform:none !important; } }
+.caravan.onmap{ position:absolute; z-index:6; left:8px; right:8px; bottom:8px; max-height:80%; overflow:auto; border:1px solid var(--ink); border-radius:3px; background:var(--surface); box-shadow:0 4px 16px rgba(0,0,0,.3); }
+.cv-x{ display:none; float:right; padding:2px 8px; }
+.caravan.onmap .cv-x{ display:inline-flex; }
 .mapctl{ position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:5px; }
 .mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
 .status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
@@ -336,6 +352,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="canvas-pad">
         <canvas id="board"></canvas>
         <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
+        <div id="cellmenu" class="cellmenu hide" role="menu" aria-label="What you can do here"><div class="cm-title"></div><div class="cm-items"></div></div>
         <div id="sendmenu" class="sendmenu hide"><label for="sendsel">Send</label><select id="sendsel" aria-label="How many soldiers to send"></select></div>
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
@@ -348,7 +365,8 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
 
       <div class="rail">
-        <button id="m-claim" aria-pressed="true">Spend a march</button>
+        <button id="m-menu" aria-pressed="true" title="Tap any square for a menu of what you can do there">Tap for options</button>
+        <button id="m-claim" aria-pressed="false">Spend a march</button>
         <button id="m-bridge" aria-pressed="false">Bridge <span class="cost">1 m · 40 tm · 20 st</span></button>
         <button id="m-wall" aria-pressed="false">Wall <span class="cost">30 st</span></button>
         <button id="m-tower" aria-pressed="false">Tower <span class="cost">40 st · 30 tm</span></button>
@@ -361,7 +379,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
 
       <div class="caravan hide" id="caravan">
-        <div class="cv-head"><b>Send a caravan</b> <span class="muted">A gift of any goods you hold. It costs no marches, but the wagon takes time on the road.</span></div>
+        <div class="cv-head"><button type="button" id="cv-x" class="cv-x" aria-label="Close">&#10005;</button><b>Send a caravan</b> <span class="muted">A gift of any goods you hold. It costs no marches, but the wagon takes time on the road.</span></div>
         <div class="cv-row">
           <div class="field"><label for="cv-to">Send to</label><select id="cv-to"></select></div>
           <div class="field"><label for="cv-stone">Stone <i id="cvh-stone"></i></label><input id="cv-stone" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
@@ -629,7 +647,7 @@ try{ myName=localStorage.getItem('marchland.name')||''; myPin=localStorage.getIt
          events:{ id:{pid,k:'m'|'b'|'br',q,r,fq,fr,t,prev,loss} } }   the last week of moves, for replays
    Screenshots live outside the board, at /marchland_shots/<code>/<id>, so the
    board download that every change triggers never drags images along.     */
-var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
+var G=null, gameCode='', mode='menu', S=26, viewQ=0, viewR=0, dirty=false, pulling=false;
 var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
@@ -1273,7 +1291,7 @@ function spendMarch(q,r){
   settleCastles();                                   // bring every castle's health up to date before judging this move
   var c=cellOf(q,r);
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
-  if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Switch to <b>Bridge</b> to build across; it takes a day.');
+  if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Tap it and choose <b>Build a bridge</b>; it takes a day.');
   if(!adjacentTo(q,r,ME)) return nope('Marches extend a border — pick a cell touching your own ground.');
   if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Take or cut the road to its grain squares and cut it off &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
   var cost=c.o?2:1, prev=c.o, pw=c.w||0;
@@ -1323,7 +1341,7 @@ function bridge(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.t!==RIVER) return nope('Bridges go on river cells. Pick a river cell touching your ground.');
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
-  if(c.o) return nope('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Switch to <b>Spend a march</b> to take it &mdash; two marches, like the rest of their ground.');
+  if(c.o) return nope('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Tap it and choose <b>Take this bridge</b> &mdash; two marches, like the rest of their ground.');
   if(!adjacentTo(q,r,ME)) return nope('Build from your own bank &mdash; pick a river cell touching ground you hold.');
   if(pl.squares<1) return nope('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
   for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return nope('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'. '+shortBy(BRIDGE_COST)); }
@@ -1444,8 +1462,8 @@ function sayMove(){
 var sendMenuSig='', sendMenuPos='';
 function placeSendMenu(){
   var box=document.getElementById('sendmenu'); if(!box) return;
-  var c=sel&&mode==='move'&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
-  if(!sel||mode!=='move'||n<2){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; } return; }
+  var c=sel&&(mode==='move'||mode==='menu')&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
+  if(!sel||(mode!=='move'&&mode!=='menu')||n<2){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; } return; }
   var selEl=document.getElementById('sendsel'), sig=n+':'+sendN;
   if(sendMenuSig.split(':')[0]!==String(n)){            // (re)build the choices only when the band's size changes, so an open list isn't snatched away
     var opts='<option value="0">All '+n+'</option>';
@@ -1470,7 +1488,7 @@ function moveClick(q,r){
     sel={q:q,r:r}; sendN=0; draw(); return sayMove();
   }
   if(key(q,r)===key(sel.q,sel.r)){ sel=null; draw(); return say('Cancelled.'); }
-  if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. To take that cell, stand a band next to it and use <b>Spend a march</b>.');
+  if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. To take that cell, stand a band next to it, then tap it and choose <b>Take this square</b>.');
   var from=G.cells[key(sel.q,sel.r)], n=from&&from.b||0;
   if(!n){ sel=null; draw(); return nope('That band is gone.'); }
   var send=sendN&&sendN<n?sendN:n;
@@ -1495,19 +1513,26 @@ function trekAt(tk,t){
   return {q:q, r:r, P:toScreen(q,r)};
 }
 /* tapping one of your own walking bands (Move soldiers mode) picks it for new orders; tapping it again cancels */
-function trekTap(x,y){
-  if(sel||!G||!me()||!G.treks) return false;
+function trekAtPoint(x,y){
+  if(!G||!me()||!G.treks) return null;
   var now=Date.now(), rad=Math.max(16,S*0.8), best=null, bd=1e9;
   Object.keys(G.treks).forEach(function(id){
     var tk=G.treks[id]; if(!tk||tk.o!==ME||now>=tk.eta) return;
     var P=trekAt(tk,now).P, d=Math.hypot(P[0]-x,P[1]-y);
     if(d<=rad && d<bd){ bd=d; best=id; }
   });
-  if(!best) return false;
+  return best;
+}
+function pickTrek(id){
+  var tk=G.treks&&G.treks[id]; if(!tk) return;
+  selTrek=id; draw();
+  say('Band of <b>'+(tk.n||1)+'</b> on the road selected. Tap any of your squares to send them there instead &mdash; they turn from where they are now, and it costs no marches. Tap the band again to cancel.');
+}
+function trekTap(x,y){
+  if(sel) return false;
+  var best=trekAtPoint(x,y); if(!best) return false;
   if(selTrek===best){ selTrek=null; draw(); say('Cancelled &mdash; they keep walking the way they were.'); return true; }
-  selTrek=best; draw();
-  var tk2=G.treks[best];
-  say('Band of <b>'+(tk2.n||1)+'</b> on the road selected. Click any of your cells to send them there instead &mdash; they turn from where they are now, and it costs no marches. Click the band again to cancel.');
+  pickTrek(best);
   return true;
 }
 function redirectTrek(q,r){
@@ -1534,6 +1559,157 @@ function redirectTrek(q,r){
   putPath('/treks/'+id,tk);
   say('New orders: <b>'+(tk.n||1)+'</b> soldier'+(tk.n>1?'s':'')+' turn toward the new spot, no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>.');
 }
+/* ═══ tap a square, get its options ═══════════════════════════════════════
+   The default way to play. Tapping a square opens a small menu beside it listing what can be
+   done there, with prices; anything not possible right now is greyed with the reason.
+   Every entry runs the very same action the buttons under the map run, so the rules and costs
+   live in one place. Moving soldiers and sending caravans carry on over the map itself.      */
+var menuAt=null, menuActions=[], menuSig='', menuPos='', menuChk=0;
+var TERRAIN_NAME=['plain','forest','quarry','iron mine','farm','river'];
+function lackText(cost){
+  var pl=me(), miss=[];
+  for(var k in cost){ var have=Math.floor(pl.res[k]||0); if(have<cost[k]) miss.push((cost[k]-have)+' more '+k); }
+  return miss.length?'Needs '+andList(miss):'';
+}
+function bestBandBeside(q,r){
+  var m=0;
+  for(var i=0;i<6;i++){ var c=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(c&&c.o===ME&&c.b>0&&!building(c)&&c.b>m) m=c.b; }
+  return m;
+}
+function cellTitle(c){
+  var wet=c.t===RIVER, who=c.o?(c.o===ME?'Your ':esc(nameOf(c.o))+'&rsquo;s '):'', what;
+  if(c.k===CASTLE) what=isRuin(c)?'fallen castle':'castle'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
+  else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
+  else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
+  else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
+  var t=who+what;
+  if(c.o&&c.b>0) t+=' &middot; band of '+c.b;
+  if((c.w||0)>0) t+=' &middot; wall '+ROMAN[c.w];
+  return t;
+}
+function cellActions(q,r){
+  var pl=me(), c=cellOf(q,r), out=[], wet=c.t===RIVER, own=c.o===ME, adj=adjacentTo(q,r,ME), beside=bestBandBeside(q,r);
+  var A=function(label,cost,run,why){ out.push({label:label,cost:cost||'',run:run,why:why||''}); };
+  var marches=function(n){ return pl.squares<n?'Needs '+n+' marches (you have '+pl.squares+')':''; };
+  if(!own && !c.o){
+    if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Pick a square touching your ground':marches(1));
+    else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Build from your own bank':(marches(1)||lackText(BRIDGE_COST)));
+  } else if(!own){
+    var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need=guns+(c.w||0)+guard.n, need2=guns+guard.n;
+    var bandWhy=function(n){ return !beside?'Needs one of your bands standing beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
+    var whyTake=!adj?'Pick a square touching your ground':(bandWhy(need)||marches(2));
+    var price='2 marches'+(need?' &middot; '+need+' soldier'+(need>1?'s':'')+' lost':'');
+    var take=function(){ spendMarch(q,r); };
+    if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
+    else if(c.k===CASTLE) A('Seize the fallen castle',price+' &middot; +'+CASTLE_BOUNTY+' marches',take,whyTake);
+    else if(c.k===TOWER) A('Tear down the tower',price,take,whyTake);
+    else if(wet) A('Take this bridge',price,take,whyTake);
+    else A('Take this square',price,take,whyTake);
+    if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
+  } else if(building(c)){
+    A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
+  } else {
+    if(c.b>0) A('Move soldiers','free &middot; '+(TREK_MS_CELL/36e5)+' h a square',function(){ startMove(q,r); });
+    if(wet) A('Break this bridge',BREAK_COST+' marches',function(){ breakBridge(q,r); },bandWhy2(beside)||marches(BREAK_COST));
+    else if(c.k){
+      if(c.k===CASTLE) A('Muster a soldier','25 iron &middot; 40 grain',function(){ muster(q,r); },isRuin(c)?'A fallen castle can&rsquo;t muster':lackText({iron:25,grain:40}));
+      var lvl=c.l+1, uc={}; for(var k in SPEC[c.k].cost) uc[k]=SPEC[c.k].cost[k]*lvl;
+      A('Upgrade to level '+ROMAN[Math.min(3,lvl)],costLine(uc),function(){ upgrade(q,r); },c.l>=3?'Already level III':(isRuin(c)?'A fallen castle can&rsquo;t be upgraded':lackText(uc)));
+    } else {
+      var mine=fieldOf(ME);
+      A('Build a wall'+((c.w||0)?' (course '+((c.w||0)+1)+')':''),'30 stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:30}));
+      var tc=SPEC[TOWER].cost;
+      A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc)||(mine<SPEC[TOWER].gar[1]?'Needs a soldier to man it':''));
+      var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
+      var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs a road of your ground to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
+      A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
+    }
+  }
+  Object.keys(G.players).forEach(function(pid){
+    var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
+    A('Send goods to '+esc(o.name),'no marches',function(){ openCaravanOnMap(pid); });
+  });
+  return out;
+}
+function bandWhy2(beside){ return beside?'':'Needs one of your bands standing beside it'; }
+function startMove(q,r){ selTrek=null; sel={q:q,r:r}; sendN=0; draw(); sayMove(); }
+function renderCellMenu(){
+  var box=document.getElementById('cellmenu'), at=menuAt; if(!at||!G||!me()) return;
+  var title, acts;
+  if(at.trek){
+    var tk=G.treks&&G.treks[at.trek];
+    if(!tk||tk.o!==ME||Date.now()>=tk.eta) return closeCellMenu();
+    title='Your band of '+(tk.n||1)+' &middot; on the road';
+    acts=[{label:'Change course',cost:'free',why:'',run:function(){ pickTrek(at.trek); }}];
+  } else { title=cellTitle(cellOf(at.q,at.r)); acts=cellActions(at.q,at.r); }
+  menuActions=acts;
+  var sig=title+'|'+acts.map(function(a){ return a.label+a.cost+a.why; }).join('|');
+  if(sig===menuSig) return;
+  menuSig=sig;
+  box.querySelector('.cm-title').innerHTML=title;
+  box.querySelector('.cm-items').innerHTML=acts.map(function(a,i){
+    return '<button type="button" class="cm-item'+(a.why?' off':'')+'" role="menuitem" data-i="'+i+'"'+(a.why?' aria-disabled="true"':'')+'><span class="cm-l">'+a.label+'</span>'+(a.cost?'<span class="cm-c">'+a.cost+'</span>':'')+(a.why?'<span class="cm-w">'+a.why+'</span>':'')+'</button>';
+  }).join('');
+}
+function openCellMenu(target){
+  menuAt=target; menuSig=''; menuPos=''; menuChk=Date.now();
+  renderCellMenu(); if(!menuAt) return;
+  document.getElementById('cellmenu').classList.remove('hide');
+  placeCellMenu();
+}
+function closeCellMenu(){
+  menuAt=null; menuSig=''; menuPos='';
+  var box=document.getElementById('cellmenu'); if(box) box.classList.add('hide');
+}
+function placeCellMenu(){
+  var box=document.getElementById('cellmenu'); if(!box) return;
+  if(!menuAt){ if(!box.classList.contains('hide')) box.classList.add('hide'); return; }
+  var now=Date.now();
+  if(now-menuChk>1000){ menuChk=now; renderCellMenu(); if(!menuAt) return; }       // prices and "why not" notes stay current
+  var P;
+  if(menuAt.trek){ var tk=G.treks&&G.treks[menuAt.trek]; if(!tk) return closeCellMenu(); P=trekAt(tk,now).P; }
+  else P=toNear(menuAt.q,menuAt.r);
+  var bw=box.offsetWidth||230, bh=box.offsetHeight||120, gap=Math.max(14,S*0.95);
+  var x=Math.max(6,Math.min(W-bw-6,P[0]-bw/2));
+  var above=P[1]-gap-bh, y=above>=6?above:Math.max(6,Math.min(H-bh-6,P[1]+gap));   // flips below the square near the top edge
+  var pos=Math.round(x)+'px,'+Math.round(y)+'px';
+  if(pos!==menuPos){ box.style.transform='translate('+pos+')'; menuPos=pos; }
+}
+function menuTap(x,y,q,r){
+  if(sel||selTrek){ if(!trekTap(x,y)) moveClick(q,r); return; }                // a move already under way takes the tap as its destination
+  var tid=trekAtPoint(x,y);
+  if(tid){ if(menuAt&&menuAt.trek===tid) return closeCellMenu(); return openCellMenu({trek:tid}); }
+  if(menuAt&&!menuAt.trek&&key(menuAt.q,menuAt.r)===key(q,r)) return closeCellMenu();
+  openCellMenu({q:q,r:r});
+}
+document.getElementById('cellmenu').addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-i]'); if(!b) return;
+  var a=menuActions[parseInt(b.getAttribute('data-i'),10)], at=menuAt;
+  closeCellMenu(); if(!a||!G||!me()) return;
+  if(at&&!at.trek){ var P=toNear(at.q,at.r); lastTap={x:P[0],y:P[1],t:Date.now()}; }   // so a refusal can mark the square
+  a.run(); lastTap=null;
+});
+document.addEventListener('keydown',function(e){
+  if(e.key!=='Escape'||!G) return;
+  if(menuAt) closeCellMenu();
+  else if(sel||selTrek){ sel=null; selTrek=null; draw(); say('Cancelled.'); }
+});
+/* sending goods from the map: the caravan form opens over the map with the keep's owner already chosen */
+function openCaravanOnMap(pid){
+  var box=document.getElementById('caravan'), pad=document.querySelector('.canvas-pad');
+  if(!box.classList.contains('onmap')) pad.appendChild(box);
+  box.classList.add('onmap'); box.classList.remove('hide');
+  document.getElementById('m-caravan').setAttribute('aria-expanded','true');
+  cvPanel(); var to=document.getElementById('cv-to'); if(G.players[pid]) to.value=pid; cvPanel();
+  say('Load the wagon for <b>'+esc(nameOf(pid))+'</b> &mdash; type how much of each good to send. It costs no marches, but the wagon takes time on the road.');
+}
+function closeCaravanMap(){
+  var box=document.getElementById('caravan');
+  if(box.classList.contains('onmap')){ box.classList.remove('onmap'); var st=document.getElementById('status'); st.parentNode.insertBefore(box,st); }
+  box.classList.add('hide'); document.getElementById('m-caravan').setAttribute('aria-expanded','false');
+}
+document.getElementById('cv-x').addEventListener('click',closeCaravanMap);
+
 /* the owner's tab: put any band that has finished its walk onto its destination.
    If that ground was lost in the meantime, the men fall back to the nearest cell of the owner's. */
 function settleTreks(){
@@ -2278,7 +2454,7 @@ function draw(){
       for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
       ctx.stroke(); ctx.restore();
     }
-    if(haveMarch&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
+    if(haveMarch&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='menu' || mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
       ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=pColor(ME); ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
       if(glowOn){ ctx.save(); ctx.globalAlpha=0.14+0.16*(0.5+0.5*Math.sin(now*4.5)); ctx.fillStyle=pColor(ME); hexPath(p[0],p[1],S*0.9); ctx.fill(); ctx.restore(); }
@@ -2343,6 +2519,7 @@ function draw(){
   if(amb) ambBirds(ctx,now);
   drawCoach(now);
   placeSendMenu();
+  placeCellMenu();
 
   // Anyone off the edge of the screen gets an arrow pointing at their keep, with
   // how far away it is — otherwise a distant opponent is simply invisible.
@@ -3146,7 +3323,8 @@ function endPointer(ev){
     if(wasDragging && !moved && G && me()){
       var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top); h=[wrapC(h[0]),wrapC(h[1])];
       lastTap={x:ev.clientX-b.left, y:ev.clientY-b.top, t:Date.now()};      // so a refusal can mark the spot
-      if(mode==='claim') spendMarch(h[0],h[1]);
+      if(mode==='menu') menuTap(ev.clientX-b.left,ev.clientY-b.top,h[0],h[1]);
+      else if(mode==='claim') spendMarch(h[0],h[1]);
       else if(mode==='bridge') bridge(h[0],h[1]);
       else if(mode==='wall') wall(h[0],h[1]);
       else if(mode==='tower') build(h[0],h[1],TOWER);
@@ -3166,8 +3344,9 @@ canvas.addEventListener('wheel',function(ev){
   ev.preventDefault();
   setZoom(S*(ev.deltaY<0?1.15:1/1.15)); draw();
 },{passive:false});
-var MODES={claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop',move:'m-move',break:'m-break'};
+var MODES={menu:'m-menu',claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop',move:'m-move',break:'m-break'};
 var HINTS={
+  menu:'Tap any square on the map. A small menu opens beside it with everything you can do there and what it costs; anything you can&rsquo;t do right now is greyed, with the reason. The buttons below the map are shortcuts that stay on one action &mdash; handy for claiming several squares in a row.',
   claim:'Click any dashed cell touching your ground to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it, big enough to pay for their walls, guns and guarding band with one left over to hold it. Rivers can&rsquo;t be marched into &mdash; bridge them.',
   bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
@@ -3183,7 +3362,7 @@ function whyLocked(m){
   var head='<span class="bad">You can&rsquo;t '+NAMES[m]+' yet.</span> ';
   if(m==='move'||m==='break'){
     var pl=me(), canM=pl.res.iron>=25&&pl.res.grain>=40;
-    return head+'You have no soldiers on the map. Switch to <b>Muster</b> and click one of your castles to raise one (25 iron, 40 grain)'
+    return head+'You have no soldiers on the map. Tap one of your castles and choose <b>Muster a soldier</b> to raise one (25 iron, 40 grain)'
       +(canM?'.':'. '+shortBy({iron:25,grain:40}));
   }
   var cost = m==='wall'?{stone:30} : m==='bridge'?BRIDGE_COST : m==='tower'?SPEC[TOWER].cost : m==='castle'?castleCost(ME) : {iron:25,grain:40};
@@ -3193,7 +3372,7 @@ Object.keys(MODES).forEach(function(m){
   document.getElementById(MODES[m]).addEventListener('click',function(){
     if(locked(this)) return nope(whyLocked(m),this);
     if(coach.target){ coach.target=null; coach.following=false; }   // they picked a tool themselves: the idea bubble steps aside (Suggest re-adds it)
-    mode=m; sel=null; selTrek=null;
+    mode=m; sel=null; selTrek=null; closeCellMenu();
     Object.keys(MODES).forEach(function(k){ document.getElementById(MODES[k]).setAttribute('aria-pressed',String(k===m)); });
     say(HINTS[m]); draw();
   });
@@ -3279,7 +3458,7 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Click a dashed cell to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
+  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell and choose <b>Claim</b> to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
   else { setTimeout(showNotice,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
@@ -3451,6 +3630,7 @@ function sendCaravan(){
   logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g});
   render();
   say('Caravan on its way to <b>'+esc(them.name)+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map.');
+  if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
 function settleCaravans(){
@@ -3533,6 +3713,7 @@ function artCaravan(g,x,y,s,col,t,face){
 }
 document.getElementById('m-caravan').addEventListener('click',function(){
   var box=document.getElementById('caravan'), open=box.classList.contains('hide');
+  if(box.classList.contains('onmap')){ closeCaravanMap(); return; }
   box.classList.toggle('hide',!open); this.setAttribute('aria-expanded',String(open));
   if(open){ cvPanel(); say('Choose who the caravan goes to and what to load. Sending it costs no marches.'); }
 });
@@ -3631,7 +3812,7 @@ function coachShow(how){                             // how: false = asked for i
   if(coach.hidden && auto) return;
   flashCoach();
   if(p.target){
-    if(p.mode && mode!==p.mode){
+    if(p.mode && mode!==p.mode && mode!=='menu'){     // (in the tap menu every idea is already one tap away, so the tool is left alone)
       if(idle) return;                                // never swap the tool under someone who is just thinking
       var btn=document.getElementById(MODES[p.mode]); if(btn && !locked(btn)) btn.click();
     }
