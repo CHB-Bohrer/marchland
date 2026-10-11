@@ -1680,6 +1680,8 @@ function menuTap(x,y,q,r){
   var tid=trekAtPoint(x,y);
   if(tid){ if(menuAt&&menuAt.trek===tid) return closeCellMenu(); return openCellMenu({trek:tid}); }
   if(menuAt&&!menuAt.trek&&key(menuAt.q,menuAt.r)===key(q,r)) return closeCellMenu();
+  var cc=cellOf(q,r);
+  if(!cc.o && cc.t!==RIVER){ closeCellMenu(); return spendMarch(q,r); }      // unoccupied land: one tap, one march, no menu
   openCellMenu({q:q,r:r});
 }
 document.getElementById('cellmenu').addEventListener('click',function(ev){
@@ -3458,7 +3460,7 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell and choose <b>Claim</b> to take it, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
+  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
   else { setTimeout(showNotice,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
