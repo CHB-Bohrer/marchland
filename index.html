@@ -355,7 +355,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <button id="m-castle" aria-pressed="false">Castle <span class="cost">260 tm · 200 st · 60 ir</span></button>
         <button id="m-upgrade" aria-pressed="false">Upgrade</button>
         <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
-        <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">free · 2 h / cell</span></button>
+        <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">free · 3 h / cell</span></button>
         <button id="m-break" aria-pressed="false">Break bridge <span class="cost">2 marches</span></button>
         <button id="m-caravan" class="cvbtn" aria-expanded="false" aria-controls="caravan">Caravan <span class="cost">gift goods · no marches</span></button>
       </div>
@@ -433,7 +433,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <h3>What changed</h3>
     <ul>
       <li><b>No marches to move.</b> Sending a band along your own ground is free. (The old price was 1 march for every 3 cells.)</li>
-      <li><b>Two hours a cell.</b> A band covers 1 cell of road every 2 hours, so 5 cells takes 10 hours and 12 cells takes a day. When you send one, the game tells you how long it will be. You and everyone else can watch the band walk across the map.</li>
+      <li><b>Three hours a cell.</b> A band covers 1 cell of road every 3 hours, so 5 cells takes 15 hours and 8 cells takes a day. When you send one, the game tells you how long it will be. You and everyone else can watch the band walk across the map.</li>
       <li><b>On the road, they stand nowhere.</b> Soldiers who are walking don&rsquo;t guard any cell, can&rsquo;t be used to take ground, tear down towers or break bridges, and don&rsquo;t count toward a garrison until they arrive. They still eat grain.</li>
       <li><b>If the ground is lost.</b> Should the cell they were heading for be taken before they reach it, they fall back to your nearest cell instead.</li>
     </ul>
@@ -846,12 +846,12 @@ function adjacentTo(q,r,pid){
 /* ═══ bands ═════════════════════════════════════════════════════════════
    Soldiers are not a number in a purse: they stand on the map, in bands, on
    their owner's ground. A band is raised at a castle, walks across its owner's
-   land for free but slowly (two hours a cell, see treks below), and has to be standing next to someone
+   land for free but slowly (three hours a cell, see treks below), and has to be standing next to someone
    else's cell to take it. A band also guards: taking a cell on or next to one
    costs the attacker a soldier for every soldier in it, and the band dies
    defending. Bands live on the cells, so an attack writes only the cells it
    touches.                                                                   */
-var TREK_MS_CELL=2*36e5;                              // a band on the road covers one cell every two hours
+var TREK_MS_CELL=3*36e5;                              // a band on the road covers one cell every three hours
 /* soldiers currently walking between cells (they stand nowhere, so they guard nothing) */
 function transitOf(pid){ var n=0, T=(G&&G.treks)||{}; for(var id in T){ var t=T[id]; if(t && t.o===pid) n+=t.n||0; } return n; }
 function bandsOf(pid){
@@ -1428,7 +1428,7 @@ function muster(q,r){
   pl.res.iron-=25; pl.res.grain-=40; c.b=(c.b||0)+1;
   writeCell(q,r,c); logMove('ms',q,r,null,null,0);
   render(); pushCell(q,r); pushMe(); flashStat(document.getElementById('v-field').parentNode);
-  say('A soldier joins the band at this castle &mdash; <b>'+c.b+'</b> here now. Use <b>Move soldiers</b> to send them toward a border &mdash; it&rsquo;s free, but they walk 1 cell every 2 hours. Every soldier eats grain.');
+  say('A soldier joins the band at this castle &mdash; <b>'+c.b+'</b> here now. Use <b>Move soldiers</b> to send them toward a border &mdash; it&rsquo;s free, but they walk 1 cell every 3 hours. Every soldier eats grain.');
 }
 
 /* ── moving a band ── */
@@ -1438,7 +1438,7 @@ function sayMove(){
   var c=G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
   say('Band of <b>'+n+'</b> selected, sending <b>'+sendLabel()+'</b>. '
     +(n>1?'Choose how many from the menu on the map. ':'')
-    +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 2 hours. Click the band again to cancel.');
+    +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 3 hours. Click the band again to cancel.');
 }
 /* the "how many?" menu sits on the map, just above the selected band, and follows it as the map is panned or zoomed */
 var sendMenuSig='', sendMenuPos='';
@@ -3127,7 +3127,7 @@ var HINTS={
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
-  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 2 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours.'
+  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours.'
 };
 var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
 function whyLocked(m){
