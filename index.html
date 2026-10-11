@@ -1432,7 +1432,7 @@ function muster(q,r){
 }
 
 /* ── moving a band ── */
-var sel=null, sendN=0;                               // selected band, and how many to send (0 = all)
+var sel=null, sendN=0, selTrek=null;                 // selected band, how many to send (0 = all), and a walking band picked for new orders
 function sendLabel(){ var c=sel&&G.cells[key(sel.q,sel.r)]; var n=c&&c.b||0; return sendN&&sendN<n?sendN+' of '+n:'all '+n; }
 function sayMove(){
   var c=G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
@@ -1464,6 +1464,7 @@ function placeSendMenu(){
 }
 function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
+  if(selTrek) return redirectTrek(q,r);              // a walking band is selected: this click is its new destination
   if(!sel){
     if(c.o!==ME || !(c.b>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground.');
     sel={q:q,r:r}; sendN=0; draw(); return sayMove();
@@ -1485,6 +1486,53 @@ function moveClick(q,r){
   render();
   putPath('/treks/'+id,tk).then(function(){ return pushCell(oq,or); });
   say('<b>'+send+'</b> soldier'+(send>1?'s':'')+' set off along '+d+' cell'+(d>1?'s':'')+' of road &mdash; no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>, and guard nothing until they do.');
+}
+/* where a walking band is right now: its map coordinates (on the copy of the world nearest the view) and screen point */
+function trekAt(tk,t){
+  var k=Math.max(0,Math.min(1,(t-tk.t)/Math.max(1,tk.eta-tk.t)));
+  var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
+  var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k;
+  return {q:q, r:r, P:toScreen(q,r)};
+}
+/* tapping one of your own walking bands (Move soldiers mode) picks it for new orders; tapping it again cancels */
+function trekTap(x,y){
+  if(sel||!G||!me()||!G.treks) return false;
+  var now=Date.now(), rad=Math.max(16,S*0.8), best=null, bd=1e9;
+  Object.keys(G.treks).forEach(function(id){
+    var tk=G.treks[id]; if(!tk||tk.o!==ME||now>=tk.eta) return;
+    var P=trekAt(tk,now).P, d=Math.hypot(P[0]-x,P[1]-y);
+    if(d<=rad && d<bd){ bd=d; best=id; }
+  });
+  if(!best) return false;
+  if(selTrek===best){ selTrek=null; draw(); say('Cancelled &mdash; they keep walking the way they were.'); return true; }
+  selTrek=best; draw();
+  var tk2=G.treks[best];
+  say('Band of <b>'+(tk2.n||1)+'</b> on the road selected. Click any of your cells to send them there instead &mdash; they turn from where they are now, and it costs no marches. Click the band again to cancel.');
+  return true;
+}
+function redirectTrek(q,r){
+  var tk=G.treks&&G.treks[selTrek], id=selTrek, now=Date.now();
+  if(!tk||tk.o!==ME||now>=tk.eta){ selTrek=null; draw(); return nope('That band has already arrived.'); }
+  var c=cellOf(q,r);
+  if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. Click one of your own cells to send them there.');
+  if(key(q,r)===key(tk.to[0],tk.to[1])) return say('They are already heading there. Click a different cell of yours, or the band to cancel.');
+  // they turn from where they stand: the road is measured from the nearest finished cell of yours
+  // (their position now, or where they set out from, or where they were going), plus the short way back to it
+  var pos=trekAt(tk,now), here=cubeRound(pos.q,pos.r);
+  var cands=[here, cubeRound(tk.from[0],tk.from[1]), [tk.to[0],tk.to[1]]], pick=null;
+  for(var i=0;i<cands.length && !pick;i++){
+    var cc=G.cells[key(cands[i][0],cands[i][1])];
+    if(!cc||cc.o!==ME||building(cc)) continue;
+    var d=roadLength(ME,cands[i][0],cands[i][1],q,r);
+    if(d>=0) pick={d:d, back:hexDist(pos.q,pos.r,cands[i][0],cands[i][1])};
+  }
+  if(!pick) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground from where they are to there.');
+  var ms=Math.max(60000,Math.round((pick.d+pick.back)*TREK_MS_CELL));
+  var r3=function(v){ return Math.round(v*1000)/1000; };
+  tk.from=[r3(wrapC(pos.q)),r3(wrapC(pos.r))]; tk.to=[wrapC(q),wrapC(r)]; tk.t=now; tk.eta=now+ms;
+  selTrek=null; draw();
+  putPath('/treks/'+id,tk);
+  say('New orders: <b>'+(tk.n||1)+'</b> soldier'+(tk.n>1?'s':'')+' turn toward the new spot, no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>.');
 }
 /* the owner's tab: put any band that has finished its walk onto its destination.
    If that ground was lost in the meantime, the men fall back to the nearest cell of the owner's. */
@@ -1520,6 +1568,7 @@ function drawTreks(now,amb){
     var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
     var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
+    if(id===selTrek){ ctx.save(); ctx.strokeStyle=T['--ink']; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(P[0],P[1],Math.max(14,S*0.8),0,6.284); ctx.stroke(); ctx.restore(); }
     var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,Math.max(1,tk.n||1));
     // the road still to walk: a dashed line from where they are to where they are going, so a band
     // reads as "heading there" even when the map is too small to make out the walkers themselves
@@ -3104,7 +3153,7 @@ function endPointer(ev){
       else if(mode==='castle') build(h[0],h[1],CASTLE);
       else if(mode==='upgrade') upgrade(h[0],h[1]);
       else if(mode==='troop') muster(h[0],h[1]);
-      else if(mode==='move') moveClick(h[0],h[1]);
+      else if(mode==='move'){ if(!trekTap(ev.clientX-b.left,ev.clientY-b.top)) moveClick(h[0],h[1]); }
       else if(mode==='break') breakBridge(h[0],h[1]);
       lastTap=null;
     }
@@ -3127,7 +3176,7 @@ var HINTS={
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
-  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours.'
+  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours. To change a walking band\'s course, click it on the map, then click a new destination.'
 };
 var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
 function whyLocked(m){
@@ -3144,7 +3193,7 @@ Object.keys(MODES).forEach(function(m){
   document.getElementById(MODES[m]).addEventListener('click',function(){
     if(locked(this)) return nope(whyLocked(m),this);
     if(coach.target){ coach.target=null; coach.following=false; }   // they picked a tool themselves: the idea bubble steps aside (Suggest re-adds it)
-    mode=m; sel=null;
+    mode=m; sel=null; selTrek=null;
     Object.keys(MODES).forEach(function(k){ document.getElementById(MODES[k]).setAttribute('aria-pressed',String(k===m)); });
     say(HINTS[m]); draw();
   });
