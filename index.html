@@ -1494,14 +1494,31 @@ function drawTreks(now,amb){
     var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
     var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
-    var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,Math.max(1,tk.n||1));
-    for(var i=0;i<cnt;i++){
-      var off=(i-(cnt-1)/2)*h*0.5;
-      artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,pColor(tk.o),{face:face, ph:amb?now*11+i*1.3:0});
-    }
-    if(S>=12){
+    var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,Math.max(1,tk.n||1));
+    // the road still to walk: a dashed line from where they are to where they are going, so a band
+    // reads as "heading there" even when the map is too small to make out the walkers themselves
+    ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=.7; ctx.lineWidth=Math.max(1.5,S*0.09); ctx.setLineDash([Math.max(3,S*0.28),Math.max(3,S*0.2)]);
+    if(amb) ctx.lineDashOffset=-(now*14)%40;
+    ctx.beginPath(); ctx.moveTo(P[0],P[1]); ctx.lineTo(PB[0],PB[1]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha=.9; ctx.beginPath(); ctx.arc(PB[0],PB[1],Math.max(3,S*0.16),0,6.284); ctx.fillStyle=col; ctx.fill(); ctx.restore();
+    if(S>=16){                                       // close in: the men themselves, walking
+      for(var i=0;i<cnt;i++){
+        var off=(i-(cnt-1)/2)*h*0.5;
+        artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,col,{face:face, ph:amb?now*11+i*1.3:0});
+      }
       var lab=(tk.n||1)+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
-      artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),pColor(tk.o),1);
+      artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),col,1);
+    } else {                                         // zoomed out: a numbered badge like a standing band, but with a dashed ring and a pointer toward where it is headed
+      var s=Math.max(11,S*0.5), R=s*0.62, ang=Math.atan2(PB[1]-P[1],PB[0]-P[0]);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(P[0],P[1],R,0,6.284); ctx.fillStyle=T['--surface']; ctx.fill();
+      ctx.lineWidth=2; ctx.strokeStyle=col; ctx.setLineDash([3,2.5]); ctx.stroke(); ctx.setLineDash([]);
+      var ax=P[0]+Math.cos(ang)*(R+3), ay=P[1]+Math.sin(ang)*(R+3), ah=Math.max(4,R*0.5);   // arrowhead just outside the badge
+      ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(ax+Math.cos(ang)*ah,ay+Math.sin(ang)*ah);
+      ctx.lineTo(ax+Math.cos(ang+2.4)*ah,ay+Math.sin(ang+2.4)*ah); ctx.lineTo(ax+Math.cos(ang-2.4)*ah,ay+Math.sin(ang-2.4)*ah); ctx.closePath(); ctx.fill();
+      ctx.fillStyle=T['--ink']; ctx.font='600 '+Math.round(s*0.78)+'px ui-monospace, monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(tk.n||1),P[0],P[1]+0.5);
+      ctx.restore();
     }
   });
 }
