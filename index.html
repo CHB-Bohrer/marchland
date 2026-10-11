@@ -79,6 +79,10 @@ input:focus-visible, select:focus-visible{ outline:2px solid var(--brass); outli
 .canvas-pad{ position:relative; background:var(--sink); }
 canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crosshair; }
 .replaybtn{ position:absolute; top:8px; left:8px; font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; background:var(--surface); opacity:.95; }
+.sendmenu{ position:absolute; z-index:4; left:0; top:0; display:flex; align-items:center; gap:6px; padding:4px 6px; background:var(--surface); border:1px solid var(--ink); border-radius:3px; box-shadow:0 2px 8px rgba(0,0,0,.25); will-change:transform; }
+.sendmenu.hide{ display:none; }
+.sendmenu label{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-2); }
+.sendmenu select{ padding:4px 6px; font-family:var(--mono); font-size:14px; font-weight:600; min-width:78px; }
 .mapctl{ position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:5px; }
 .mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
 .status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
@@ -332,6 +336,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="canvas-pad">
         <canvas id="board"></canvas>
         <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
+        <div id="sendmenu" class="sendmenu hide"><label for="sendsel">Send</label><select id="sendsel" aria-label="How many soldiers to send"></select></div>
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
           <button id="zout" aria-label="Zoom out">−</button>
@@ -1431,10 +1436,31 @@ var sel=null, sendN=0;                               // selected band, and how m
 function sendLabel(){ var c=sel&&G.cells[key(sel.q,sel.r)]; var n=c&&c.b||0; return sendN&&sendN<n?sendN+' of '+n:'all '+n; }
 function sayMove(){
   var c=G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
-  var btn=function(v,l){ return '<button class="mini" data-send="'+v+'"'+((sendN===v)?' aria-pressed="true"':'')+'>'+l+'</button>'; };
   say('Band of <b>'+n+'</b> selected, sending <b>'+sendLabel()+'</b>. '
-    +(n>1?btn(0,'All')+' '+(n>2?btn(Math.floor(n/2),'Half')+' ':'')+btn(1,'One')+' ':'')
+    +(n>1?'Choose how many from the menu on the map. ':'')
     +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 2 hours. Click the band again to cancel.');
+}
+/* the "how many?" menu sits on the map, just above the selected band, and follows it as the map is panned or zoomed */
+var sendMenuSig='', sendMenuPos='';
+function placeSendMenu(){
+  var box=document.getElementById('sendmenu'); if(!box) return;
+  var c=sel&&mode==='move'&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
+  if(!sel||mode!=='move'||n<2){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; } return; }
+  var selEl=document.getElementById('sendsel'), sig=n+':'+sendN;
+  if(sendMenuSig.split(':')[0]!==String(n)){            // (re)build the choices only when the band's size changes, so an open list isn't snatched away
+    var opts='<option value="0">All '+n+'</option>';
+    for(var i=n-1;i>=1;i--) opts+='<option value="'+i+'">'+i+(i===Math.floor(n/2)&&n>2?' (half)':'')+'</option>';
+    selEl.innerHTML=opts;
+  }
+  var want=String(sendN&&sendN<n?sendN:0);
+  if(selEl.value!==want) selEl.value=want;
+  sendMenuSig=sig;
+  if(box.classList.contains('hide')) box.classList.remove('hide');
+  var P=toNear(sel.q,sel.r), bw=box.offsetWidth||130, bh=box.offsetHeight||34;
+  var x=Math.max(4,Math.min(W-bw-4,P[0]-bw/2));
+  var above=P[1]-S*0.95-bh-4, y=above>=4?above:Math.min(H-bh-4,P[1]+S*0.95+4);   // flips below the band near the top edge
+  var pos=Math.round(x)+'px,'+Math.round(y)+'px';
+  if(pos!==sendMenuPos){ box.style.transform='translate('+pos+')'; sendMenuPos=pos; }
 }
 function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
@@ -2267,6 +2293,7 @@ function draw(){
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
   drawCoach(now);
+  placeSendMenu();
 
   // Anyone off the edge of the screen gets an arrow pointing at their keep, with
   // how far away it is — otherwise a distant opponent is simply invisible.
@@ -3136,9 +3163,9 @@ document.getElementById('why').addEventListener('click',function(){
     new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting && e.intersectionRatio>0.9) hideWhy(); }); },{threshold:[0.9,1]}).observe(st);
   } else window.addEventListener('scroll',function(){ if(statusInView().seen) hideWhy(); },{passive:true});
 })();
-document.getElementById('status').addEventListener('click',function(ev){
-  var b=ev.target.closest('button[data-send]'); if(!b||!sel) return;
-  sendN=parseInt(b.getAttribute('data-send'),10)||0; sayMove();
+document.getElementById('sendsel').addEventListener('change',function(){
+  if(!sel) return;
+  sendN=parseInt(this.value,10)||0; sayMove(); draw();
 });
 document.getElementById('zin').addEventListener('click',function(){ setZoom(S*1.35); draw(); });
 document.getElementById('zout').addEventListener('click',function(){ setZoom(S/1.35); draw(); });
