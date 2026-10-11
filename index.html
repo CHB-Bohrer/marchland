@@ -350,7 +350,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <button id="m-castle" aria-pressed="false">Castle <span class="cost">260 tm · 200 st · 60 ir</span></button>
         <button id="m-upgrade" aria-pressed="false">Upgrade</button>
         <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
-        <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">1 march / 3 cells</span></button>
+        <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">free · 2 h / cell</span></button>
         <button id="m-break" aria-pressed="false">Break bridge <span class="cost">2 marches</span></button>
         <button id="m-caravan" class="cvbtn" aria-expanded="false" aria-controls="caravan">Caravan <span class="cost">gift goods · no marches</span></button>
       </div>
@@ -423,17 +423,17 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 <div id="rulesnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="rulesnote-h">
   <div class="rulesnote-card">
     <p class="rulesnote-eyebrow">Rules change &middot; read this</p>
-    <h2 id="rulesnote-h">Castles now need farms</h2>
-    <p>A castle can no longer be planted anywhere you like, and a castle with no food will fall.</p>
+    <h2 id="rulesnote-h">Soldiers now walk for free &mdash; but slowly</h2>
+    <p>Moving a band of soldiers no longer costs marches. Instead, it costs time.</p>
     <h3>What changed</h3>
     <ul>
-      <li><b>Where you can build one.</b> Never on a grain square (&equiv;), and only where your own unbroken ground links it to a farm you hold &mdash; the same kind of road that carries supply.</li>
-      <li><b>Keeping it standing.</b> If no farm is connected to a castle, it loses health every 4 hours and <b>falls after 5 days</b>. Reconnect a farm and it heals at exactly the rate it was losing health.</li>
-      <li><b>When it falls.</b> A fallen castle gives no supply, no grain and holds no garrison. A band standing beside it can <b>seize it</b>, which destroys it &mdash; and the captor gets <b>50 marches</b>. Healthy castles still cannot be stormed.</li>
+      <li><b>No marches to move.</b> Sending a band along your own ground is free. (The old price was 1 march for every 3 cells.)</li>
+      <li><b>Two hours a cell.</b> A band covers 1 cell of road every 2 hours, so 5 cells takes 10 hours and 12 cells takes a day. When you send one, the game tells you how long it will be. You and everyone else can watch the band walk across the map.</li>
+      <li><b>On the road, they stand nowhere.</b> Soldiers who are walking don&rsquo;t guard any cell, can&rsquo;t be used to take ground, tear down towers or break bridges, and don&rsquo;t count toward a garrison until they arrive. They still eat grain.</li>
+      <li><b>If the ground is lost.</b> Should the cell they were heading for be taken before they reach it, they fall back to your nearest cell instead.</li>
     </ul>
     <h3>Why</h3>
-    <p>Before this, you could march into another player&rsquo;s land and drop a castle right there, with soldiers mustering at their border within a day. Now a castle has to be connected to your own farms &mdash; so a keep planted inside enemy ground starves as soon as the road to it is cut, and then it can be taken.</p>
-    <div class="rulesnote-mine hide" id="rulesnote-mine"></div>
+    <p>Marches are now spent only on claiming ground, not on shuffling soldiers about. And distance now matters: a band sent toward a border takes hours to arrive, so the move can be seen coming &mdash; plan ahead rather than appearing at an enemy&rsquo;s door in an instant.</p>
     <button type="button" class="rulesnote-go" id="rulesnote-go">Got it &mdash; let&rsquo;s play</button>
   </div>
 </div>
@@ -628,7 +628,7 @@ var G=null, gameCode='', mode='claim', S=26, viewQ=0, viewR=0, dirty=false, pull
 var panX=0, panY=0;                                  // drag offset in pixels, on top of the anchor cell
 
 function blankGame(code){
-  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{}, events:{}, caravans:{} };
+  return { v:1, code:code, created:Date.now(), players:{}, cells:{}, claims:{}, events:{}, caravans:{}, treks:{} };
 }
 function cellOf(q,r){
   var c=G.cells[key(q,r)];
@@ -820,7 +820,7 @@ function ratesFor(pid){
     if(c.k===CASTLE && !isRuin(c)) out.grain+=2;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
-  var f=fieldOf(pid);
+  var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
   return {out:out,sup:s,own:own,mouths:f+g[0],net:out.grain-(f+g[0]),supset:sup,gar:g,field:f};
 }
 function coverOn(q,r,notPid){        // manned guns of everyone except notPid
@@ -841,12 +841,14 @@ function adjacentTo(q,r,pid){
 /* ═══ bands ═════════════════════════════════════════════════════════════
    Soldiers are not a number in a purse: they stand on the map, in bands, on
    their owner's ground. A band is raised at a castle, walks across its owner's
-   land for a march per three cells, and has to be standing next to someone
+   land for free but slowly (two hours a cell, see treks below), and has to be standing next to someone
    else's cell to take it. A band also guards: taking a cell on or next to one
    costs the attacker a soldier for every soldier in it, and the band dies
    defending. Bands live on the cells, so an attack writes only the cells it
    touches.                                                                   */
-var MOVE_PER_MARCH=3;
+var TREK_MS_CELL=2*36e5;                              // a band on the road covers one cell every two hours
+/* soldiers currently walking between cells (they stand nowhere, so they guard nothing) */
+function transitOf(pid){ var n=0, T=(G&&G.treks)||{}; for(var id in T){ var t=T[id]; if(t && t.o===pid) n+=t.n||0; } return n; }
 function bandsOf(pid){
   var out=[];
   for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0){ var p=k.split('_'); out.push({q:parseInt(p[0],10),r:parseInt(p[1],10),n:c.b,k:k}); } }
@@ -988,11 +990,12 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},othersOf(G.players)]);
+  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players)]);
   G.cells=remote.cells||{}; tidyBoard(G);
   G.claims=remote.claims||{};
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
+  G.treks=remote.treks||{};
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -1002,7 +1005,7 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,othersOf(G.players)])!==before;
+  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players)])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -1420,7 +1423,7 @@ function muster(q,r){
   pl.res.iron-=25; pl.res.grain-=40; c.b=(c.b||0)+1;
   writeCell(q,r,c); logMove('ms',q,r,null,null,0);
   render(); pushCell(q,r); pushMe(); flashStat(document.getElementById('v-field').parentNode);
-  say('A soldier joins the band at this castle &mdash; <b>'+c.b+'</b> here now. Use <b>Move soldiers</b> to march them toward a border. Every soldier eats grain.');
+  say('A soldier joins the band at this castle &mdash; <b>'+c.b+'</b> here now. Use <b>Move soldiers</b> to send them toward a border &mdash; it&rsquo;s free, but they walk 1 cell every 2 hours. Every soldier eats grain.');
 }
 
 /* ── moving a band ── */
@@ -1431,7 +1434,7 @@ function sayMove(){
   var btn=function(v,l){ return '<button class="mini" data-send="'+v+'"'+((sendN===v)?' aria-pressed="true"':'')+'>'+l+'</button>'; };
   say('Band of <b>'+n+'</b> selected, sending <b>'+sendLabel()+'</b>. '
     +(n>1?btn(0,'All')+' '+(n>2?btn(Math.floor(n/2),'Half')+' ':'')+btn(1,'One')+' ':'')
-    +'Now click any of your cells to march there: 1 march per '+MOVE_PER_MARCH+' cells of road. Click the band again to cancel.');
+    +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 2 hours. Click the band again to cancel.');
 }
 function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
@@ -1446,15 +1449,61 @@ function moveClick(q,r){
   var send=sendN&&sendN<n?sendN:n;
   var d=roadLength(ME,sel.q,sel.r,q,r);
   if(d<0) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground between here and there.');
-  var cost=Math.ceil(d/MOVE_PER_MARCH);
-  if(pl.squares<cost) return nope('That walk is '+d+' cells and costs '+cost+' march'+(cost>1?'es':'')+'. You have '+pl.squares+'.');
-  pl.squares-=cost;
+  // the walk costs no marches; the men leave the cell now and step onto the far one when the time is up
+  var oq=sel.q, or=sel.r, now=Date.now(), ms=d*TREK_MS_CELL, id=ME+'-'+now.toString(36);
+  var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapC(oq),wrapC(or)], to:[wrapC(q),wrapC(r)]};
+  G.treks=G.treks||{}; G.treks[id]=tk;
   from.b-=send; if(!from.b) delete from.b;
-  c.b=(c.b||0)+send; writeCell(q,r,c);
-  var oq=sel.q, or=sel.r; sel=null;
+  sel=null;
   logMove('mv',q,r,[oq,or],null,0,{n:send});
-  render(); pushCell(oq,or); pushCell(q,r); pushMe();
-  say('<b>'+send+'</b> soldier'+(send>1?'s':'')+' marched '+d+' cell'+(d>1?'s':'')+' for <b>'+cost+'</b> march'+(cost>1?'es':'')+'. <b>'+avail()+'</b> left.');
+  render();
+  putPath('/treks/'+id,tk).then(function(){ return pushCell(oq,or); });
+  say('<b>'+send+'</b> soldier'+(send>1?'s':'')+' set off along '+d+' cell'+(d>1?'s':'')+' of road &mdash; no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>, and guard nothing until they do.');
+}
+/* the owner's tab: put any band that has finished its walk onto its destination.
+   If that ground was lost in the meantime, the men fall back to the nearest cell of the owner's. */
+function settleTreks(){
+  if(!G||!me()||!G.treks) return;
+  var now=Date.now(), touched=[], gone=[], lines=[];
+  Object.keys(G.treks).forEach(function(id){
+    var t=G.treks[id]; if(!t) return;
+    if(t.o!==ME){ if(now-t.eta>14*864e5){ delete G.treks[id]; } return; }   // (a stranded band of someone long gone just tidies away)
+    if(t.eta>now) return;
+    var spot=null, dc=G.cells[key(t.to[0],t.to[1])];
+    if(dc && dc.o===ME && !building(dc)) spot=[t.to[0],t.to[1]];
+    else {
+      var best=1e9;
+      for(var k in G.cells){ var cc=G.cells[k]; if(cc.o!==ME||building(cc)) continue; var p=k.split('_'), pq=parseInt(p[0],10), pr=parseInt(p[1],10), dd=hexDist(t.to[0],t.to[1],pq,pr); if(dd<best){ best=dd; spot=[pq,pr]; } }
+    }
+    delete G.treks[id]; gone.push(id);
+    if(!spot) return;                                  // nowhere left to stand
+    var c=cellOf(spot[0],spot[1]); c.b=(c.b||0)+(t.n||0); writeCell(spot[0],spot[1],c); touched.push(spot);
+    lines.push(t.n+' soldier'+(t.n>1?'s':'')+' reached '+(spot[0]===t.to[0]&&spot[1]===t.to[1]?'their destination':'your nearest ground (their destination was lost)'));
+  });
+  if(!touched.length && !gone.length) return;
+  touched.forEach(function(p){ pushCell(p[0],p[1]); });
+  gone.forEach(function(id){ putPath('/treks/'+id,null); });
+  if(lines.length) setTimeout(function(){ say('<span class="good">'+lines.join('; ')+'.</span>'); },50);
+}
+/* bands on the road, drawn even with animations off: they show where soldiers are */
+function drawTreks(now,amb){
+  var list=Object.keys(G.treks||{}), t=Date.now();
+  list.forEach(function(id){
+    var tk=G.treks[id]; if(!tk||t>=tk.eta||t<tk.t) return;
+    var k=(t-tk.t)/(tk.eta-tk.t);
+    var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
+    var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
+    if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
+    var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,Math.max(1,tk.n||1));
+    for(var i=0;i<cnt;i++){
+      var off=(i-(cnt-1)/2)*h*0.5;
+      artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,pColor(tk.o),{face:face, ph:amb?now*11+i*1.3:0});
+    }
+    if(S>=12){
+      var lab=(tk.n||1)+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
+      artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),pColor(tk.o),1);
+    }
+  });
 }
 
 /* ── breaking a bridge ── one of your bands must stand beside it. The river is
@@ -2196,6 +2245,7 @@ function draw(){
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
   drawCaravans(now,amb);
+  drawTreks(now,amb);
   if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
@@ -2261,11 +2311,11 @@ function animTick(){
 }
 /* event kinds: m march · b battle · br bridge · w wall · tw tower · cs castle · up upgrade · ms muster
    (claims are not logged twice: the claim log already has them, and replays read it) */
-var ANIM_KIND={mv:'move',brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim'};
+var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim'};
 function veilFor(ev){                                // how the cell looked just before this move
   switch(ev.k){
     case 'm': case 'br': return {o:null};
-    case 'mv': return null;
+    case 'mv': return null;      // (a band's walk is drawn live on the road, see drawTreks)
     case 'brk': return {o:ev.prev||ev.pid};
     case 'b': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
     case 'w': return {o:ev.pid, w:(ev.lvl||1)-1};
@@ -2321,7 +2371,7 @@ function describe(e){
   if(e.k==='up') return who+' upgraded a '+(e.bk===CASTLE?'castle':'tower')+' to level '+ROMAN[e.lvl||2]+'.';
   if(e.k==='ms') return who+' mustered a soldier.';
   if(e.k==='br') return who+' started a bridge.';
-  if(e.k==='mv') return who+' moved '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' up.';
+  if(e.k==='mv') return who+' sent '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' marching.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
   if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
   if(e.k==='m') return who+' marched into new ground.';
@@ -2779,6 +2829,7 @@ function render(){
   G.claims=G.claims||{};
   settleMine();
   settleCaravans();
+  settleTreks();
   settleCastles();
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
@@ -3032,7 +3083,7 @@ var HINTS={
   upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
-  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground, and costs 1 march per '+MOVE_PER_MARCH+' cells. A band also guards the cells around it: taking one costs the attacker a soldier for each of yours.'
+  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 2 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours.'
 };
 var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
 function whyLocked(m){
@@ -3142,7 +3193,7 @@ function enterGame(isNew){
 /* ── one-time announcements ──
    Each notice is shown once per player. "Seen" is kept on the player's own record (so it
    follows them to another device) and in this browser as a backup. */
-var NOTICE_ID='castles1';
+var NOTICE_ID='trek1';
 function noticeSeen(){
   var pl=me();
   if(pl && pl.notes && pl.notes[NOTICE_ID]) return true;
@@ -3162,9 +3213,6 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||noticeSeen()) return;
-  settleCastles();
-  var ca=castleAlert(ME), mine=document.getElementById('rulesnote-mine');
-  if(ca){ mine.innerHTML='<b>Your castles right now:</b> '+ca.long; mine.classList.remove('hide'); } else mine.classList.add('hide');
   n.classList.remove('hide');
   n.scrollTop=0;
   document.addEventListener('keydown',noticeKey,true);
@@ -3180,7 +3228,7 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; myRev=remote.rev||0; tidyBoard(G); }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; tidyBoard(G); }
     else G=blankGame(gameCode);
     var ex=G.players[tryPid];
     if(ex && ex.pin && ex.pin!==tryHash){
