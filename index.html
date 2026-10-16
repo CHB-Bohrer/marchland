@@ -321,6 +321,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     </div>
 
     <div class="banner" id="daily" style="margin-bottom:14px;border-color:var(--rule);color:var(--ink)"></div>
+    <div class="banner hide" id="tyrant" style="margin-bottom:14px;border-color:#9A2A1F;color:var(--ink)"></div>
 
     <div class="panel">
       <div class="ledger">
@@ -449,18 +450,19 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 <!-- ── one-time announcement: castle rules (shown once per player, see showNotice) ── -->
 <div id="rulesnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="rulesnote-h">
   <div class="rulesnote-card">
-    <p class="rulesnote-eyebrow">Rules change &middot; read this</p>
-    <h2 id="rulesnote-h">Soldiers now walk for free &mdash; but slowly</h2>
-    <p>Moving a band of soldiers no longer costs marches. Instead, it costs time.</p>
-    <h3>What changed</h3>
+    <p class="rulesnote-eyebrow">October only &middot; read this</p>
+    <h2 id="rulesnote-h">&#9760; The Tyrant of October</h2>
+    <p>For the rest of October there is one guillotine on the board, and one player at a time can be the Tyrant.</p>
+    <h3>How it works</h3>
     <ul>
-      <li><b>No marches to move.</b> Sending a band along your own ground is free. (The old price was 1 march for every 3 cells.)</li>
-      <li><b>Three hours a cell.</b> A band covers 1 cell of road every 3 hours, so 5 cells takes 15 hours and 8 cells takes a day. When you send one, the game tells you how long it will be. You and everyone else can watch the band walk across the map.</li>
-      <li><b>On the road, they stand nowhere.</b> Soldiers who are walking don&rsquo;t guard any cell, can&rsquo;t be used to take ground, tear down towers or break bridges, and don&rsquo;t count toward a garrison until they arrive. They still eat grain.</li>
-      <li><b>If the ground is lost.</b> Should the cell they were heading for be taken before they reach it, they fall back to your nearest cell instead.</li>
+      <li><b>Raising it.</b> Tap one of your own open squares and choose <b>Raise the guillotine</b> (60 timber, 40 stone, 40 iron). Only one can stand on the board. Whoever raises it first is the Tyrant.</li>
+      <li><b>Whoever holds the square holds the blade.</b> The guillotine stands on that square of ground. Take the square from the Tyrant and the guillotine is yours.</li>
+      <li><b>Executions.</b> While you hold it, up to 3 defenders who fall to you in a battle (the men in a tower you tear down, or a band guarding a square you take) are executed in public. Each one pays <b>1 march and 10 iron</b>, and it is announced to everyone in the chat.</li>
+      <li><b>Infamy and the bounty.</b> Every execution adds to the Tyrant&rsquo;s infamy, and infamy is a bounty. Anyone who takes ground from the Tyrant is paid marches for it, and taking the guillotine&rsquo;s own square pays the most (15 and up). The banner above the map always shows the current price.</li>
+      <li><b>A clean slate.</b> Whoever seizes the guillotine starts with no infamy &mdash; and the whole board&rsquo;s attention.</li>
     </ul>
     <h3>Why</h3>
-    <p>Marches are now spent only on claiming ground, not on shuffling soldiers about. And distance now matters: a band sent toward a border takes hours to arrive, so the move can be seen coming &mdash; plan ahead rather than appearing at an enemy&rsquo;s door in an instant.</p>
+    <p>The blade rewards a ruthless player and then paints a target on them. Hold it, and the others will find reasons to cooperate &mdash; use the chat and the caravans. The guillotine disappears when October ends.</p>
     <button type="button" class="rulesnote-go" id="rulesnote-go">Got it &mdash; let&rsquo;s play</button>
   </div>
 </div>
@@ -509,6 +511,29 @@ var BRIDGE_MS=24*36e5, BRIDGE_COST={timber:40,stone:20};   // plus one march; re
 var SPEC={};
 SPEC[TOWER] ={range:[0,1,2,3],volley:[0,2,4,6],gar:[0,1,2,4],cost:{stone:40,timber:30}};   // towers hit hard
 SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,stone:60}};
+/* ═══ The Tyrant of October ═══════════════════════════════════════════════
+   A seasonal event, live only in October. There is ONE guillotine on the board. Whoever
+   raises it first is the Tyrant; it stands on a square of their own ground, and whoever
+   holds that square holds the guillotine, so taking the square takes the blade.
+   While you hold it, every defender who falls to you (men in a tower you tear down, a band
+   guarding a square you take) is executed in public: a few marches and some iron each,
+   at the price of infamy. Infamy is a bounty: the more the Tyrant has executed, the more
+   marches anyone is paid for taking ground from them, and the most for taking the
+   guillotine's own square. Whoever seizes it starts with a clean slate and the whole
+   board's attention. Add ?tyrant=1 to the address to see it out of season. */
+var TYR_OK=(new Date().getMonth()===9);
+try{ if(/[?&]tyrant=1/.test(location.search)) TYR_OK=true; }catch(e){}
+var GL_COST={timber:60,stone:40,iron:40};
+var GL_EX_MAX=3, GL_EX_IRON=10;                     // per battle: marches (1 each) and iron for each man executed
+var GL_SEIZE=15, GL_SEIZE_MAX=25, GL_CELL_MAX=10;   // bounties: the guillotine's square (15 + 3 per infamy, up to +25) and any other square (1 per infamy, up to 10)
+function tyrantNow(){
+  if(!TYR_OK||!G||!G.tyrant) return null;
+  var t=G.tyrant, c=G.cells[key(t.q,t.r)];
+  if(!c||!c.o||!G.players[c.o]) return null;         // an abandoned blade can be raised again
+  return {q:wrapC(t.q), r:wrapC(t.r), pid:c.o, inf:t.inf||0};
+}
+function isGuillotineAt(q,r){ var t=tyrantNow(); return !!t && key(q,r)===key(t.q,t.r); }
+function seizeBounty(inf){ return GL_SEIZE+Math.min(GL_SEIZE_MAX,3*inf); }
 /* Starting keeps are generated on rings around the origin rather than picked from
    a fixed list, so the fifth player gets their own ground instead of spawning on
    top of the fourth. Six seats per ring, each ring 18 cells further out. */
@@ -1017,12 +1042,13 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players)]);
+  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players),G.tyrant||null]);
   G.cells=remote.cells||{}; tidyBoard(G);
   G.claims=remote.claims||{};
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
+  G.tyrant=remote.tyrant||null;
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -1032,7 +1058,7 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players)])!==before;
+  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players),G.tyrant||null])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -1320,21 +1346,32 @@ function spendMarch(q,r){
   var band=mine[0];
   if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> '+(tow?'Tearing the tower down':keep?'Seizing the castle':'Taking the cell')+' costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
   var victim=c.o;
+  var TY=tyrantNow(), bounty=0, seizedG=false, ex=0;     // the Tyrant of October (see the constants)
+  if(TY && TY.pid===victim){
+    if(key(q,r)===key(TY.q,TY.r)){ seizedG=true; bounty=seizeBounty(TY.inf); }
+    else bounty=Math.min(GL_CELL_MAX,TY.inf);
+  } else if(TY && TY.pid===ME){ ex=Math.min(GL_EX_MAX,(tow?tg:0)+guard.n); }
   pl.squares-=cost; c.w=0; c.o=ME;
   addGraves(c,need+(tow?tg:0));                       // attackers who fell here, and the men inside a tower that was torn down
   if(tow){ c.k=null; c.l=0; c.g=0; c.d=0; }           // the tower falls, and the men inside it with it
   if(keep){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; pl.squares+=CASTLE_BOUNTY; }   // the ruin is razed, and the captor is paid
+  if(bounty) pl.squares+=bounty;                      // a price on the Tyrant's head
+  if(ex){ pl.squares+=ex; pl.res.iron+=ex*GL_EX_IRON; G.tyrant.inf=(TY.inf||0)+ex; putPath('/tyrant',G.tyrant); }   // the guillotine falls
+  if(seizedG){ G.tyrant={q:wrapC(q),r:wrapC(r),inf:0,t:Date.now()}; putPath('/tyrant',G.tyrant); }   // the blade changes hands, with a clean slate
   guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ addGraves(gc,gc.b||0); delete gc.b; pushCell(g[0],g[1]); } });   // defenders fall where they stood
   var fromCell=G.cells[key(band.q,band.r)]; delete fromCell.b;
   c.b=band.n-need;                                   // the survivors march in
   writeCell(q,r,c);
-  logMove('b',q,r,[band.q,band.r],prev,need,(pw||razed)?{pw:pw||null,pk:tow?TOWER:(keep?CASTLE:null),pl:razed?tl:null,pg:razed?tg:null}:null);
+  logMove('b',q,r,[band.q,band.r],prev,need,{pw:pw||null,pk:tow?TOWER:(keep?CASTLE:null),pl:razed?tl:null,pg:razed?tg:null,ex:ex||null,bt:bounty||null,gs:seizedG?1:null});
   render(); pushCell(band.q,band.r); pushCell(q,r); pushMe();
   var m=(tow?'Tower torn down for <b>':keep?'Castle seized for <b>':'Cell taken for <b>')+cost+'</b> marches.';
   if(keep) m+=' <span class="good">+'+CASTLE_BOUNTY+' marches for taking the castle!</span>';
   if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost</span> &mdash; their crosses will stand there for 5 days.';
   if(tow && tg) m+=' <span class="good">The '+tg+' defender'+(tg>1?'s':'')+' inside fell with it.</span>';
   if(guard.n) m+=' <span class="good">'+esc(nameOf(victim))+'&rsquo;s band of '+guard.n+' fell defending it.</span>';
+  if(ex){ m+=' <span class="good">&#9760; The guillotine falls on '+ex+' of the vanquished: +'+ex+' march'+(ex>1?'es':'')+' and +'+(ex*GL_EX_IRON)+' iron.</span> Your infamy grows, and so does the price on your head.'; tyrantChat('The guillotine fell on '+ex+' of '+nameOf(victim)+'’s soldiers, in public. The Tyrant of October strikes again.'); }
+  if(bounty&&!seizedG) m+=' <span class="good">+'+bounty+' march'+(bounty>1?'es':'')+' bounty for taking ground from the Tyrant.</span>';
+  if(seizedG){ m+=' <span class="good">&#9760; You seized the guillotine! +'+bounty+' marches bounty.</span> You are the Tyrant now &mdash; every other player has you in their sights.'; tyrantChat('The guillotine has been seized from '+nameOf(victim)+'. Long live the new Tyrant.'); }
   say(m+' '+c.b+' soldier'+(c.b>1?'s march':' marches')+' in to hold it. <b>'+avail()+'</b> marches left.');
 }
 
@@ -1374,6 +1411,7 @@ function build(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k) return nope('Something already stands here.');
+  if(isGuillotineAt(q,r)) return nope('The guillotine stands on this square.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
@@ -1394,6 +1432,27 @@ function build(q,r,kind){
   say(kind===TOWER
     ? 'Watchtower raised. Keep a soldier in it and its guns cost attackers soldiers.'
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep its road to a farm open: if no grain square is connected to it, it loses health and falls in 5 days.');
+}
+/* The Tyrant of October: raising the one guillotine, and announcing the blade to everyone in the chat */
+function raiseGuillotine(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!TYR_OK) return nope('The guillotine is only raised in October.');
+  if(tyrantNow()) return nope('A guillotine already stands on this board &mdash; there is only one. Take its square to win it.');
+  if(c.o!==ME) return nope('Raise it on ground you hold.');
+  if(c.k||c.t===RIVER||building(c)) return nope('Pick open ground of yours &mdash; not a keep, a tower or a river.');
+  for(var k in GL_COST){ if(pl.res[k]<GL_COST[k]) return nope('Not enough materials &mdash; the guillotine needs '+costLine(GL_COST)+'. '+shortBy(GL_COST)); }
+  for(var k2 in GL_COST) pl.res[k2]-=GL_COST[k2];
+  G.tyrant={q:wrapC(q),r:wrapC(r),inf:0,t:Date.now()};
+  putPath('/tyrant',G.tyrant);
+  logMove('gl',q,r,fromFor(q,r,ME),null,0);
+  render(); pushMe();
+  tyrantChat('I have raised the guillotine. Mind your soldiers.');
+  say('<b>&#9760; The guillotine is raised.</b> You are the Tyrant of October. Every defender who falls to you is executed for marches and iron &mdash; but each execution puts a higher price on your head, and whoever takes this square takes the blade.');
+}
+function tyrantChat(txt){
+  if(!online||!me()) return;
+  var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
+  chatPut('/m/'+id,{pid:ME,n:me().name,t:t,m:txt}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 /* what is missing for a cost, and where it comes from */
@@ -1587,6 +1646,7 @@ function cellTitle(c){
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what;
+  if(isGuillotineAt(c.q,c.r)) t+=' &middot; <b>&#9760; the guillotine</b>';
   if(c.o&&c.b>0) t+=' &middot; band of '+c.b;
   if((c.w||0)>0) t+=' &middot; wall '+ROMAN[c.w];
   return t;
@@ -1608,6 +1668,7 @@ function cellActions(q,r){
     else if(c.k===CASTLE) A('Seize the fallen castle',price+' &middot; +'+CASTLE_BOUNTY+' marches',take,whyTake);
     else if(c.k===TOWER) A('Tear down the tower',price,take,whyTake);
     else if(wet) A('Take this bridge',price,take,whyTake);
+    else if(isGuillotineAt(q,r)) A('Seize the guillotine',price+' &middot; +'+seizeBounty(tyrantNow().inf)+' marches',take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
   } else if(building(c)){
@@ -1622,11 +1683,14 @@ function cellActions(q,r){
     } else {
       var mine=fieldOf(ME);
       A('Build a wall'+((c.w||0)?' (course '+((c.w||0)+1)+')':''),'30 stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:30}));
-      var tc=SPEC[TOWER].cost;
-      A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc)||(mine<SPEC[TOWER].gar[1]?'Needs a soldier to man it':''));
-      var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
-      var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs a road of your ground to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
-      A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
+      if(!isGuillotineAt(q,r)){                        // (the guillotine takes the whole square)
+        var tc=SPEC[TOWER].cost;
+        A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc)||(mine<SPEC[TOWER].gar[1]?'Needs a soldier to man it':''));
+        var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
+        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs a road of your ground to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
+        A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
+        if(TYR_OK && !tyrantNow()) A('&#9760; Raise the guillotine',costLine(GL_COST)+' &middot; become the Tyrant',function(){ raiseGuillotine(q,r); },lackText(GL_COST));
+      }
     }
   }
   Object.keys(G.players).forEach(function(pid){
@@ -2381,6 +2445,36 @@ function drawGraves(x,y,s,n,q,r){
   }
   ctx.restore();
 }
+/* the guillotine: two posts, a crossbeam, a slanted blade on a rope, a basket, and the Tyrant's banner.
+   With animations on, the blade drops every few seconds and is hauled back up. */
+function drawGuillotine(g,x,y,s,col,t,live){
+  var h=s*0.86, w=s*0.2, pw=Math.max(1.2,s*0.055), base=y+s*0.4, top=base-h;
+  var k=0;
+  if(live){ var ph=t%8; k=ph<0.22?ph/0.22:ph<1.5?1:ph<2.6?1-(ph-1.5)/1.1:0; k=k*k*(3-2*k); }
+  var by=top+h*0.16+k*h*0.5, bh=Math.max(2,s*0.15);
+  g.save(); g.lineJoin='round';
+  g.globalAlpha=.3; g.fillStyle='#14100A'; g.beginPath(); g.ellipse(x,base+s*0.05,w*2.3,s*0.1,0,0,6.284); g.fill();
+  g.globalAlpha=1;
+  g.fillStyle='#4A3720'; g.fillRect(x-w*2.1,base-s*0.02,w*4.2,s*0.09);                        // the bench
+  g.fillStyle='#6B4F2C'; g.fillRect(x-w-pw,top,pw,base-top); g.fillRect(x+w,top,pw,base-top);   // the posts
+  g.fillRect(x-w-pw*1.5,top-s*0.02,w*2+pw*3,s*0.08);                                           // the crossbeam
+  g.strokeStyle='#2B1F10'; g.lineWidth=Math.max(.6,s*0.015);
+  g.strokeRect(x-w-pw,top,pw,base-top); g.strokeRect(x+w,top,pw,base-top);
+  g.strokeStyle='rgba(30,24,14,.8)'; g.lineWidth=Math.max(.8,s*0.02);                         // the rope
+  g.beginPath(); g.moveTo(x,top+s*0.06); g.lineTo(x,by); g.stroke();
+  g.beginPath();                                                                               // the blade, slanted
+  g.moveTo(x-w,by); g.lineTo(x+w,by); g.lineTo(x+w,by+bh*0.55); g.lineTo(x-w,by+bh); g.closePath();
+  g.fillStyle='#D3DADD'; g.fill(); g.strokeStyle='#4B565B'; g.lineWidth=Math.max(.7,s*0.02); g.stroke();
+  g.fillStyle='#8B2A22'; g.globalAlpha=.9;                                                     // the basket
+  g.fillRect(x-w*1.9,base-s*0.12,w*1.2,s*0.14);
+  g.globalAlpha=1; g.strokeStyle='#3A2A16'; g.lineWidth=Math.max(.6,s*0.015); g.strokeRect(x-w*1.9,base-s*0.12,w*1.2,s*0.14);
+  g.beginPath(); g.moveTo(x+w+pw,top-s*0.02); g.lineTo(x+w+pw,top-s*0.3);                     // the Tyrant's banner
+  g.strokeStyle='#2B1F10'; g.lineWidth=Math.max(.8,s*0.02); g.stroke();
+  var wave=live?Math.sin(t*3)*s*0.02:0;
+  g.fillStyle=col; g.beginPath(); g.moveTo(x+w+pw,top-s*0.3); g.lineTo(x+w+pw+s*0.26,top-s*0.24+wave); g.lineTo(x+w+pw,top-s*0.16); g.closePath(); g.fill();
+  if(live && k>0.95){ g.globalAlpha=.55; g.fillStyle='#C93B2A'; g.beginPath(); g.arc(x-w*1.3,base-s*0.02,s*0.07,0,6.284); g.fill(); }   // the drop lands
+  g.restore();
+}
 function drawBand(c,cx,cy,col,detail){
   var s=Math.max(11,S*0.5), x=cx+(c.k?S*0.34:0), y=cy+(c.k?-S*0.30:0);
   var isSel = sel && key(sel.q,sel.r)===key(c.q,c.r);
@@ -2442,6 +2536,7 @@ function draw(){
   var sup=me()?supplied(ME):{};
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
+  var TYG=tyrantNow(), TYK=TYG?key(TYG.q,TYG.r):null, gills=[];   // the guillotine, if October has one standing
   var guns=[], walls=[], builds=[], spans=[], bands=[], detail=S>=7, now=clock();
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[], spook=[], HW=amb&&hallo();   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
@@ -2482,6 +2577,7 @@ function draw(){
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
+    if(TYK && !vl && key(q,r)===TYK) gills.push([c,p,col]);
     if(HW && !wet && !vl) spook.push([c,p,q,r]);
     if(amb){
       if(wet){ if(!c.o) waters.push([p,q,r]); }
@@ -2518,6 +2614,7 @@ function draw(){
   });
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
+  gills.forEach(function(e){ drawGuillotine(ctx,e[1][0]-S*0.2,e[1][1]-S*0.04,S,e[2],now,amb); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   if(HW) halloKeeps(ctx,builds,now);
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
@@ -2654,11 +2751,16 @@ function describe(e){
   if(e.k==='mv') return who+' sent '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' marching.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
   if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
+  if(e.k==='gl') return who+' <span class="bad">&#9760; raised the guillotine</span> &mdash; the Tyrant of October.';
   if(e.k==='m') return who+' marched into new ground.';
   var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
-  if(e.pk===CASTLE) return e.prev===ME ? who+' <span class="bad">seized your fallen castle</span> and took '+CASTLE_BOUNTY+' marches'+lost+'.' : who+' seized a fallen castle of '+esc(nameOf(e.prev))+lost+'.';
-  if(e.pk) return e.prev===ME ? who+' <span class="bad">tore down one of your towers</span>'+lost+'.' : who+' tore down a tower of '+esc(nameOf(e.prev))+lost+'.';
-  return e.prev===ME ? who+' <span class="bad">took one of your cells</span>'+lost+'.' : who+' took a cell from '+esc(nameOf(e.prev))+lost+'.';
+  var base;
+  if(e.pk===CASTLE) base=e.prev===ME ? who+' <span class="bad">seized your fallen castle</span> and took '+CASTLE_BOUNTY+' marches'+lost : who+' seized a fallen castle of '+esc(nameOf(e.prev))+lost;
+  else if(e.pk) base=e.prev===ME ? who+' <span class="bad">tore down one of your towers</span>'+lost : who+' tore down a tower of '+esc(nameOf(e.prev))+lost;
+  else base=e.prev===ME ? who+' <span class="bad">took one of your cells</span>'+lost : who+' took a cell from '+esc(nameOf(e.prev))+lost;
+  if(e.gs) base+=e.prev===ME ? ' &mdash; <span class="bad">&#9760; and took the guillotine from you</span>' : ' &mdash; &#9760; <b>and seized the guillotine</b>';
+  if(e.ex) base+=' &mdash; <span class="bad">&#9760; the guillotine fell on '+e.ex+' of the vanquished</span>';
+  return base+'.';
 }
 function startReplay(since){
   var all=Object.keys(G.events||{});
@@ -3264,6 +3366,19 @@ function renderDaily(){
         +esc(r.p.name)+' <b class="n" style="font-family:var(--mono)">'+r.n.toLocaleString()+'</b></span>';
     }).join('');
 }
+function renderTyrant(){
+  var el=document.getElementById('tyrant'); if(!el) return;
+  if(!TYR_OK){ el.classList.add('hide'); return; }
+  el.classList.remove('hide');
+  var t=tyrantNow();
+  if(!t){
+    el.innerHTML='<b>&#9760; The Tyrant of October</b> &middot; no guillotine stands on this board yet. Anyone can raise the one guillotine on a square of their own ground (<span class="n" style="font-family:var(--mono)">'+costLine(GL_COST)+'</span>) &mdash; and become the Tyrant. Tap one of your squares to do it.';
+    return;
+  }
+  var dot='<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pColor(t.pid)+';margin:0 5px 0 2px"></span>';
+  el.innerHTML='<b>&#9760; The Tyrant of October</b> &middot; '+dot+'<b>'+esc(nameOf(t.pid))+(t.pid===ME?' (you)':'')+'</b> holds the guillotine &middot; '+t.inf+' executed<br>'
+    +'Taking the guillotine&rsquo;s square pays <b>'+seizeBounty(t.inf)+' marches</b> and wins the blade. Any other square taken from the Tyrant pays <b>'+Math.min(GL_CELL_MAX,t.inf)+'</b>.';
+}
 function render(){
   if(!G||!me()) return;
   G.claims=G.claims||{};
@@ -3291,6 +3406,7 @@ function render(){
   var ca=castleAlert(ME);
   if(ca){ document.getElementById('u-gar').textContent=ca.short; document.getElementById('s-gar').classList.add('warn'); }
   renderDaily();
+  renderTyrant();
   var done=claimedToday(pl);
   document.getElementById('bankinfo').textContent =
     (done ? 'today claimed ✓ · next claim in '+untilMidnight() : 'today not claimed yet · one claim a day')
@@ -3635,7 +3751,7 @@ function enterGame(isNew){
 /* ── one-time announcements ──
    Each notice is shown once per player. "Seen" is kept on the player's own record (so it
    follows them to another device) and in this browser as a backup. */
-var NOTICE_ID='trek1';
+var NOTICE_ID='tyrant1';
 function noticeSeen(){
   var pl=me();
   if(pl && pl.notes && pl.notes[NOTICE_ID]) return true;
@@ -3654,7 +3770,7 @@ function closeNotice(){
 }
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
-  var n=document.getElementById('rulesnote'); if(!n||noticeSeen()) return;
+  var n=document.getElementById('rulesnote'); if(!n||!TYR_OK||noticeSeen()) return;   // this notice is about the October event, so it only shows during it
   n.classList.remove('hide');
   n.scrollTop=0;
   document.addEventListener('keydown',noticeKey,true);
