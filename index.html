@@ -1277,6 +1277,18 @@ function shrink(file){
     img.src=url;
   });
 }
+/* tell the steward a screenshot is waiting: a push notification through ntfy.sh (free, no account);
+   he subscribes to this topic in the ntfy app. Fire-and-forget, so a failure never affects the claim. */
+var NTFY_TOPIC='marchland-review-1675a87f0bfcac3e';
+function notifySteward(id){
+  try{
+    var c=G.claims[id]||{};
+    fetch('https://ntfy.sh/',{method:'POST',mode:'no-cors',body:JSON.stringify({
+      topic:NTFY_TOPIC, title:'Marchland: screenshot to check',
+      message:nameOf(c.pid)+' claimed '+(c.steps||0).toLocaleString()+' steps and sent a screenshot.',
+      click:'https://chb-bohrer.github.io/marchland/review/', tags:['footprints']})}).catch(function(){});
+  }catch(e){}
+}
 function attachShot(id,file){
   if(!online){ say('Screenshots need the shared database — this board is local only.'); return; }
   say('Attaching the screenshot…');
@@ -1286,7 +1298,7 @@ function attachShot(id,file){
       if(G.claims[id]) G.claims[id].shot=true;
       return putPath('/claims/'+id+'/shot',true);
     });
-  }).then(function(){ render(); say('Screenshot attached — anyone checking the claim can open it from the claim log.'); },
+  }).then(function(){ notifySteward(id); render(); say('Screenshot attached — it has been sent to Bohrer to check, and anyone can open it from the claim log.'); },
           function(e){ say('<span class="bad">Could not attach the screenshot</span> ('+esc(e.message)+'). The claim itself is saved.'); });
 }
 function resetShotPick(){
