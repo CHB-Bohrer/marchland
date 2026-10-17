@@ -185,6 +185,7 @@ button.go[aria-disabled="true"]:hover{ background:var(--surface); color:var(--p0
 .rulesnote-card ul{ margin:0; padding-left:20px; } .rulesnote-card li{ font-size:15px; line-height:1.5; margin:0 0 6px; }
 .rulesnote-mine{ background:var(--paper); border-left:4px solid var(--p1); padding:10px 13px; margin:16px 0 0; font-size:14.5px; line-height:1.45; }
 .rulesnote-go{ margin-top:20px; width:100%; justify-content:center; font-size:15px; padding:12px 16px; background:var(--ink); color:var(--paper); border-color:var(--ink); }
+.rulesnote-alt{ margin-top:8px; background:transparent; color:var(--ink); border-color:var(--rule); }
 @media (max-width:480px){ .rulesnote-card{ padding:20px 18px 18px; } .rulesnote-card h2{ font-size:25px; } }
 /* the pointer to the explanation, when it is off screen */
 .why{ position:fixed; left:50%; transform:translateX(-50%); bottom:calc(58px + env(safe-area-inset-bottom, 0px)); z-index:100002;
@@ -465,6 +466,18 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <h3>Why</h3>
     <p>The blade rewards a ruthless player and then paints a target on them. Hold it, and the others will find reasons to cooperate &mdash; use the chat and the caravans. The guillotines disappear when October ends.</p>
     <button type="button" class="rulesnote-go" id="rulesnote-go">Got it &mdash; let&rsquo;s play</button>
+  </div>
+</div>
+
+<!-- ── one-time announcement: the Marchland Saga cartoon (shown once per player, see showSaga) ── -->
+<div id="sagenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="sagenote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">New &middot; sound on</p>
+    <h2 id="sagenote-h">Hear ye, players of Marchland!</h2>
+    <p>The chronicles have been written: <b>Marchland Saga</b>, a short animated cartoon with a full soundtrack.</p>
+    <p><i>Any resemblance to actual standings is purely coincidental.</i></p>
+    <button type="button" class="rulesnote-go" id="sagenote-watch">Watch the cartoon</button>
+    <button type="button" class="rulesnote-go rulesnote-alt" id="sagenote-go">Not now</button>
   </div>
 </div>
 
@@ -3774,8 +3787,8 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); }
-  else { setTimeout(showNotice,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
+  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
+  else { setTimeout(function(){ if(!showNotice()) showSaga(); },700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
 /* ── one-time announcements ──
@@ -3797,14 +3810,47 @@ function closeNotice(){
   var n=document.getElementById('rulesnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',noticeKey,true);
   markNoticeSeen();
+  setTimeout(showSaga,250);                                  // the cartoon announcement follows, once
 }
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
-  var n=document.getElementById('rulesnote'); if(!n||!TYR_OK||noticeSeen()) return;   // this notice is about the October event, so it only shows during it
+  var n=document.getElementById('rulesnote'); if(!n||!TYR_OK||noticeSeen()) return false;   // this notice is about the October event, so it only shows during it
   n.classList.remove('hide');
   n.scrollTop=0;
   document.addEventListener('keydown',noticeKey,true);
   var b=document.getElementById('rulesnote-go'); b.onclick=closeNotice; try{ b.focus(); }catch(e){}
+  return true;
+}
+/* The Marchland Saga cartoon: announced once per player, after the rules notice (if they still owe one). */
+var SAGA_ID='saga1';
+function sagaSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[SAGA_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+SAGA_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markSagaSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[SAGA_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+SAGA_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeSaga(){
+  var n=document.getElementById('sagenote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',sagaKey,true);
+  markSagaSeen();
+}
+function sagaKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeSaga(); } }
+function showSaga(){
+  var n=document.getElementById('sagenote'); if(!n||!G||!me()||sagaSeen()) return false;
+  var r=document.getElementById('rulesnote'); if(r&&!r.classList.contains('hide')) return false;   // never stack on the rules notice
+  n.classList.remove('hide');
+  n.scrollTop=0;
+  document.addEventListener('keydown',sagaKey,true);
+  document.getElementById('sagenote-go').onclick=closeSaga;
+  var w=document.getElementById('sagenote-watch');
+  w.onclick=function(){ try{ window.open('saga/','_blank','noopener'); }catch(e){} closeSaga(); };
+  try{ w.focus(); }catch(e){}
+  return true;
 }
 
 function join(){

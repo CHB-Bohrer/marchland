@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Marchland Saga</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Fredoka:wght@400;600&display=swap">
+<style>
+/* Layout: one storybook stage (16:9 SVG) over a caption strip and a control row. Single committed look: dusk-plum frame, cartoon outlines. */
+:root{
+  --frame:#1d1230; --panel:#2b1b47; --ink:#2a1b3d; --paper:#fff4d6; --gold:#ffcf3f; --hot:#ff5a3c;
+  --sky-a:#8fd3ff; --sky-b:#d9f2ff;
+  --display:'Bangers','Impact','Arial Narrow',sans-serif;
+  --body:'Fredoka','Trebuchet MS',system-ui,sans-serif;
+  color-scheme:dark;
+}
+html,body{background:var(--frame);}
+body{margin:0;color:var(--paper);font-family:var(--body);padding-block:14px 22px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));}
+.wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:12px;}
+h1{font-family:var(--display);font-weight:400;letter-spacing:.06em;font-size:clamp(26px,5vw,40px);margin:0;color:var(--gold);text-shadow:2px 2px 0 var(--hot);text-wrap:balance;}
+.sub{margin:0;font-size:14px;opacity:.85;}
+.stagebox{position:relative;border:4px solid var(--ink);border-radius:14px;overflow:hidden;background:#000;box-shadow:0 6px 0 #0d0718;}
+svg.stage{display:block;width:100%;height:auto;max-width:100%;}
+.cap{background:var(--panel);border:3px solid var(--ink);border-radius:10px;padding:12px 14px;min-height:3.6em;font-size:clamp(15px,2.6vw,19px);line-height:1.35;}
+.cap b{font-family:var(--display);font-weight:400;letter-spacing:.05em;color:var(--gold);font-size:1.15em;}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
+.ctl button{font:600 15px var(--body);color:var(--ink);background:var(--gold);border:3px solid var(--ink);border-radius:999px;padding:8px 16px;cursor:pointer;box-shadow:0 3px 0 #0d0718;}
+.ctl button:active{transform:translateY(2px);box-shadow:0 1px 0 #0d0718;}
+.ctl button:focus-visible{outline:3px solid #fff;outline-offset:2px;}
+.dots{display:flex;gap:6px;margin-left:auto;}
+.dots i{width:12px;height:12px;border-radius:50%;background:#5a4680;border:2px solid var(--ink);cursor:pointer;display:block;}
+.dots i.on{background:var(--gold);}
+
+/* ---- SVG text + common ---- */
+.stage text{font-family:var(--display);letter-spacing:.05em;}
+.ol{stroke:var(--ink);stroke-width:3;stroke-linejoin:round;stroke-linecap:round;}
+.scene{display:none;}
+.scene.on{display:block;}
+.paused *{animation-play-state:paused !important;}
+
+/* ---- keyframes ---- */
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{0%{opacity:0;transform:scale(0)}70%{opacity:1;transform:scale(1.18)}100%{opacity:1;transform:scale(1)}}
+@keyframes dropin{0%{opacity:0;transform:translateY(-120px)}70%{opacity:1;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes sneak{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+@keyframes stomp{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-12px) rotate(3deg)}}
+@keyframes drift{from{transform:translateX(-160px)}to{transform:translateX(960px)}}
+@keyframes flag{0%,100%{transform:skewY(0deg) scaleX(1)}50%{transform:skewY(8deg) scaleX(.9)}}
+@keyframes glow{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.12)}}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(.3) rotate(0)}50%{opacity:1;transform:scale(1) rotate(90deg)}}
+@keyframes floatup{0%{opacity:0;transform:translateY(0)}20%{opacity:1}100%{opacity:0;transform:translateY(-90px)}}
+@keyframes flex{0%,100%{transform:rotate(0)}50%{transform:rotate(-8deg) scale(1.08)}}
+@keyframes gallop{0%,100%{transform:rotate(-28deg)}50%{transform:rotate(28deg)}}
+@keyframes gallop2{0%,100%{transform:rotate(28deg)}50%{transform:rotate(-28deg)}}
+@keyframes ride{0%,100%{transform:translateY(0)}50%{transform:translateY(-9px)}}
+@keyframes capewave{0%,100%{transform:rotate(0) skewX(0)}50%{transform:rotate(-6deg) skewX(-10deg)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+@keyframes dust{0%{opacity:.8;transform:scale(.3) translateX(0)}100%{opacity:0;transform:scale(1.6) translateX(-50px)}}
+@keyframes arrow{0%{opacity:1;transform:translate(0,0) rotate(18deg)}100%{opacity:1;transform:translate(300px,70px) rotate(35deg)}}
+@keyframes bam{0%{opacity:0;transform:scale(0) rotate(-12deg)}25%{opacity:1;transform:scale(1.3) rotate(-6deg)}70%{opacity:1;transform:scale(1) rotate(-6deg)}100%{opacity:0;transform:scale(1.1) rotate(-6deg)}}
+@keyframes yeet1{0%{transform:translate(0,0) rotate(0)}100%{transform:translate(380px,-260px) rotate(720deg)}}
+@keyframes yeet2{0%{transform:translate(0,0) rotate(0)}100%{transform:translate(300px,-300px) rotate(-640deg)}}
+@keyframes flee{0%{transform:translateX(0)}100%{transform:translateX(560px)}}
+@keyframes rear{0%,100%{transform:rotate(0)}30%,70%{transform:rotate(-16deg)}}
+@keyframes swing{0%,100%{transform:rotate(-30deg)}50%{transform:rotate(55deg)}}
+@keyframes confetti{0%{opacity:0;transform:translateY(-40px) rotate(0)}15%{opacity:1}100%{opacity:1;transform:translateY(420px) rotate(540deg)}}
+@keyframes panelin{0%{opacity:0;transform:translateX(120px)}100%{opacity:1;transform:translateX(0)}}
+@keyframes dim{from{opacity:0}to{opacity:.55}}
+@keyframes shrink{0%{transform:scale(1)}100%{transform:scale(.55)}}
+
+/* ---- utility classes driven by --d (delay) and --t (duration) ---- */
+.scene.on .a-fade{animation:fade .6s both;animation-delay:var(--d,0s)}
+.scene.on .a-pop{animation:pop .5s both;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+.scene.on .a-drop{animation:dropin .8s both;animation-delay:var(--d,0s)}
+.scene.on .a-bob{animation:bob 1.6s ease-in-out infinite;animation-delay:var(--d,0s)}
+.scene.on .a-sneak{animation:sneak .55s ease-in-out infinite;animation-delay:var(--d,0s)}
+.scene.on .a-stomp{animation:stomp .32s ease-in-out infinite;animation-delay:var(--d,0s)}
+.scene.on .a-cloud{animation:drift var(--t,60s) linear infinite;animation-delay:var(--d,0s)}
+.scene.on .a-flag{animation:flag 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:left center}
+.scene.on .a-glow{animation:glow 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.scene.on .a-twinkle{animation:twinkle 1.6s ease-in-out infinite;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+.scene.on .a-float{animation:floatup 2.6s ease-out infinite;animation-delay:var(--d,0s)}
+.scene.on .a-flex{animation:flex 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:left bottom}
+.scene.on .a-leg1{animation:gallop .38s ease-in-out infinite;transform-box:fill-box;transform-origin:top center}
+.scene.on .a-leg2{animation:gallop2 .38s ease-in-out infinite;transform-box:fill-box;transform-origin:top center}
+.scene.on .a-ride{animation:ride .38s ease-in-out infinite}
+.scene.on .a-cape{animation:capewave .5s ease-in-out infinite;transform-box:fill-box;transform-origin:right top}
+.scene.on .a-shake{animation:shake .18s linear infinite;animation-delay:var(--d,0s)}
+.scene.on .a-dust{animation:dust .9s ease-out infinite;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+.scene.on .a-bam{animation:bam 1.6s both;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+.scene.on .a-rear{animation:rear 1.8s ease-in-out infinite;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:bottom center}
+.scene.on .a-swing{animation:swing .5s ease-in-out infinite;transform-box:fill-box;transform-origin:bottom center}
+.scene.on .a-confetti{animation:confetti 3.4s linear infinite;animation-delay:var(--d,0s)}
+.scene.on .a-panel{animation:panelin .9s ease-out both;animation-delay:var(--d,0s)}
+.scene.on .a-dim{animation:dim 1.5s both;animation-delay:var(--d,0s)}
+.a-yeet1,.a-yeet2{transform-box:fill-box;transform-origin:center}
+.scene.on .a-yeet1{animation:yeet1 1.1s cubic-bezier(.2,.7,.4,1) both;animation-delay:var(--d,0s)}
+.scene.on .a-yeet2{animation:yeet2 1.1s cubic-bezier(.2,.7,.4,1) both;animation-delay:var(--d,0s)}
+.scene.on .a-flee{animation:flee 3.5s ease-in both;animation-delay:var(--d,0s)}
+.scene.on .a-arrow{animation:arrow 1.1s linear infinite;animation-delay:var(--d,0s)}
+.scene.on .a-march{animation:marchin var(--t,4s) linear both;animation-delay:var(--d,0s)}
+.scene.on .a-gallopin{animation:gallopin var(--t,2s) ease-out both;animation-delay:var(--d,0s)}
+@keyframes marchin{from{transform:translateX(var(--from,360px))}to{transform:translateX(0)}}
+@keyframes gallopin{from{transform:translateX(-520px)}to{transform:translateX(0)}}
+
+@media (prefers-reduced-motion:reduce){
+  .scene.on *{animation:none !important;opacity:1}
+}
+
+.start{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;width:100%;border:0;margin:0;padding:0 0 4%;background:linear-gradient(to top,rgba(29,18,48,.8),rgba(29,18,48,0) 55%);color:var(--gold);font-family:var(--display);font-size:clamp(30px,8vw,60px);letter-spacing:.08em;text-shadow:3px 3px 0 var(--hot);cursor:pointer;z-index:2}
+.start small{font-family:var(--body);font-weight:600;font-size:clamp(13px,2.6vw,17px);letter-spacing:.02em;color:var(--paper);text-shadow:none}
+.start:focus-visible{outline:4px solid #fff;outline-offset:-8px}
+.stage.await *{animation:none !important}
+.stage.await .a-float{opacity:0}
+</style>
+<style>
+/* looping animations inside <use> definitions must not depend on .scene.on ancestry */
+.a-cape{animation:capewave .5s ease-in-out infinite;transform-box:fill-box;transform-origin:right top}
+.a-leg1{animation:gallop .38s ease-in-out infinite;animation-play-state:var(--lp,running);animation-delay:var(--ld0,0s);transform-box:fill-box;transform-origin:top center}
+.a-leg2{animation:gallop2 .38s ease-in-out infinite;animation-play-state:var(--lp,running);animation-delay:var(--ld0,0s);transform-box:fill-box;transform-origin:top center}
+.a-flex{animation:flex 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:left bottom}
+.a-glow{animation:glow 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.a-twinkle{animation:twinkle 1.6s ease-in-out infinite;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+.a-flag{animation:flag 1.2s ease-in-out infinite;transform-box:fill-box;transform-origin:left center}
+.a-swing{animation:swing .5s ease-in-out infinite;transform-box:fill-box;transform-origin:bottom center}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Marchland Saga</h1>
+<p class="sub">The Defense of Bohrer's Realm &mdash; a short cartoon. <a href="../" style="color:#ffcf3f">Back to the game</a></p>
+<div class="stagebox" id="box">
+<svg class="stage" id="stage" viewBox="0 0 800 450" role="img" aria-label="Animated cartoon: Bohrer defends Marchland from goblin invaders">
+<defs>
+  <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+  <linearGradient id="skyDay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#58b8ff"/><stop offset="1" stop-color="#d9f2ff"/></linearGradient>
+  <linearGradient id="skyDusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a2a6b"/><stop offset="1" stop-color="#c8678a"/></linearGradient>
+  <linearGradient id="skyFire" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b1d3a"/><stop offset=".6" stop-color="#e2562e"/><stop offset="1" stop-color="#ffc24a"/></linearGradient>
+  <linearGradient id="skyDawn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fa8ff"/><stop offset=".7" stop-color="#ffd99a"/><stop offset="1" stop-color="#fff2c8"/></linearGradient>
+  <pattern id="wheatPat" width="14" height="16" patternUnits="userSpaceOnUse">
+    <rect width="14" height="16" fill="#e6b53a"/>
+    <path d="M3,16 V4 M3,8 l-3,-3 M3,8 l3,-3 M10,16 V6 M10,10 l-3,-3 M10,10 l3,-3" stroke="#a9741a" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+  </pattern>
+
+  <!-- scenery -->
+  <g id="ground">
+    <path d="M0,300 Q120,250 240,290 T480,285 T800,280 V340 H0Z" fill="#79c36b"/>
+    <path d="M0,320 Q200,285 420,318 T800,305 V450 H0Z" fill="#58ad4f"/>
+    <rect y="395" width="800" height="55" fill="#4a9a44"/>
+    <path d="M0,395 Q400,380 800,395" stroke="#3b8238" stroke-width="3" fill="none"/>
+  </g>
+  <g id="cloud"><ellipse cx="0" cy="0" rx="46" ry="16" fill="#fff"/><ellipse cx="-20" cy="-10" rx="22" ry="16" fill="#fff"/><ellipse cx="18" cy="-12" rx="26" ry="18" fill="#fff"/></g>
+  <g id="bird"><path d="M-10,0 Q-5,-8 0,0 Q5,-8 10,0" fill="none" stroke="#2a1b3d" stroke-width="2.5" stroke-linecap="round"/></g>
+  <g id="spark"><path d="M0,-12 L3,-3 L12,0 L3,3 L0,12 L-3,3 L-12,0 L-3,-3Z" fill="#fff9c4"/></g>
+  <g id="tree"><rect class="ol" x="-7" y="-50" width="14" height="50" fill="#8a5a33"/><circle class="ol" cx="0" cy="-70" r="34" fill="#3f9a45"/><circle cx="-12" cy="-80" r="8" fill="#5cba5f"/></g>
+  <g id="castle">
+    <g class="a-flag"><path class="ol" d="M0,-210 L46,-200 L0,-188Z" fill="#ff5a3c" style="stroke-width:2.5"/></g>
+    <rect x="-1.5" y="-224" width="3" height="46" fill="#2a1b3d"/>
+    <rect class="ol" x="-70" y="-110" width="140" height="110" fill="#c3bdd3"/>
+    <path class="ol" d="M-70,-110 v-14 h16 v14 h16 v-14 h16 v14 h16 v-14 h16 v14 h16 v-14 h16 v14 h16 v-14 h14 v14" fill="#c3bdd3" style="stroke-width:2.5"/>
+    <rect class="ol" x="-118" y="-150" width="46" height="150" fill="#b4aec8"/>
+    <path class="ol" d="M-124,-150 L-95,-196 L-66,-150Z" fill="#d7263d"/>
+    <rect class="ol" x="72" y="-150" width="46" height="150" fill="#b4aec8"/>
+    <path class="ol" d="M66,-150 L95,-196 L124,-150Z" fill="#d7263d"/>
+    <path class="ol" d="M-24,0 V-46 Q0,-74 24,-46 V0Z" fill="#3a2350"/>
+    <rect x="-8" y="-86" width="16" height="26" rx="8" fill="#3a2350" stroke="#2a1b3d" stroke-width="2.5"/>
+    <rect x="-103" y="-110" width="10" height="22" rx="5" fill="#3a2350"/><rect x="93" y="-110" width="10" height="22" rx="5" fill="#3a2350"/>
+    <path d="M-60,-70 h18 M-48,-70 v-14 M40,-60 h18 M52,-60 v-14" stroke="#9c95b3" stroke-width="2" fill="none"/>
+  </g>
+  <g id="tower">
+    <rect class="ol" x="-22" y="-120" width="44" height="120" fill="#b4aec8"/>
+    <path class="ol" d="M-34,-120 H34 V-136 H22 V-148 H-22 V-136 H-34Z" fill="#c3bdd3" style="stroke-width:2.5"/>
+    <path class="ol" d="M-28,-148 L0,-186 L28,-148Z" fill="#d7263d"/>
+    <rect x="-6" y="-100" width="12" height="22" rx="6" fill="#3a2350"/>
+    <path d="M-18,-60 h36 M-18,-30 h36" stroke="#9c95b3" stroke-width="2"/>
+  </g>
+  <g id="cross"><rect class="ol" x="-3" y="-26" width="6" height="26" fill="#eee1c0" style="stroke-width:2"/><rect class="ol" x="-11" y="-20" width="22" height="6" fill="#eee1c0" style="stroke-width:2"/></g>
+
+  <!-- ===== BOHRER ===== -->
+  <g id="bohrerTop">
+    <g class="a-cape"><path class="ol" fill="#d7263d" d="M-24,-72 C-104,-62 -112,12 -96,56 C-72,30 -46,22 -16,8Z"/></g>
+    <path class="ol" fill="#f6b98a" d="M-34,-68 C-62,-70 -70,-38 -62,-14 C-56,2 -40,0 -38,-14Z"/>
+    <circle class="ol" cx="-50" cy="-52" r="17" fill="#f6b98a"/>
+    <path class="ol" fill="#f6b98a" d="M-36,-76 Q0,-88 36,-76 Q46,-44 26,2 L-26,2 Q-46,-44 -36,-76Z"/>
+    <g fill="none" stroke="#c98a5e" stroke-width="3" stroke-linecap="round">
+      <path d="M-30,-62 Q-14,-46 -2,-62 M2,-62 Q14,-46 30,-62"/><path d="M0,-60 V-6"/>
+      <path d="M-14,-42 H-3 M3,-42 H14 M-15,-28 H-3 M3,-28 H15 M-14,-14 H-3 M3,-14 H14"/>
+    </g>
+    <rect class="ol" x="-29" y="-2" width="58" height="13" rx="4" fill="#ffcf3f"/>
+    <rect class="ol" x="-8" y="-4" width="16" height="17" rx="3" fill="#ff5a3c"/>
+    <g class="a-flex">
+      <path class="ol" fill="#f6b98a" d="M28,-70 C58,-84 82,-84 86,-112 C88,-132 70,-134 66,-118 C64,-100 46,-94 26,-54Z"/>
+      <circle class="ol" cx="58" cy="-86" r="20" fill="#f6b98a"/>
+      <circle class="ol" cx="76" cy="-122" r="12" fill="#f6b98a"/>
+      <g style="display:var(--sword,none)">
+        <path d="M76,-134 L76,-205" stroke="#fff6a8" stroke-width="16" stroke-linecap="round" opacity=".55" filter="url(#blur)"/>
+        <path class="ol" d="M70,-134 L70,-192 L76,-208 L82,-192 L82,-134Z" fill="#eaf3ff" style="stroke-width:2.5"/>
+        <rect class="ol" x="60" y="-136" width="32" height="8" rx="3" fill="#ffcf3f" style="stroke-width:2.5"/>
+      </g>
+    </g>
+    <rect class="ol" x="-9" y="-94" width="18" height="20" fill="#f6b98a"/>
+    <circle class="a-glow" cx="0" cy="-130" r="50" fill="#fff3a0" opacity=".65" filter="url(#blur)"/>
+    <path class="ol" fill="#ffd23f" d="M-28,-120 Q-38,-150 -18,-158 Q-14,-178 6,-168 Q24,-180 30,-158 Q44,-146 28,-120 Q20,-138 0,-140 Q-18,-138 -28,-120Z"/>
+    <path d="M-14,-152 Q-4,-166 8,-158 M10,-162 Q22,-162 24,-150" stroke="#fff6a8" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <path class="ol" fill="#f6b98a" d="M-25,-118 Q-25,-142 0,-142 Q25,-142 25,-118 L22,-102 Q18,-84 0,-84 Q-18,-84 -22,-102Z"/>
+    <path class="ol" fill="#ffd23f" d="M-24,-124 Q-12,-146 0,-138 Q14,-146 24,-124 Q14,-132 0,-128 Q-14,-132 -24,-124Z" style="stroke-width:2.5"/>
+    <path class="ol" fill="#ff8a1f" d="M-15,-160 L-15,-182 L-7,-171 L0,-186 L7,-171 L15,-182 L15,-160Z" style="stroke-width:2.5"/>
+    <circle cx="0" cy="-169" r="3.2" fill="#37d3ff"/>
+    <ellipse cx="-10" cy="-114" rx="6" ry="6.5" fill="#fff" stroke="#2a1b3d" stroke-width="2"/><ellipse cx="10" cy="-114" rx="6" ry="6.5" fill="#fff" stroke="#2a1b3d" stroke-width="2"/>
+    <circle cx="-9" cy="-114" r="3.4" fill="#2b6fd6"/><circle cx="11" cy="-114" r="3.4" fill="#2b6fd6"/>
+    <circle cx="-8" cy="-115.5" r="1.2" fill="#fff"/><circle cx="12" cy="-115.5" r="1.2" fill="#fff"/>
+    <path d="M-18,-124 L-4,-121 M18,-124 L4,-121" stroke="#2a1b3d" stroke-width="3.2" stroke-linecap="round"/>
+    <path d="M1,-112 Q5,-104 0,-103" stroke="#c98a5e" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <circle cx="-17" cy="-104" r="4.5" fill="#ff9a8b" opacity=".6"/><circle cx="17" cy="-104" r="4.5" fill="#ff9a8b" opacity=".6"/>
+    <path d="M-11,-97 Q0,-85 11,-97 Q0,-93 -11,-97Z" fill="#fff" stroke="#2a1b3d" stroke-width="2.2" stroke-linejoin="round"/>
+    <use href="#spark" x="7" y="-95" transform="scale(.5)" style="transform-origin:7px -95px"/>
+  </g>
+  <g id="bohrer">
+    <rect class="ol" x="-24" y="-66" width="22" height="64" rx="9" fill="#2f4ea8"/>
+    <rect class="ol" x="2" y="-66" width="22" height="64" rx="9" fill="#2f4ea8"/>
+    <ellipse class="ol" cx="-14" cy="-3" rx="20" ry="9" fill="#6b3b1e"/><ellipse class="ol" cx="14" cy="-3" rx="20" ry="9" fill="#6b3b1e"/>
+    <use href="#bohrerTop" y="-70"/>
+  </g>
+
+  <!-- ===== HORSE + RIDER ===== -->
+  <g id="horse">
+    <path class="ol" fill="#7fb8ff" d="M-76,-114 C-124,-124 -136,-60 -110,-26 C-112,-70 -98,-92 -72,-98Z"/>
+    <g class="a-leg2"><rect class="ol" x="-64" y="-84" width="17" height="84" rx="7" fill="#e9ecf6"/><rect class="ol" x="-66" y="-10" width="21" height="11" rx="4" fill="#3a2350"/></g>
+    <g class="a-leg1"><rect class="ol" x="48" y="-84" width="17" height="84" rx="7" fill="#e9ecf6"/><rect class="ol" x="46" y="-10" width="21" height="11" rx="4" fill="#3a2350"/></g>
+    <ellipse class="ol" cx="0" cy="-102" rx="84" ry="40" fill="#fdfdff"/>
+    <g class="a-leg1"><rect class="ol" x="-40" y="-80" width="17" height="80" rx="7" fill="#fdfdff"/><rect class="ol" x="-42" y="-10" width="21" height="11" rx="4" fill="#3a2350"/></g>
+    <g class="a-leg2"><rect class="ol" x="24" y="-80" width="17" height="80" rx="7" fill="#fdfdff"/><rect class="ol" x="22" y="-10" width="21" height="11" rx="4" fill="#3a2350"/></g>
+    <path class="ol" fill="#fdfdff" d="M50,-122 C70,-172 92,-188 114,-184 L128,-150 C108,-146 96,-130 84,-86Z"/>
+    <ellipse class="ol" cx="138" cy="-160" rx="32" ry="17" transform="rotate(34 138 -160)" fill="#fdfdff"/>
+    <path class="ol" fill="#fdfdff" d="M104,-188 L108,-208 L120,-190Z" style="stroke-width:2.5"/>
+    <circle cx="127" cy="-170" r="4" fill="#2a1b3d"/><circle cx="128.2" cy="-171.2" r="1.3" fill="#fff"/>
+    <ellipse cx="160" cy="-146" rx="3" ry="2" fill="#c9a0a8" transform="rotate(34 160 -146)"/>
+    <path class="ol" fill="#7fb8ff" d="M112,-192 C86,-200 58,-180 46,-130 C62,-150 74,-150 82,-140 C78,-160 92,-172 110,-174Z"/>
+    <path d="M100,-188 C80,-184 64,-168 56,-146" stroke="#ffe27a" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+    <rect class="ol" x="-30" y="-142" width="60" height="22" rx="9" fill="#d7263d"/>
+    <path d="M-26,-124 H26" stroke="#ffcf3f" stroke-width="3.5"/>
+  </g>
+  <g id="rider">
+    <use href="#horse"/>
+    <path class="ol" fill="#2f4ea8" d="M-14,-134 L24,-134 L34,-86 L12,-80 L2,-112 L-14,-114Z"/>
+    <ellipse class="ol" cx="24" cy="-78" rx="15" ry="8" fill="#6b3b1e" transform="rotate(-8 24 -78)"/>
+    <use href="#bohrerTop" x="0" y="-136" transform="translate(0 0)"/>
+  </g>
+
+  <!-- ===== GOBLIN (faces left; skin via CSS vars) ===== -->
+  <g id="goblin">
+    <ellipse class="ol" cx="-24" cy="-6" rx="24" ry="10" style="fill:var(--gd)"/><ellipse class="ol" cx="26" cy="-6" rx="24" ry="10" style="fill:var(--gd)"/>
+    <rect class="ol" x="-32" y="-34" width="24" height="30" rx="9" style="fill:var(--gs)"/><rect class="ol" x="10" y="-34" width="24" height="30" rx="9" style="fill:var(--gs)"/>
+    <ellipse class="ol" cx="54" cy="-86" rx="14" ry="24" transform="rotate(-18 54 -86)" style="fill:var(--gs)"/>
+    <ellipse class="ol" cx="0" cy="-72" rx="58" ry="50" style="fill:var(--gs)"/>
+    <path d="M-46,-80 Q0,-62 46,-80 M-50,-62 Q0,-44 50,-62" fill="none" stroke="#2a1b3d" stroke-width="2.5" opacity=".45" stroke-linecap="round"/>
+    <path class="ol" d="M-52,-58 Q0,-16 52,-58 L48,-34 L36,-42 L28,-30 L14,-40 L0,-28 L-14,-40 L-28,-30 L-36,-42 L-48,-34Z" style="fill:var(--gc);stroke-width:2.5"/>
+    <circle cx="-14" cy="-86" r="3" fill="#2a1b3d" opacity=".5"/><circle cx="22" cy="-92" r="3.4" fill="#2a1b3d" opacity=".5"/>
+    <ellipse class="ol" cx="-54" cy="-86" rx="14" ry="24" transform="rotate(18 -54 -86)" style="fill:var(--gs)"/>
+    <ellipse class="ol" cx="0" cy="-108" rx="34" ry="17" style="fill:var(--gs)"/>
+    <path class="ol" d="M-38,-138 L-82,-164 L-74,-130 L-38,-122Z" style="fill:var(--gs)"/><path class="ol" d="M34,-138 L76,-166 L68,-130 L34,-122Z" style="fill:var(--gs)"/>
+    <path d="M-44,-140 L-70,-154 L-66,-136Z" fill="#e58aa0"/><path d="M40,-140 L64,-156 L60,-136Z" fill="#e58aa0"/>
+    <ellipse class="ol" cx="-3" cy="-134" rx="40" ry="31" style="fill:var(--gs)"/>
+    <path d="M-14,-166 l-6,-16 l9,6 l5,-16 l6,15 l9,-8 l-3,19Z" fill="#3b2a1a" stroke="#2a1b3d" stroke-width="2"/>
+    <ellipse class="ol" cx="-32" cy="-124" rx="18" ry="14" style="fill:var(--gd)"/>
+    <circle cx="-38" cy="-124" r="3" fill="#2a1b3d"/><circle cx="-27" cy="-123" r="3" fill="#2a1b3d"/><circle cx="-24" cy="-132" r="2.4" fill="#5b2a1a"/><circle cx="14" cy="-122" r="3" fill="#5b2a1a"/>
+    <ellipse cx="-15" cy="-142" rx="9" ry="7" fill="#ffe84a" stroke="#2a1b3d" stroke-width="2.2"/><ellipse cx="11" cy="-144" rx="9" ry="7" fill="#ffe84a" stroke="#2a1b3d" stroke-width="2.2"/>
+    <circle cx="-17" cy="-142" r="2.8" fill="#2a1b3d"/><circle cx="9" cy="-144" r="2.8" fill="#2a1b3d"/>
+    <path d="M-28,-156 L-6,-146 M24,-158 L2,-148" stroke="#2a1b3d" stroke-width="4" stroke-linecap="round"/>
+    <path d="M-34,-106 Q-4,-86 28,-110 Q-4,-100 -34,-106Z" fill="#6a1b2a" stroke="#2a1b3d" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M-26,-103 l4,10 l5,-8z M-12,-98 l4,9 l5,-9z M2,-98 l4,9 l5,-10z M16,-102 l4,9 l5,-11z" fill="#fff8d0" stroke="#2a1b3d" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="M-20,-92 q-2,12 2,14 q4,-2 2,-14z" fill="#9ee27a" opacity=".8"/>
+  </g>
+  <g id="bossExtras">
+    <path class="ol" d="M-24,-160 L-22,-186 L-11,-171 L0,-190 L11,-171 L23,-186 L25,-160Z" fill="#ffcf3f" transform="rotate(-14 0 -160)" style="stroke-width:2.5"/>
+    <circle cx="-4" cy="-174" r="3" fill="#d7263d"/>
+    <circle class="ol" cx="11" cy="-144" r="11" fill="#1c1228" style="stroke-width:2"/>
+    <path d="M-10,-160 L34,-130 M0,-166 L-4,-150" stroke="#1c1228" stroke-width="2.4"/>
+    <path d="M-28,-152 L-4,-124" stroke="#d96a7a" stroke-width="3.5" stroke-linecap="round"/><path d="M-24,-140 l8,-4 M-18,-132 l8,-4" stroke="#d96a7a" stroke-width="2.4"/>
+    <path d="M-50,-60 Q0,-40 50,-60" stroke="#2a1b3d" stroke-width="3" fill="none" opacity=".5"/>
+    <rect class="ol" x="-48" y="-62" width="96" height="9" rx="3" fill="#3a2a1a" style="stroke-width:2.2"/>
+    <circle class="ol" cx="0" cy="-58" r="9" fill="#efe6c8" style="stroke-width:2"/><circle cx="-3" cy="-59" r="1.8" fill="#2a1b3d"/><circle cx="3" cy="-59" r="1.8" fill="#2a1b3d"/>
+    <path d="M-34,-180 q6,-8 0,-14 M30,-190 q6,-8 0,-14" stroke="#7fa53a" stroke-width="3" fill="none" stroke-linecap="round" opacity=".8"/>
+    <circle cx="-48" cy="-190" r="2.6" fill="#2a1b3d"/><circle cx="52" cy="-176" r="2.6" fill="#2a1b3d"/><circle cx="-60" cy="-120" r="2.6" fill="#2a1b3d"/>
+  </g>
+  <g id="guillo">
+    <circle class="ol" cx="-44" cy="-14" r="14" fill="#8a5a33"/><circle class="ol" cx="44" cy="-14" r="14" fill="#8a5a33"/>
+    <rect class="ol" x="-64" y="-34" width="128" height="16" rx="3" fill="#6b3f22"/>
+    <rect class="ol" x="-52" y="-176" width="14" height="144" fill="#8a5a33"/><rect class="ol" x="38" y="-176" width="14" height="144" fill="#8a5a33"/>
+    <rect class="ol" x="-60" y="-190" width="120" height="16" rx="3" fill="#6b3f22"/>
+    <path class="ol" d="M-36,-150 L36,-150 L36,-96 L-36,-128Z" fill="#dfe7f3"/>
+    <path d="M-30,-144 L30,-144" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+    <rect class="ol" x="-24" y="-52" width="48" height="18" rx="3" fill="#4a3220" style="stroke-width:2.5"/>
+  </g>
+</defs>
+<!-- ============ SCENE 1: THE REALM ============ -->
+<g class="scene on" id="s1">
+  <rect width="800" height="450" fill="url(#skyDay)"/>
+  <circle class="a-glow" cx="690" cy="86" r="62" fill="#fff6a8" opacity=".7"/>
+  <circle cx="690" cy="86" r="34" fill="#ffe14d" stroke="#2a1b3d" stroke-width="3"/>
+  <g transform="translate(0 60)"><g class="a-cloud" style="--t:70s;--d:-18s"><use href="#cloud"/></g></g>
+  <g transform="translate(0 130)"><g class="a-cloud" style="--t:90s;--d:-60s"><use href="#cloud" transform="scale(.8)"/></g></g>
+  <g transform="translate(0 200)"><g class="a-cloud" style="--t:50s;--d:-8s"><use href="#bird"/></g></g>
+  <g transform="translate(0 175)"><g class="a-cloud" style="--t:44s;--d:-30s"><use href="#bird" transform="scale(.8)"/></g></g>
+  <use href="#ground"/>
+  <use href="#castle" x="120" y="338"/>
+  <g transform="translate(330 352) scale(.8)"><use href="#tower"/></g>
+  <g transform="translate(486 352)"><use href="#tree"/></g>
+  <rect class="ol" x="580" y="346" width="210" height="46" fill="url(#wheatPat)" style="stroke-width:2.5"/>
+  <rect class="ol" x="14" y="352" width="96" height="40" fill="url(#wheatPat)" style="stroke-width:2.5"/>
+  <g transform="translate(770 346) scale(.8)"><use href="#tree"/></g>
+
+  <!-- floating step gains -->
+  <g transform="translate(215 380)"><g class="a-float" style="--d:.4s"><text text-anchor="middle" font-size="24" fill="#fff" stroke="#2a1b3d" stroke-width="5" paint-order="stroke" textLength="138" lengthAdjust="spacingAndGlyphs">+1,204 steps</text></g></g>
+  <g transform="translate(560 384)"><g class="a-float" style="--d:1.6s"><text text-anchor="middle" font-size="24" fill="#ffe14d" stroke="#2a1b3d" stroke-width="5" paint-order="stroke" textLength="92" lengthAdjust="spacingAndGlyphs">+8 grain</text></g></g>
+  <g transform="translate(110 372)"><g class="a-float" style="--d:2.8s"><text text-anchor="middle" font-size="24" fill="#d9d4e6" stroke="#2a1b3d" stroke-width="5" paint-order="stroke" textLength="104" lengthAdjust="spacingAndGlyphs">+12 stone</text></g></g>
+  <g transform="translate(655 372)"><g class="a-float" style="--d:3.9s"><text text-anchor="middle" font-size="24" fill="#8fe0ff" stroke="#2a1b3d" stroke-width="5" paint-order="stroke" textLength="81" lengthAdjust="spacingAndGlyphs">+3 iron</text></g></g>
+
+  <!-- Bohrer -->
+  <g transform="translate(400 416) scale(1.05)"><g class="a-drop" style="--d:.1s"><g class="a-bob" style="--d:1s"><use href="#bohrer"/></g></g></g>
+  <use href="#spark" class="a-twinkle" x="352" y="168" style="--d:.2s"/><use href="#spark" class="a-twinkle" x="452" y="176" style="--d:.9s"/><use href="#spark" class="a-twinkle" x="420" y="140" style="--d:.5s"/><use href="#spark" class="a-twinkle" x="340" y="212" style="--d:1.2s"/>
+
+  <!-- title + tag -->
+  <g transform="translate(400 58)"><g class="a-drop" style="--d:.2s"><text text-anchor="middle" font-size="68" fill="#ffcf3f" stroke="#2a1b3d" stroke-width="9" paint-order="stroke" style="letter-spacing:.08em" textLength="294" lengthAdjust="spacingAndGlyphs">MARCHLAND</text></g></g>
+  <g transform="translate(400 108)"><g class="a-pop" style="--d:.9s"><rect class="ol" x="-172" y="-16" width="344" height="34" rx="10" fill="#fff4d6"/><text y="9" text-anchor="middle" font-size="24" fill="#d7263d" textLength="290" lengthAdjust="spacingAndGlyphs">BOHRER <tspan fill="#2a1b3d" font-size="18">&#183; RULER OF THE REALM</tspan></text></g></g>
+</g>
+
+<!-- ============ SCENE 2: THE SNEAK ============ -->
+<g class="scene" id="s2">
+  <rect width="800" height="450" fill="url(#skyDusk)"/>
+  <circle cx="90" cy="70" r="26" fill="#f3e9ff" stroke="#2a1b3d" stroke-width="3"/><circle cx="80" cy="64" r="5" fill="#d8c8f0"/><circle cx="98" cy="78" r="4" fill="#d8c8f0"/>
+  <g transform="translate(0 90)"><g class="a-cloud" style="--t:60s;--d:-25s"><use href="#cloud" style="opacity:.55"/></g></g>
+  <use href="#ground"/>
+  <rect width="800" height="450" fill="#2a1250" opacity=".28"/>
+  <use href="#castle" x="110" y="338"/>
+  <rect class="ol" x="14" y="352" width="96" height="40" fill="url(#wheatPat)" style="stroke-width:2.5"/>
+
+  <!-- Bohrer notices -->
+  <g transform="translate(250 416) scale(1)"><g class="a-bob"><use href="#bohrer"/></g></g>
+  <g transform="translate(250 126)"><g class="a-pop" style="--d:3.4s"><path class="ol" d="M-58,-26 H58 a10,10 0 0 1 10,10 V6 a10,10 0 0 1 -10,10 H-6 L-18,34 L-22,16 H-58 a10,10 0 0 1 -10,-10 V-16 a10,10 0 0 1 10,-10Z" fill="#fff" style="stroke-width:2.5"/><text y="6" text-anchor="middle" font-size="22" fill="#2a1b3d" textLength="169" lengthAdjust="spacingAndGlyphs">WHO GOES THERE?!</text></g></g>
+
+  <!-- boss + guillotine (back row) -->
+  <g transform="translate(755 382) scale(.62)"><g class="a-march" style="--from:430px;--t:3.6s"><use href="#guillo"/></g></g>
+  <g transform="translate(672 402) scale(1.4 1.3)"><g class="a-march" style="--from:430px;--t:3.6s"><g class="a-stomp" style="animation-duration:.7s"><use href="#goblin" style="--gs:#7d9a3c;--gd:#4a6322;--gc:#5a2a6e"/><use href="#bossExtras"/></g></g></g>
+  <g transform="translate(670 118)"><g class="a-march" style="--from:430px;--t:3.6s"><g class="a-pop" style="--d:.4s"><rect class="ol" x="-115" y="-22" width="230" height="48" rx="10" fill="#d7263d"/><text y="3" text-anchor="middle" font-size="25" fill="#ffe14d" textLength="144" lengthAdjust="spacingAndGlyphs">SIR CHARLTON</text><text y="20" text-anchor="middle" font-size="12" fill="#fff4d6" style="letter-spacing:.1em" textLength="161" lengthAdjust="spacingAndGlyphs">BOSS GOBLIN &#183; OCTOBER TYRANT</text></g></g></g>
+
+  <!-- front goblins -->
+  <g transform="translate(410 430) scale(.82)"><g class="a-march" style="--from:470px;--t:3.8s"><g class="a-sneak"><use href="#goblin" style="--gs:#8fc24a;--gd:#5f8f2e;--gc:#7b4a2b"/></g></g></g>
+  <g transform="translate(520 434) scale(.7)"><g class="a-march" style="--from:460px;--t:3.7s"><g class="a-sneak" style="--d:.15s"><use href="#goblin" style="--gs:#a5c64a;--gd:#6f8f2a;--gc:#2f6b66"/></g></g></g>
+  <g transform="translate(603 430) scale(.85)"><g class="a-march" style="--from:440px;--t:3.7s"><g class="a-sneak" style="--d:.3s"><use href="#goblin" style="--gs:#6fb06a;--gd:#3f7a45;--gc:#a8322a"/></g></g></g>
+
+  <!-- front goblin tags -->
+  <g transform="translate(410 252)"><g class="a-march" style="--from:470px;--t:3.8s"><g class="a-pop" style="--d:.5s"><rect class="ol" x="-84" y="-15" width="168" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="121" lengthAdjust="spacingAndGlyphs">COUNT UNIDOS</text></g></g></g>
+  <g transform="translate(520 288)"><g class="a-march" style="--from:460px;--t:3.7s"><g class="a-pop" style="--d:.7s"><rect class="ol" x="-36" y="-15" width="72" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="30" lengthAdjust="spacingAndGlyphs">ANT</text></g></g></g>
+  <g transform="translate(603 236)"><g class="a-march" style="--from:440px;--t:3.7s"><g class="a-pop" style="--d:.9s"><rect class="ol" x="-52" y="-15" width="104" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="60" lengthAdjust="spacingAndGlyphs">PIETRO</text></g></g></g>
+
+  <!-- boss speech -->
+  <g transform="translate(540 52)"><g class="a-pop" style="--d:4.6s"><path class="ol" d="M-150,-24 H150 a10,10 0 0 1 10,10 V12 a10,10 0 0 1 -10,10 H80 L100,46 L52,22 H-150 a10,10 0 0 1 -10,-10 V-14 a10,10 0 0 1 10,-10Z" fill="#fff" style="stroke-width:2.5"/><text y="6" text-anchor="middle" font-size="20" fill="#7a1020" textLength="355" lengthAdjust="spacingAndGlyphs">GRAB THE GRAIN! BRING THE GUILLOTINE!</text></g></g>
+</g>
+
+<!-- ============ SCENE 3: THE CHARGE ============ -->
+<g class="scene" id="s3">
+  <rect width="800" height="450" fill="url(#skyDusk)"/>
+  <g transform="translate(0 70)"><g class="a-cloud" style="--t:40s;--d:-14s"><use href="#cloud" style="opacity:.5"/></g></g>
+  <use href="#ground"/>
+  <rect width="800" height="450" fill="#3a1030" opacity=".3"/>
+  <use href="#castle" x="100" y="338"/>
+  <g transform="translate(330 352) scale(.8)"><use href="#tower"/></g>
+
+  <!-- tower arrows -->
+  <g transform="translate(340 266)"><g class="a-arrow" style="--d:.2s"><path d="M0,0 H44 M44,0 l-9,-6 M44,0 l-9,6" stroke="#2a1b3d" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M0,0 l-8,-6 M0,0 l-8,6" stroke="#ff5a3c" stroke-width="3.5" fill="none" stroke-linecap="round"/></g></g>
+  <g transform="translate(340 262)"><g class="a-arrow" style="--d:.65s"><path d="M0,0 H44 M44,0 l-9,-6 M44,0 l-9,6" stroke="#2a1b3d" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M0,0 l-8,-6 M0,0 l-8,6" stroke="#ff5a3c" stroke-width="3.5" fill="none" stroke-linecap="round"/></g></g>
+
+  <!-- boss + guillotine -->
+  <g transform="translate(766 386) scale(.6)"><g class="a-march" style="--from:240px;--t:3s"><use href="#guillo"/></g></g>
+  <g transform="translate(690 406) scale(1.32 1.26)"><g class="a-march" style="--from:240px;--t:3s"><g class="a-stomp" style="animation-duration:.5s"><use href="#goblin" style="--gs:#7d9a3c;--gd:#4a6322;--gc:#5a2a6e"/><use href="#bossExtras"/>
+    <g transform="translate(-62 -72)"><g class="a-swing" style="animation-duration:.8s"><rect class="ol" x="-6" y="-70" width="12" height="70" rx="5" fill="#6b3f22"/><path class="ol" d="M-16,-70 L-8,-112 L0,-90 L8,-114 L16,-70Z" fill="#9aa3b5" style="stroke-width:2.5"/></g></g>
+  </g></g></g>
+  <g transform="translate(672 126)"><g class="a-march" style="--from:240px;--t:3s"><g class="a-pop" style="--d:.2s"><rect class="ol" x="-115" y="-22" width="230" height="48" rx="10" fill="#d7263d"/><text y="3" text-anchor="middle" font-size="25" fill="#ffe14d" textLength="144" lengthAdjust="spacingAndGlyphs">SIR CHARLTON</text><text y="20" text-anchor="middle" font-size="12" fill="#fff4d6" style="letter-spacing:.1em" textLength="161" lengthAdjust="spacingAndGlyphs">BOSS GOBLIN &#183; OCTOBER TYRANT</text></g></g></g>
+
+  <!-- goblins -->
+  <g transform="translate(470 432) scale(.8)"><g class="a-march" style="--from:240px;--t:3s"><g class="a-stomp" style="animation-duration:.42s"><use href="#goblin" style="--gs:#8fc24a;--gd:#5f8f2e;--gc:#7b4a2b"/>
+    <g transform="translate(-62 -72)"><g class="a-swing" style="animation-duration:.9s"><rect x="-2" y="-120" width="4" height="120" fill="#6b3f22"/><path class="ol" d="M2,-120 H76 V-84 H2Z" fill="#fff" style="stroke-width:2.5"/><path d="M2,-112 H76 M2,-92 H76" stroke="#2b6fd6" stroke-width="6"/><text x="39" y="-96" text-anchor="middle" font-size="14" fill="#d7263d" textLength="47" lengthAdjust="spacingAndGlyphs">UNIDOS!</text></g></g>
+  </g></g></g>
+  <g transform="translate(560 438) scale(.68)"><g class="a-march" style="--from:240px;--t:3s"><g class="a-stomp" style="animation-duration:.36s"><use href="#goblin" style="--gs:#a5c64a;--gd:#6f8f2a;--gc:#2f6b66"/>
+    <g transform="translate(-62 -72)"><g class="a-swing" style="animation-duration:.7s"><rect x="-3" y="-80" width="6" height="80" fill="#6b3f22"/><path class="ol" d="M-18,-110 V-84 H18 V-110 M0,-114 V-84" fill="none" style="stroke-width:5"/></g></g>
+  </g></g></g>
+  <g transform="translate(640 434) scale(.82)"><g class="a-march" style="--from:240px;--t:3s"><g class="a-stomp" style="animation-duration:.46s"><use href="#goblin" style="--gs:#6fb06a;--gd:#3f7a45;--gc:#a8322a"/>
+    <g transform="translate(-62 -72)"><g class="a-swing" style="animation-duration:.8s"><rect class="ol" x="-5" y="-70" width="10" height="70" rx="4" fill="#6b3f22" style="stroke-width:2.5"/><g class="a-glow"><ellipse class="ol" cx="0" cy="-86" rx="15" ry="22" fill="#ff8a1f" style="stroke-width:2.5"/><ellipse cx="0" cy="-82" rx="7" ry="13" fill="#ffe14d"/></g></g></g>
+  </g></g></g>
+
+  <!-- goblin tags -->
+  <g transform="translate(470 258)"><g class="a-march" style="--from:240px;--t:3s"><rect class="ol" x="-84" y="-15" width="168" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="121" lengthAdjust="spacingAndGlyphs">COUNT UNIDOS</text></g></g>
+  <g transform="translate(560 296)"><g class="a-march" style="--from:240px;--t:3s"><rect class="ol" x="-36" y="-15" width="72" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="30" lengthAdjust="spacingAndGlyphs">ANT</text></g></g>
+  <g transform="translate(640 240)"><g class="a-march" style="--from:240px;--t:3s"><rect class="ol" x="-52" y="-15" width="104" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="60" lengthAdjust="spacingAndGlyphs">PIETRO</text></g></g>
+
+  <!-- Bohrer gallops in -->
+  <g transform="translate(240 424) scale(.95)"><g class="a-gallopin" style="--t:2.2s">
+    <g class="a-dust" style="--d:0s"><circle cx="-110" cy="-12" r="16" fill="#e6d3ae"/></g><g class="a-dust" style="--d:.3s"><circle cx="-100" cy="-8" r="12" fill="#e6d3ae"/></g><g class="a-dust" style="--d:.6s"><circle cx="-120" cy="-6" r="14" fill="#e6d3ae"/></g>
+    <g class="a-ride"><use href="#rider" style="--sword:inline"/></g></g></g>
+  <g transform="translate(240 86)"><g class="a-pop" style="--d:2.1s"><rect class="ol" x="-62" y="-16" width="124" height="32" rx="9" fill="#fff4d6"/><text y="8" text-anchor="middle" font-size="24" fill="#d7263d" textLength="69" lengthAdjust="spacingAndGlyphs">BOHRER</text></g></g>
+  <g transform="translate(560 64) rotate(-6)"><g class="a-bam" style="--d:2.4s"><text text-anchor="middle" font-size="64" fill="#ffe14d" stroke="#2a1b3d" stroke-width="9" paint-order="stroke" textLength="215" lengthAdjust="spacingAndGlyphs">CHARGE!</text></g></g>
+</g>
+
+<!-- ============ SCENE 4: THE DEFENSE ============ -->
+<g class="scene" id="s4">
+  <rect width="800" height="450" fill="url(#skyFire)"/>
+  <circle class="a-glow" cx="560" cy="250" r="110" fill="#ffd36b" opacity=".35"/>
+  <use href="#ground"/>
+  <rect width="800" height="450" fill="#5b1020" opacity=".18"/>
+  <use href="#castle" x="80" y="338"/>
+  <g transform="translate(250 352) scale(.7)"><use href="#tower"/></g>
+
+  <!-- crosses where goblins fell -->
+  <g transform="translate(470 446) scale(.8)"><g class="a-pop" style="--d:2.3s"><use href="#cross"/></g></g>
+  <g transform="translate(548 448) scale(.7)"><g class="a-pop" style="--d:3.5s"><use href="#cross"/></g></g>
+  <g transform="translate(622 446) scale(.8)"><g class="a-pop" style="--d:4.7s"><use href="#cross"/></g></g>
+
+  <!-- boss + guillotine -->
+  <g class="a-yeet2" style="--d:5.9s"><g transform="translate(706 408) scale(1.3 1.26)"><g class="a-stomp" style="animation-duration:.5s"><use href="#goblin" style="--gs:#7d9a3c;--gd:#4a6322;--gc:#5a2a6e"/><use href="#bossExtras"/></g></g>
+    <g transform="translate(682 132)"><rect class="ol" x="-115" y="-22" width="230" height="48" rx="10" fill="#d7263d"/><text y="3" text-anchor="middle" font-size="25" fill="#ffe14d" textLength="144" lengthAdjust="spacingAndGlyphs">SIR CHARLTON</text><text y="20" text-anchor="middle" font-size="12" fill="#fff4d6" style="letter-spacing:.1em" textLength="161" lengthAdjust="spacingAndGlyphs">BOSS GOBLIN &#183; OCTOBER TYRANT</text></g></g>
+  <g class="a-yeet1" style="--d:5.0s"><g transform="translate(776 390) scale(.6)"><use href="#guillo"/></g></g>
+
+  <!-- goblins -->
+  <g class="a-yeet1" style="--d:1.5s"><g transform="translate(470 432) scale(.85)"><g class="a-stomp" style="animation-duration:.42s"><use href="#goblin" style="--gs:#8fc24a;--gd:#5f8f2e;--gc:#7b4a2b"/></g></g>
+    <g transform="translate(470 252)"><rect class="ol" x="-84" y="-15" width="168" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="121" lengthAdjust="spacingAndGlyphs">COUNT UNIDOS</text></g></g>
+  <g class="a-yeet2" style="--d:2.7s"><g transform="translate(550 438) scale(.72)"><g class="a-stomp" style="animation-duration:.36s"><use href="#goblin" style="--gs:#a5c64a;--gd:#6f8f2a;--gc:#2f6b66"/></g></g>
+    <g transform="translate(550 292)"><rect class="ol" x="-36" y="-15" width="72" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="30" lengthAdjust="spacingAndGlyphs">ANT</text></g></g>
+  <g class="a-yeet1" style="--d:3.9s"><g transform="translate(626 434) scale(.88)"><g class="a-stomp" style="animation-duration:.46s"><use href="#goblin" style="--gs:#6fb06a;--gd:#3f7a45;--gc:#a8322a"/></g></g>
+    <g transform="translate(626 236)"><rect class="ol" x="-52" y="-15" width="104" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="60" lengthAdjust="spacingAndGlyphs">PIETRO</text></g></g>
+
+  <!-- hero -->
+  <g transform="translate(300 430) scale(1.02)"><g class="a-rear"><g class="a-ride"><use href="#rider" style="--sword:inline"/></g></g></g>
+  <g transform="translate(250 60)"><g class="a-pop" style="--d:.2s"><rect class="ol" x="-62" y="-16" width="124" height="32" rx="9" fill="#fff4d6"/><text y="8" text-anchor="middle" font-size="24" fill="#d7263d" textLength="69" lengthAdjust="spacingAndGlyphs">BOHRER</text></g></g>
+
+  <!-- impacts -->
+  <g transform="translate(470 270)"><g class="a-bam" style="--d:1.5s"><circle r="52" fill="#fff" opacity=".85"/><text y="14" text-anchor="middle" font-size="44" fill="#ff5a3c" stroke="#2a1b3d" stroke-width="7" paint-order="stroke" textLength="106" lengthAdjust="spacingAndGlyphs">BONK!</text></g></g>
+  <g transform="translate(560 300)"><g class="a-bam" style="--d:2.7s"><circle r="48" fill="#fff" opacity=".85"/><text y="14" text-anchor="middle" font-size="44" fill="#2b9fd6" stroke="#2a1b3d" stroke-width="7" paint-order="stroke" textLength="84" lengthAdjust="spacingAndGlyphs">POW!</text></g></g>
+  <g transform="translate(640 250)"><g class="a-bam" style="--d:3.9s"><circle r="54" fill="#fff" opacity=".85"/><text y="14" text-anchor="middle" font-size="44" fill="#7a2bd6" stroke="#2a1b3d" stroke-width="7" paint-order="stroke" textLength="127" lengthAdjust="spacingAndGlyphs">SPLAT!</text></g></g>
+  <g transform="translate(730 250)"><g class="a-bam" style="--d:5.0s"><circle r="56" fill="#fff" opacity=".85"/><text y="14" text-anchor="middle" font-size="40" fill="#d7263d" stroke="#2a1b3d" stroke-width="7" paint-order="stroke" textLength="134" lengthAdjust="spacingAndGlyphs">CRUNCH!</text></g></g>
+  <g transform="translate(560 100) rotate(-4)"><g class="a-bam" style="--d:5.9s"><text text-anchor="middle" font-size="62" fill="#ffe14d" stroke="#2a1b3d" stroke-width="9" paint-order="stroke" textLength="179" lengthAdjust="spacingAndGlyphs">NOOOO!</text></g></g>
+</g>
+
+<!-- ============ SCENE 5: THE LEADERBOARD ============ -->
+<g class="scene" id="s5">
+  <rect width="800" height="450" fill="url(#skyDawn)"/>
+  <circle class="a-glow" cx="450" cy="120" r="70" fill="#fff6a8" opacity=".8"/>
+  <circle cx="450" cy="120" r="36" fill="#ffe14d" stroke="#2a1b3d" stroke-width="3"/>
+  <use href="#ground"/>
+  <use href="#castle" x="110" y="338"/>
+  <rect class="ol" x="14" y="352" width="96" height="40" fill="url(#wheatPat)" style="stroke-width:2.5"/>
+  <g transform="translate(486 352)"><use href="#tree"/></g>
+
+  <!-- victory pose -->
+  <g transform="translate(400 426)"><use href="#horse" style="--lp:paused;--ld0:-.095s"/></g>
+  <g transform="translate(250 420) scale(1.1)"><g class="a-bob"><use href="#bohrer" style="--sword:inline"/></g></g>
+  <use href="#spark" class="a-twinkle" x="205" y="160" style="--d:.1s"/><use href="#spark" class="a-twinkle" x="302" y="170" style="--d:.7s"/><use href="#spark" class="a-twinkle" x="262" y="118" style="--d:.4s"/>
+  <g transform="translate(250 100)"><g class="a-pop" style="--d:.6s"><rect class="ol" x="-62" y="-16" width="124" height="32" rx="9" fill="#fff4d6"/><text y="8" text-anchor="middle" font-size="24" fill="#d7263d" textLength="69" lengthAdjust="spacingAndGlyphs">BOHRER</text></g></g>
+  <g transform="translate(250 62) rotate(-4)"><g class="a-bam" style="--d:.2s;animation-duration:3s"><text text-anchor="middle" font-size="62" fill="#ffcf3f" stroke="#2a1b3d" stroke-width="9" paint-order="stroke" textLength="238" lengthAdjust="spacingAndGlyphs">VICTORY!</text></g></g>
+
+  <!-- fleeing goblins -->
+  <g class="a-flee" style="--d:1.6s"><g transform="translate(440 432) scale(-.8 .8)"><g class="a-stomp" style="animation-duration:.4s"><use href="#goblin" style="--gs:#8fc24a;--gd:#5f8f2e;--gc:#7b4a2b"/></g></g>
+    <g transform="translate(440 266)"><rect class="ol" x="-84" y="-15" width="168" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="121" lengthAdjust="spacingAndGlyphs">COUNT UNIDOS</text></g></g>
+  <g class="a-flee" style="--d:1.9s"><g transform="translate(520 438) scale(-.68 .68)"><g class="a-stomp" style="animation-duration:.34s"><use href="#goblin" style="--gs:#a5c64a;--gd:#6f8f2a;--gc:#2f6b66"/></g></g>
+    <g transform="translate(520 302)"><rect class="ol" x="-36" y="-15" width="72" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="30" lengthAdjust="spacingAndGlyphs">ANT</text></g></g>
+  <g class="a-flee" style="--d:2.2s"><g transform="translate(596 434) scale(-.82 .82)"><g class="a-stomp" style="animation-duration:.44s"><use href="#goblin" style="--gs:#6fb06a;--gd:#3f7a45;--gc:#a8322a"/></g></g>
+    <g transform="translate(596 262)"><rect class="ol" x="-52" y="-15" width="104" height="30" rx="8" fill="#fff4d6"/><text y="7" text-anchor="middle" font-size="21" fill="#2a1b3d" textLength="60" lengthAdjust="spacingAndGlyphs">PIETRO</text></g></g>
+  <g class="a-flee" style="--d:3s;animation-duration:5s"><g transform="translate(690 408) scale(-1.3 1.26)"><g class="a-stomp" style="animation-duration:.6s"><use href="#goblin" style="--gs:#7d9a3c;--gd:#4a6322;--gc:#5a2a6e"/><use href="#bossExtras"/></g></g>
+    <g transform="translate(690 300)"><rect class="ol" x="-84" y="-17" width="168" height="34" rx="9" fill="#d7263d"/><text y="8" text-anchor="middle" font-size="23" fill="#ffe14d" textLength="132" lengthAdjust="spacingAndGlyphs">SIR CHARLTON</text></g></g>
+
+  <!-- leaderboard -->
+  <g transform="translate(512 18)"><g class="a-panel" style="--d:3.2s">
+    <rect class="ol" x="0" y="0" width="276" height="226" rx="12" fill="#fff4d6"/>
+    <text x="138" y="36" text-anchor="middle" font-size="28" fill="#d7263d" textLength="148" lengthAdjust="spacingAndGlyphs">GROUND HELD</text>
+    <rect x="8" y="48" width="260" height="34" rx="8" fill="#ffe14d"/>
+    <g font-size="20" fill="#2a1b3d"><text x="20" y="72">1</text><text x="44" y="72" textLength="58" lengthAdjust="spacingAndGlyphs">BOHRER</text><text x="258" y="72" text-anchor="end" font-size="15" fill="#7a1020" textLength="108" lengthAdjust="spacingAndGlyphs">THE WHOLE REALM</text>
+    <text x="20" y="108">2</text><text x="44" y="108" textLength="58" lengthAdjust="spacingAndGlyphs">PIETRO</text><text x="258" y="108" text-anchor="end" font-size="15" textLength="144" lengthAdjust="spacingAndGlyphs">3 squares + a bruise</text>
+    <text x="20" y="140">3</text><text x="44" y="140" textLength="29" lengthAdjust="spacingAndGlyphs">ANT</text><text x="258" y="140" text-anchor="end" font-size="15" textLength="65" lengthAdjust="spacingAndGlyphs">2 squares</text>
+    <text x="20" y="172">4</text><text x="44" y="172" textLength="115" lengthAdjust="spacingAndGlyphs">COUNT UNIDOS</text><text x="258" y="172" text-anchor="end" font-size="15" textLength="58" lengthAdjust="spacingAndGlyphs">1 square</text>
+    <text x="20" y="204">5</text><text x="44" y="204" textLength="115" lengthAdjust="spacingAndGlyphs">SIR CHARLTON</text><text x="258" y="204" text-anchor="end" font-size="15" textLength="86" lengthAdjust="spacingAndGlyphs">a small ruin</text></g>
+  </g></g>
+
+  <!-- confetti -->
+  <g transform="translate(60 -20)"><g class="a-confetti" style="--d:.2s"><rect width="10" height="16" fill="#ff5a3c"/></g></g>
+  <g transform="translate(140 -20)"><g class="a-confetti" style="--d:1.1s"><rect width="10" height="16" fill="#37d3ff"/></g></g>
+  <g transform="translate(210 -20)"><g class="a-confetti" style="--d:.6s"><rect width="10" height="16" fill="#ffcf3f"/></g></g>
+  <g transform="translate(300 -20)"><g class="a-confetti" style="--d:1.7s"><rect width="10" height="16" fill="#9be15d"/></g></g>
+  <g transform="translate(360 -20)"><g class="a-confetti" style="--d:.1s"><rect width="10" height="16" fill="#ff5a3c"/></g></g>
+  <g transform="translate(430 -20)"><g class="a-confetti" style="--d:1.3s"><rect width="10" height="16" fill="#ffcf3f"/></g></g>
+  <g transform="translate(120 -20)"><g class="a-confetti" style="--d:2.2s"><rect width="10" height="16" fill="#c06bff"/></g></g>
+  <g transform="translate(330 -20)"><g class="a-confetti" style="--d:2.6s"><rect width="10" height="16" fill="#37d3ff"/></g></g>
+  <g transform="translate(250 -20)"><g class="a-confetti" style="--d:2.9s"><rect width="10" height="16" fill="#ff5a3c"/></g></g>
+  <g transform="translate(30 -20)"><g class="a-confetti" style="--d:1.9s"><rect width="10" height="16" fill="#9be15d"/></g></g>
+  <g transform="translate(400 -20)"><g class="a-confetti" style="--d:2.4s"><rect width="10" height="16" fill="#c06bff"/></g></g>
+  <g transform="translate(180 -20)"><g class="a-confetti" style="--d:3.2s"><rect width="10" height="16" fill="#ffcf3f"/></g></g>
+</g>
+</svg>
+<button type="button" class="start" id="start">TAP TO START<small>Plays with sound</small></button>
+</div>
+<div class="cap" id="cap" aria-live="polite"></div>
+<div class="ctl">
+  <button type="button" id="bPrev">Back</button>
+  <button type="button" id="bPlay">Pause</button>
+  <button type="button" id="bNext">Next</button>
+  <button type="button" id="bRe">Restart</button>
+  <button type="button" id="bMus" aria-pressed="false">Music: On</button>
+  <div class="dots" id="dots" role="tablist" aria-label="Chapters"></div>
+</div>
+</div>
+<script>
+(function(){
+  var scenes=[
+    {id:'s1',dur:8500,cap:'<b>CHAPTER 1: THE REALM.</b> In Marchland every step is a stone and every stride is grain. Lord Bohrer, radiant, handsome and absurdly muscular, rules his land with honor.'},
+    {id:'s2',dur:9500,cap:'<b>CHAPTER 2: THE SNEAK.</b> At dusk the goblins creep in: Count Unidos, Pietro, Ant, and their boss, the dreaded Sir Charlton, dragging his October guillotine.'},
+    {id:'s3',dur:8000,cap:'<b>CHAPTER 3: THE CHARGE.</b> The goblins storm the border. The watchtower fires. Bohrer calls for his horse and gallops to the frontier.'},
+    {id:'s4',dur:10000,cap:'<b>CHAPTER 4: THE DEFENSE.</b> Abs out, sword up. Bohrer sends them flying one by one, and Sir Charlton gets the biggest launch of all.'},
+    {id:'s5',dur:9500,cap:'<b>CHAPTER 5: THE LEADERBOARD.</b> Bohrer holds all the ground. The goblins hold a few squares, a ruin, and a lot of bruises.'}
+  ];
+  var stage=document.getElementById('stage'), capEl=document.getElementById('cap'),
+      bPlay=document.getElementById('bPlay'), dotsEl=document.getElementById('dots');
+  var reduce=false;
+  try{reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;}catch(e){}
+  var cur=0, elapsed=0, playing=false, last=0, awaiting=true;
+  var dots=scenes.map(function(s,i){
+    var d=document.createElement('i'); d.setAttribute('role','tab'); d.setAttribute('aria-label','Chapter '+(i+1));
+    d.tabIndex=0;
+    d.addEventListener('click',function(){show(i);});
+    d.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();show(i);}});
+    dotsEl.appendChild(d); return d;
+  });
+  function show(i){
+    i=(i+scenes.length)%scenes.length;
+    scenes.forEach(function(s){document.getElementById(s.id).classList.remove('on');});
+    var el=document.getElementById(scenes[i].id);
+    el.classList.add('on');
+    cur=i; elapsed=0;
+    capEl.innerHTML=scenes[i].cap;
+    dots.forEach(function(d,k){d.classList.toggle('on',k===i);});
+  }
+
+  /* ---------- synthesized score (Web Audio, no files) ---------- */
+  var AC=window.AudioContext||window.webkitAudioContext, ctx=null, master=null, noiseBuf=null,
+      musicOn=true, nextT=0, step=0, timer=null, EIGHTH=0.29;
+  var bMus=document.getElementById('bMus');
+  function mf(m){return 440*Math.pow(2,(m-69)/12);}
+  var CH={
+    minor:[[50,53,57],[46,50,53],[53,57,60],[48,52,55]],
+    major:[[50,54,57],[43,47,50],[47,50,54],[45,49,52]]
+  };
+  var MEL={
+    minor:[[74,0,0,0,77,0,76,74],[70,0,0,0,74,0,72,70],[72,0,0,0,77,0,76,77],[79,0,0,0,76,0,74,72]],
+    major:[[78,0,0,0,81,0,83,81],[79,0,0,0,83,0,81,79],[78,0,0,0,81,0,83,86],[85,0,0,0,81,0,83,85]]
+  };
+  function tone(t,midi,dur,type,vol,cut,att,rel,det){
+    var o=ctx.createOscillator(),f=ctx.createBiquadFilter(),g=ctx.createGain();
+    o.type=type;o.frequency.value=mf(midi);if(det)o.detune.value=det;
+    f.type='lowpass';f.frequency.value=cut;
+    g.gain.setValueAtTime(0.0001,t);g.gain.linearRampToValueAtTime(vol,t+att);g.gain.setTargetAtTime(0,t+dur,rel);
+    o.connect(f);f.connect(g);g.connect(master);o.start(t);o.stop(t+dur+rel*7);
+  }
+  function drum(t,vol){
+    var o=ctx.createOscillator(),g=ctx.createGain();
+    o.type='sine';o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(42,t+0.28);
+    g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.75);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+0.8);
+    var n=ctx.createBufferSource(),nf=ctx.createBiquadFilter(),ng=ctx.createGain();
+    n.buffer=noiseBuf;nf.type='lowpass';nf.frequency.value=380;
+    ng.gain.setValueAtTime(vol*0.7,t);ng.gain.exponentialRampToValueAtTime(0.001,t+0.2);
+    n.connect(nf);nf.connect(ng);ng.connect(master);n.start(t);n.stop(t+0.25);
+  }
+  function crash(t,vol){
+    var n=ctx.createBufferSource(),nf=ctx.createBiquadFilter(),ng=ctx.createGain();
+    n.buffer=noiseBuf;nf.type='highpass';nf.frequency.value=5200;
+    ng.gain.setValueAtTime(vol,t);ng.gain.exponentialRampToValueAtTime(0.001,t+1.8);
+    n.connect(nf);nf.connect(ng);ng.connect(master);n.start(t);n.stop(t+1.9);
+  }
+  function playStep(s,t){
+    var sc=cur, key=(sc===0||sc===4)?'major':'minor', bar=Math.floor(s/8)%4, b=s%8, ch=CH[key][bar];
+    var padV=[0.035,0.05,0.055,0.065,0.055][sc];
+    if(b===0){
+      ch.forEach(function(n){
+        tone(t,n,EIGHTH*8,'sawtooth',padV,650,0.6,0.5,-7);
+        tone(t,n,EIGHTH*8,'sawtooth',padV,650,0.6,0.5,7);
+      });
+      tone(t,ch[0]-12,EIGHTH*8,'sine',0.16,300,0.1,0.4);
+    }
+    if(sc===0&&b%2===0) tone(t,ch[(b/2)%3]+12,EIGHTH*1.6,'triangle',0.05,2600,0.01,0.25);
+    if(sc>=2){
+      var idx=[0,1,2,1,0,1,2,1][b], av=[0,0,0.035,0.045,0.025][sc];
+      tone(t,ch[idx]+12,EIGHTH*0.9,'sawtooth',av,1900,0.01,0.08);
+    }
+    if(sc>=2||sc===0){
+      var m=MEL[key][bar][b];
+      if(m){
+        var mv=[0.05,0,0.075,0.085,0.08][sc];
+        tone(t,m,EIGHTH*(b===0?3.6:2.4),'sawtooth',mv,sc===0?1500:2100,0.05,0.18,-5);
+        tone(t,m,EIGHTH*(b===0?3.6:2.4),'sawtooth',mv,sc===0?1500:2100,0.05,0.18,5);
+        if(sc>=3) tone(t,m-12,EIGHTH*2.4,'square',0.02,1100,0.05,0.18);
+      }
+    }
+    if(sc===1){ if(b===0)drum(t,0.5); if(b===4)drum(t,0.28); if(b===6&&bar%2===1)drum(t,0.2); }
+    else if(sc===2){ if(b===0||b===4)drum(t,0.55); if(b===2||b===6)drum(t,0.32); if(b===0&&bar===0)crash(t,0.12); }
+    else if(sc===3){ if(b%2===0)drum(t,b===0||b===4?0.65:0.45); if(b===5||b===7)drum(t,0.28); if(b===0)crash(t,bar===0?0.2:0.1); }
+    else if(sc===4){ if(b===0)drum(t,0.55); if(b===4)drum(t,0.45); if(b===0&&bar===0)crash(t,0.16); }
+  }
+  function pump(){
+    if(!musicOn||!ctx)return;
+    while(nextT<ctx.currentTime+0.3){playStep(step,nextT);nextT+=EIGHTH;step++;}
+  }
+  var unlockEl=null, SILENT='data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+  function unlockAudio(){
+    try{if(navigator.audioSession)navigator.audioSession.type='playback';}catch(e){}
+    try{
+      if(!unlockEl){unlockEl=new Audio();unlockEl.src=SILENT;unlockEl.loop=true;unlockEl.setAttribute('playsinline','');}
+      var pr=unlockEl.play();if(pr&&pr.catch)pr.catch(function(){});
+    }catch(e){}
+  }
+  function startMusic(){
+    if(!AC)return false;
+    try{
+      unlockAudio();
+      if(!ctx){
+        ctx=new AC();
+        var comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.ratio.value=5;
+        master=ctx.createGain();master.gain.value=1.1;master.connect(comp);comp.connect(ctx.destination);
+        noiseBuf=ctx.createBuffer(1,ctx.sampleRate,ctx.sampleRate);
+        var d=noiseBuf.getChannelData(0);for(var i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+      }
+      ctx.resume();
+      musicOn=true;nextT=ctx.currentTime+0.1;step=0;
+      if(!timer)timer=setInterval(pump,60);
+      if(!playing)ctx.suspend();
+      return true;
+    }catch(e){return false;}
+  }
+  function stopMusic(){
+    musicOn=false;
+    try{if(unlockEl)unlockEl.pause();}catch(e){}
+    if(ctx){try{ctx.suspend();}catch(e){}}
+  }
+  function setMusLabel(){
+    bMus.textContent=musicOn?'Music: On':'Music: Off';
+    bMus.setAttribute('aria-pressed',musicOn?'true':'false');
+  }
+  bMus.addEventListener('click',function(){
+    if(musicOn){stopMusic();}
+    else if(awaiting){musicOn=true;}
+    else if(!startMusic()){bMus.textContent='Music unavailable';return;}
+    setMusLabel();
+  });
+  function setPlaying(p){
+    playing=p;
+    if(ctx&&musicOn){try{p?ctx.resume():ctx.suspend();}catch(e){}}
+    stage.classList.toggle('paused',!p);
+    bPlay.textContent=p?'Pause':'Play';
+  }
+  function tick(t){
+    var dt=last?Math.min(t-last,100):0; last=t;
+    if(playing){
+      elapsed+=dt;
+      if(elapsed>=scenes[cur].dur) show(cur+1);
+    }
+    requestAnimationFrame(tick);
+  }
+  document.getElementById('bPrev').addEventListener('click',function(){show(cur-1);});
+  document.getElementById('bNext').addEventListener('click',function(){show(cur+1);});
+  document.getElementById('bRe').addEventListener('click',function(){if(awaiting){show(0);begin();return;}show(0);if(!playing)setPlaying(true);});
+  bPlay.addEventListener('click',function(){if(awaiting){begin();return;}setPlaying(!playing);});
+  show(0); setPlaying(playing);
+  var startBtn=document.getElementById('start');
+  stage.classList.add('await'); setMusLabel();
+  function begin(){
+    if(!awaiting)return;
+    awaiting=false; startBtn.hidden=true; stage.classList.remove('await');
+    show(cur); setPlaying(true);
+    if(musicOn)startMusic();
+  }
+  startBtn.addEventListener('click',begin);
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
