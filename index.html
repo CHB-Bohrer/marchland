@@ -539,6 +539,14 @@ function guillotinesNow(){
   }
   return out;
 }
+/* The first build kept one blade in g.tyrant; blades now live in g.gl. Whenever a board is loaded or refreshed,
+   any blade still in g.tyrant is folded into g.gl (an entry already in g.gl for that square wins). */
+function foldOldBlade(g){
+  if(!g) return;
+  if(!g.gl) g.gl={};
+  var ot=g.tyrant;
+  if(ot && ot.q!=null){ var k=key(ot.q,ot.r); if(!g.gl[k]) g.gl[k]={q:wrapC(ot.q),r:wrapC(ot.r),inf:ot.inf||0,t:ot.t||0}; }
+}
 function guillotineAt(q,r){
   var k=key(q,r), l=guillotinesNow();
   for(var i=0;i<l.length;i++) if(key(l[i].q,l[i].r)===k) return l[i];
@@ -1062,8 +1070,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.gl=remote.gl||null;
-  if(!G.gl && remote.tyrant){ var ot=remote.tyrant; G.gl={}; G.gl[key(ot.q,ot.r)]={q:ot.q,r:ot.r,inf:ot.inf||0,t:ot.t||0}; }   // (the first build kept a single blade here)
+  G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; foldOldBlade(G);
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -3809,7 +3816,7 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; tidyBoard(G); }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; tidyBoard(G); foldOldBlade(G); }
     else G=blankGame(gameCode);
     var ex=G.players[tryPid];
     if(ex && ex.pin && ex.pin!==tryHash){
