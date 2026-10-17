@@ -152,6 +152,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .claim .shot img{ max-width:min(100%,360px); max-height:560px; border:1px solid var(--rule); display:block; }
 .chip{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--rule); padding:1px 6px; border-radius:2px; color:var(--ink-2); white-space:nowrap; }
 .chip.disputed{ border-color:var(--ink); color:var(--ink); }
+.chip.verified{ border-color:var(--p0); color:var(--p0); }
 .empty{ padding:14px 18px; }
 @media (max-width:560px){
   .claim{ grid-template-columns:minmax(0,1fr); gap:3px; padding:10px 16px; }
@@ -1201,6 +1202,8 @@ function claimState(c,now){
     if(v.v==='no'){ no++; noBy.push(p); } else if(v.v==='ok') ok++;
   });
   var out={n:n,no:no,ok:ok,noBy:noBy,until:deadline,disputed:disputed};
+  /* the steward (Bohrer) has checked the screenshot: his word settles it, no vote needed */
+  if(c.ver&&c.ver.v){ out.ver=c.ver.v; out.s=(c.ver.v==='ok')?'stands':'void'; return out; }
   if(c.final){ out.s=c.final; return out; }
   if(!n){ out.s='stands'; return out; }
   if(!disputed){ out.s=(ok>=n||now>=close)?'stands':'open'; return out; }
@@ -3489,7 +3492,7 @@ function render(){
 
 /* ═══ claim log ════════════════════════════════════════════════════════ */
 var showAllClaims=false, LOG_SHORT=12;
-var CHIP={open:'◷ open', disputed:'⚑ disputed', stands:'✓ stands', void:'✕ voided'};
+var CHIP={open:'◷ open', disputed:'⚑ disputed', stands:'✓ stands', void:'✕ voided', verified:'✓ verified', rejected:'✕ rejected'};
 function dayStart(t){ var d=new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
 function fmtK(n){ return n>=10000 ? Math.round(n/1000)+'k' : n>=1000 ? (n/1000).toFixed(1).replace(/\.0$/,'')+'k' : String(n); }
 
@@ -3509,10 +3512,13 @@ function renderClaims(){
   log.innerHTML=shown.map(function(e){
     var c=e.c, st=e.st, p=G.players[c.pid], col=p?pColor(c.pid):'var(--ink-2)';
     var meta=[since(c.t)];
+    if(st.ver==='ok') meta.push('screenshot checked by Bohrer');
+    if(st.ver==='no') meta.push('screenshot checked by Bohrer — did not match');
+    if(!st.ver && c.shot && (st.s==='open'||st.s==='disputed')) meta.push('screenshot sent to Bohrer to check');
     if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
     if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
-    if(st.s==='void') meta.push('voided by '+namesOf(st.noBy));
-    if(st.s==='stands' && st.disputed) meta.push('survived a dispute');
+    if(st.s==='void' && !st.ver) meta.push('voided by '+namesOf(st.noBy));
+    if(st.s==='stands' && st.disputed && !st.ver) meta.push('survived a dispute');
     var acts=[];
     if(c.shot) acts.push('<button data-act="photo" data-id="'+e.id+'" aria-expanded="'+!!openShots[e.id]+'">'+(openShots[e.id]?'Hide':'Screenshot')+'</button>');
     if(c.pid===ME && !c.shot && (st.s==='open'||st.s==='disputed') && online)
@@ -3536,7 +3542,7 @@ function renderClaims(){
     return '<div class="claim '+st.s+'">'
       +'<div><span class="dot" style="background:'+col+'"></span>'+esc(nameOf(c.pid))+(c.pid===ME?' <span class="muted">— you</span>':'')
       +'<div class="meta">'+meta.join(' · ')+'</div></div>'
-      +'<div><span class="amt">'+(c.steps||0).toLocaleString()+' steps → '+c.got+' marches</span> <span class="chip '+st.s+'">'+CHIP[st.s]+'</span></div>'
+      +'<div><span class="amt">'+(c.steps||0).toLocaleString()+' steps → '+c.got+' marches</span> <span class="chip '+st.s+(st.ver==='ok'?' verified':'')+'">'+CHIP[st.ver==='ok'?'verified':st.ver==='no'?'rejected':st.s]+'</span></div>'
       +'<div class="acts">'+acts.join('')+'</div>'+shot+'</div>';
   }).join('');
   var wrap=document.getElementById('claims-more-wrap');
@@ -3553,7 +3559,7 @@ function renderNotice(list){
         +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">+ Add a Health screenshot</button>')+'</span>');
     }
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
-      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was voided by '+namesOf(st.noBy)+' — '+c.got+' marches will come off your next claim.</span>');
+      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was '+(st.ver?'checked by Bohrer against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' — '+c.got+' marches will come off your next claim.</span>');
     }
     /* every login: others' claims from the last 24 hours that can still be disputed */
     if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS){

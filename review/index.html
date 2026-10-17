@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Marchland — Screenshot review</title>
+<style>
+:root{ --paper:#E5E8E2; --surface:#F2F4EE; --ink:#16242A; --ink-2:#54666A; --rule:#C2C9BE; --good:#1C6B57; --bad:#B23F2E; }
+*{ box-sizing:border-box; }
+body{ margin:0; background:var(--paper); color:var(--ink); font:15px/1.45 "Helvetica Neue",Arial,sans-serif; }
+header{ padding:18px 16px 8px; max-width:720px; margin:0 auto; }
+h1{ margin:0 0 4px; font:600 22px Georgia,serif; }
+.sub{ color:var(--ink-2); font-size:13px; }
+main{ max-width:720px; margin:0 auto; padding:8px 16px 60px; }
+h2{ font:600 13px ui-monospace,Menlo,monospace; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-2); margin:22px 0 8px; }
+.card{ background:var(--surface); border:1px solid var(--rule); border-radius:4px; padding:12px 14px; margin-bottom:12px; }
+.top{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; align-items:baseline; }
+.who{ font-weight:600; font-size:16px; }
+.amt{ font:14px ui-monospace,Menlo,monospace; }
+.meta{ color:var(--ink-2); font-size:12px; margin-top:2px; }
+.card img{ display:block; max-width:100%; max-height:70vh; margin:10px 0; border:1px solid var(--rule); }
+.row{ display:flex; gap:8px; flex-wrap:wrap; }
+button,a.btn{ font:inherit; font-size:14px; padding:8px 14px; border:1px solid var(--ink); background:var(--surface); color:var(--ink); border-radius:3px; cursor:pointer; text-decoration:none; }
+button.ok{ background:var(--good); border-color:var(--good); color:#fff; }
+button.no{ background:var(--bad); border-color:var(--bad); color:#fff; }
+button:disabled{ opacity:.5; }
+.chip{ font:10px ui-monospace,Menlo,monospace; letter-spacing:.08em; text-transform:uppercase; border:1px solid var(--rule); padding:1px 6px; border-radius:2px; }
+.chip.ok{ color:var(--good); border-color:var(--good); }
+.chip.no{ color:var(--bad); border-color:var(--bad); }
+#status{ font-size:13px; color:var(--ink-2); margin:6px 0 0; }
+.empty{ color:var(--ink-2); padding:10px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Screenshot review</h1>
+  <div class="sub">Step-count screenshots sent by players land here. Check each one against the number claimed, then Verify or Reject. Your decision settles the claim at once — no vote.</div>
+  <div id="status">Loading…</div>
+</header>
+<main>
+  <h2>Waiting for you</h2>
+  <div id="pending"></div>
+  <h2>Already decided (last 7 days)</h2>
+  <div id="done"></div>
+</main>
+
+<script>
+var DB_URL="https://marchland-352fc-default-rtdb.firebaseio.com";
+var GAME_CODE="OCT26";           // keep in step with GAME_CODE in ../index.html
+var players={}, claims={}, shots={};
+
+function db(path,opt){
+  return fetch(DB_URL+path+".json",Object.assign({cache:"no-store"},opt||{}))
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); });
+}
+function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+function nameOf(pid){ var p=players[pid]; return p&&p.name?p.name:"someone who left"; }
+function ago(t){
+  var m=Math.round((Date.now()-t)/6e4);
+  if(m<60) return Math.max(1,m)+" min ago";
+  var h=Math.round(m/60); if(h<48) return h+" h ago";
+  return Math.round(h/24)+" days ago";
+}
+function setStatus(t){ document.getElementById("status").textContent=t; }
+
+function load(){
+  return Promise.all([db("/marchland/"+GAME_CODE+"/players"),db("/marchland/"+GAME_CODE+"/claims")]).then(function(r){
+    players=r[0]||{}; claims=r[1]||{};
+    render();
+    var n=Object.keys(claims).filter(function(id){ return claims[id].shot&&!claims[id].ver; }).length;
+    document.title=(n?"("+n+") ":"")+"Marchland — Screenshot review";
+    setStatus(n?(n+" waiting for review · updated "+new Date().toLocaleTimeString()):"Nothing waiting · updated "+new Date().toLocaleTimeString());
+  }).catch(function(e){ setStatus("Could not load ("+e.message+"). Will retry."); });
+}
+
+function loadShot(id){
+  if(shots[id]) return;
+  shots[id]="loading";
+  db("/marchland_shots/"+GAME_CODE+"/"+id).then(function(d){
+    shots[id]=d||"missing"; var el=document.getElementById("img-"+id);
+    if(el) paintShot(el,id);
+  }).catch(function(){ delete shots[id]; });
+}
+function paintShot(el,id){
+  var d=shots[id];
+  if(!d||d==="loading") el.innerHTML='<div class="meta">Loading screenshot…</div>';
+  else if(d==="missing") el.innerHTML='<div class="meta">The screenshot could not be found.</div>';
+  else el.innerHTML='<img alt="Health screenshot" src="'+d+'"><div class="row"><a class="btn" download="marchland-'+esc(id)+'.jpg" href="'+d+'">Save image</a>'
+    +'<button data-copy="'+esc(id)+'">Copy question for AI</button></div>';
+}
+
+function render(){
+  var list=Object.keys(claims).map(function(id){ return {id:id,c:claims[id]}; })
+    .filter(function(e){ return e.c&&e.c.shot; })
+    .sort(function(a,b){ return b.c.t-a.c.t; });
+  var pend=list.filter(function(e){ return !e.c.ver; });
+  var done=list.filter(function(e){ return e.c.ver&&Date.now()-e.c.ver.t<7*864e5; });
+
+  document.getElementById("pending").innerHTML=pend.length?pend.map(function(e){ return card(e,true); }).join(""):'<div class="empty">Nothing waiting.</div>';
+  document.getElementById("done").innerHTML=done.length?done.map(function(e){ return card(e,false); }).join(""):'<div class="empty">None yet.</div>';
+  pend.forEach(function(e){ var el=document.getElementById("img-"+e.id); if(el){ paintShot(el,e.id); loadShot(e.id); } });
+}
+
+function card(e,isPending){
+  var c=e.c, v=c.ver&&c.ver.v;
+  var chip=v?'<span class="chip '+v+'">'+(v==="ok"?"verified":"rejected")+'</span>':"";
+  var body=isPending?('<div id="img-'+esc(e.id)+'"></div>'
+    +'<div class="row"><button class="ok" data-v="ok" data-id="'+esc(e.id)+'">✓ Verify — steps match</button>'
+    +'<button class="no" data-v="no" data-id="'+esc(e.id)+'">✕ Reject — does not match</button></div>'):'';
+  return '<div class="card"><div class="top"><span class="who">'+esc(nameOf(c.pid))+' '+chip+'</span>'
+    +'<span class="amt">'+(c.steps||0).toLocaleString()+' steps → '+(c.got||0)+' marches</span></div>'
+    +'<div class="meta">claimed '+ago(c.t)+(v?' · decided '+ago(c.ver.t):'')+'</div>'+body+'</div>';
+}
+
+function decide(id,v,btn){
+  var c=claims[id]; if(!c) return;
+  if(v==="no" && !confirm("Reject "+nameOf(c.pid)+"'s claim of "+(c.steps||0).toLocaleString()+" steps? "+(c.got||0)+" marches will come off their next claim.")) return;
+  btn.disabled=true;
+  var ver={v:v,t:Date.now()};
+  db("/marchland/"+GAME_CODE+"/claims/"+id+"/ver",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(ver)})
+    .then(function(){ return db("/marchland/"+GAME_CODE+"/rev",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(Date.now())}); })
+    .then(function(){ c.ver=ver; render(); setStatus("Saved. Players will see it the next time their game refreshes."); })
+    .catch(function(e){ btn.disabled=false; setStatus("Could not save ("+e.message+"). Try again."); });
+}
+
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("button"); if(!t) return;
+  if(t.dataset.v) return decide(t.dataset.id,t.dataset.v,t);
+  if(t.dataset.copy){
+    var id=t.dataset.copy, c=claims[id];
+    var q="This is a screenshot from an iPhone Health app. The player says they walked "+(c.steps||0).toLocaleString()+" steps today ("+new Date(c.t).toDateString()+"). Does the screenshot show that step count for that day? Tell me the number you can read, the date shown, and whether anything looks edited or inconsistent.";
+    (navigator.clipboard?navigator.clipboard.writeText(q):Promise.reject()).then(function(){ setStatus("Question copied — paste it into Claude along with the saved image."); },function(){ prompt("Copy this:",q); });
+  }
+});
+
+load(); setInterval(load,60000);
+</script>
+</body>
+</html>
