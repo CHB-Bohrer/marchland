@@ -227,6 +227,7 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .claim .meta{ font-family:var(--mono); font-size:11px; color:var(--ink-2); }
 .claim .acts{ display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 .claim .acts button{ padding:5px 9px; font-size:12px; }
+.gods{ font-size:12px; font-style:italic; color:var(--ink-2); align-self:center; }
 .claim.void .amt{ text-decoration:line-through; color:var(--ink-2); }
 .claim .shot{ grid-column:1/-1; padding-top:6px; }
 .claim .shot img{ max-width:min(100%,360px); max-height:560px; border:1px solid var(--rule); display:block; }
@@ -424,7 +425,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <div class="field"><label for="stepsin">Today&rsquo;s steps</label>
           <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="from the Health app" style="width:180px">
         </div>
-        <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label>
+        <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label><span class="gods">let the pagen gods decide!</span>
         <button id="collect" class="go">Claim</button>
         <span class="muted mono" id="bankinfo">—</span>
       </div>
@@ -505,7 +506,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <div class="panel" id="claims-panel">
       <div class="claims-head">
         <h2>Claim log</h2>
-        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only players who have logged in within the last 24 hours count in that vote. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
+        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only players who have logged in within the last 24 hours count in that vote. If a majority of them void it, its marches come off the claimant&rsquo;s next claim. A claim with a Health screenshot attached is accepted automatically, with no vote, unless Bohrer checks it and voids it.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
       <div class="log" id="claims-log"></div>
@@ -1286,6 +1287,9 @@ function claimState(c,now){
   var out={n:n,no:no,ok:ok,noBy:noBy,until:deadline,disputed:disputed};
   /* the steward (Bohrer) has checked the screenshot: his word settles it, no vote needed */
   if(c.ver&&c.ver.v){ out.ver=c.ver.v; out.s=(c.ver.v==='ok')?'stands':'void'; return out; }
+  /* a claim with a screenshot attached is accepted automatically, no dispute or vote;
+     only the steward's check (above) can void it. A claim already voided stays voided. */
+  if(c.shot && c.final!=='void'){ out.s='stands'; out.auto=true; return out; }
   if(c.final){ out.s=c.final; return out; }
   if(!n){ out.s='stands'; return out; }
   if(!disputed){ out.s=(ok>=n||now>=close)?'stands':'open'; return out; }
@@ -1380,7 +1384,7 @@ function attachShot(id,file){
       if(G.claims[id]) G.claims[id].shot=true;
       return putPath('/claims/'+id+'/shot',true);
     });
-  }).then(function(){ notifySteward(id); render(); say('Screenshot attached — it has been sent to Bohrer to check, and anyone can open it from the claim log.'); },
+  }).then(function(){ notifySteward(id); render(); say('Screenshot attached — your claim is accepted unless Bohrer voids it after checking. Anyone can open it from the claim log.'); },
           function(e){ say('<span class="bad">Could not attach the screenshot</span> ('+esc(e.message)+'). The claim itself is saved.'); });
 }
 function resetShotPick(){
@@ -3608,13 +3612,13 @@ function renderClaims(){
     var meta=[since(c.t)];
     if(st.ver==='ok') meta.push('screenshot checked by Bohrer');
     if(st.ver==='no') meta.push('screenshot checked by Bohrer — did not match');
-    if(!st.ver && c.shot && (st.s==='open'||st.s==='disputed')) meta.push('screenshot sent to Bohrer to check');
+    if(!st.ver && c.shot && st.auto) meta.push('screenshot attached — accepted unless Bohrer voids it');
     if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
     if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
     if(st.s==='void' && !st.ver) meta.push('voided by '+namesOf(st.noBy));
     if(st.s==='stands' && st.disputed && !st.ver) meta.push('survived a dispute');
     var acts=[];
-    if(c.shot) acts.push('<button data-act="photo" data-id="'+e.id+'" aria-expanded="'+!!openShots[e.id]+'">'+(openShots[e.id]?'Hide':'Screenshot')+'</button>');
+    if(c.shot) acts.push('<button data-act="photo" data-id="'+e.id+'" aria-expanded="'+!!openShots[e.id]+'">'+(openShots[e.id]?'Hide':'Screenshot')+'</button><span class="gods">let the pagen gods decide!</span>');
     if(c.pid===ME && !c.shot && (st.s==='open'||st.s==='disputed') && online)
       acts.push('<button data-act="addshot" data-id="'+e.id+'">+ Screenshot</button>');
     var canVote=c.voters&&c.voters[ME];
@@ -3847,7 +3851,7 @@ document.getElementById('shotin').addEventListener('change',function(){
   pendingShot=f;
   document.getElementById('shotlbl').textContent='✓ screenshot ready';
   document.getElementById('shotpick').classList.add('on');
-  say('Screenshot ready. It goes up with your next collection so anyone checking the claim can see it.');
+  say('Screenshot ready. It goes up with your next collection, and a claim with a screenshot is accepted unless Bohrer voids it.');
 });
 var lateFor=null;
 document.getElementById('shotlate').addEventListener('change',function(){
