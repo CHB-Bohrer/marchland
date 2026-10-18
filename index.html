@@ -506,7 +506,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <div class="panel" id="claims-panel">
       <div class="claims-head">
         <h2>Claim log</h2>
-        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only players who have logged in within the last 24 hours count in that vote. If a majority of them void it, its marches come off the claimant&rsquo;s next claim. A claim with a Health screenshot attached is accepted automatically, with no vote, unless Bohrer checks it and voids it.</span>
+        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only players who have logged in within the last 24 hours count in that vote. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
       <div class="log" id="claims-log"></div>
@@ -1384,7 +1384,7 @@ function attachShot(id,file){
       if(G.claims[id]) G.claims[id].shot=true;
       return putPath('/claims/'+id+'/shot',true);
     });
-  }).then(function(){ notifySteward(id); render(); say('Screenshot attached — your claim is accepted unless Bohrer voids it after checking. Anyone can open it from the claim log.'); },
+  }).then(function(){ notifySteward(id); render(); say('Screenshot attached — it has been sent to Bohrer to check, and anyone can open it from the claim log.'); },
           function(e){ say('<span class="bad">Could not attach the screenshot</span> ('+esc(e.message)+'). The claim itself is saved.'); });
 }
 function resetShotPick(){
@@ -3612,7 +3612,7 @@ function renderClaims(){
     var meta=[since(c.t)];
     if(st.ver==='ok') meta.push('screenshot checked by Bohrer');
     if(st.ver==='no') meta.push('screenshot checked by Bohrer — did not match');
-    if(!st.ver && c.shot && st.auto) meta.push('screenshot attached — accepted unless Bohrer voids it');
+    if(!st.ver && c.shot && (st.s==='open'||st.s==='disputed')) meta.push('screenshot sent to Bohrer to check');
     if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
     if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
     if(st.s==='void' && !st.ver) meta.push('voided by '+namesOf(st.noBy));
@@ -3851,7 +3851,7 @@ document.getElementById('shotin').addEventListener('change',function(){
   pendingShot=f;
   document.getElementById('shotlbl').textContent='✓ screenshot ready';
   document.getElementById('shotpick').classList.add('on');
-  say('Screenshot ready. It goes up with your next collection, and a claim with a screenshot is accepted unless Bohrer voids it.');
+  say('Screenshot ready. It goes up with your next collection so anyone checking the claim can see it.');
 });
 var lateFor=null;
 document.getElementById('shotlate').addEventListener('change',function(){
