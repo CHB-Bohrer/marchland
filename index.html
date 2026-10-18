@@ -449,6 +449,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="home" aria-label="Centre on your keep" title="Centre on your keep">◎</button>
           <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
+          <button id="namesbtn" aria-label="Name labels" title="Name labels on/off">Aa</button>
           <button id="hallobtn" class="hide" aria-label="Halloween decorations" title="Halloween on/off">&#127875;</button>
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
@@ -2784,6 +2785,7 @@ function draw(){
     ctx.fillStyle=col;
     ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath(); ctx.fill();
     ctx.restore();
+    if(!SHOW_NAMES) return;                              // the player has switched the name labels off: just the arrow
     if(S>=TRIBE_LABEL_MAX_S) return;                    // zoomed in: just the arrow, the name labels would crowd the map
     var label=p.name+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
     ctx.font='500 11px ui-monospace, monospace';
@@ -2802,6 +2804,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
+var SHOW_NAMES=true; try{ SHOW_NAMES=localStorage.getItem('marchland.names')!=='0'; }catch(e){}   // name labels on the map are on unless the player switches them off
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
 function clock(){ return performance.now()/1000; }
 function fromFor(q,r,pid){
@@ -2968,6 +2971,11 @@ document.getElementById('skipreplay').addEventListener('click',endReplay);
 (function(){ var b=document.getElementById('calm');
   function paint(){ b.innerHTML=REDUCE?'&#10074;&#10074;':'&#9654;'; b.title=REDUCE?'Animations are off - tap to turn on':'Animations are on - tap to turn off'; }
   b.addEventListener('click',function(){ REDUCE=!REDUCE; try{ localStorage.setItem('marchland.calm',REDUCE?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); });
+  paint(); })();
+
+(function(){ var b=document.getElementById('namesbtn');
+  function paint(){ b.style.opacity=SHOW_NAMES?'.95':'.5'; b.setAttribute('aria-pressed',SHOW_NAMES?'true':'false'); b.title=SHOW_NAMES?'Name labels are on - tap to hide them':'Name labels are off - tap to show them'; }
+  b.addEventListener('click',function(){ SHOW_NAMES=!SHOW_NAMES; try{ localStorage.setItem('marchland.names',SHOW_NAMES?'1':'0'); }catch(e){} paint(); if(G) draw(); });
   paint(); })();
 
 /* ═══ the living map ═══════════════════════════════════════════════════
@@ -4143,7 +4151,7 @@ function drawCaravans(now,amb){
     var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1;
     artCaravan(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face);
     if((c.from===ME||c.to===ME) && S>=12){
-      var lab=(c.from===ME?'to '+nameOf(c.to):'from '+nameOf(c.from))+' · '+fmtDur(c.eta-t);
+      var lab=(SHOW_NAMES?(c.from===ME?'to '+nameOf(c.to):'from '+nameOf(c.from))+' · ':'')+fmtDur(c.eta-t);
       artLabel(ctx,P[0],P[1]+S*0.2+Math.max(10,S)*0.42,lab,Math.max(10,S*0.3),pColor(c.from),1);
     }
   });
