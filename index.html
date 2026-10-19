@@ -554,6 +554,17 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── shown to a player the moment the elimination rule removes them (see showEliminated) ── -->
+<div id="outnote" class="rulesnote hide" role="alertdialog" aria-modal="true" aria-labelledby="outnote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">The end of your realm</p>
+    <h2 id="outnote-h">&#9876; You have been eliminated</h2>
+    <p>You have no castle standing and no soldiers left, so your realm is gone. Your name is off the player list, and every square you still held has been destroyed.</p>
+    <p>Whenever you like, you can begin again from the start with a fresh keep.</p>
+    <button type="button" class="rulesnote-go" id="outnote-go">Back to the start</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the Marchland Saga cartoon (shown once per player, see showSaga) ── -->
 <div id="sagenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="sagenote-h">
   <div class="rulesnote-card">
@@ -762,11 +773,20 @@ function dbGet(path){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 var lastWrite=0;                                    // a pull that started before this is stale
+var ELIM=false;                                     // set when this tab's own player has been eliminated: nothing more is written for them
 function dbPut(path,val){
+  if(ELIM) return Promise.resolve(null);              // an eliminated player's tab must never write itself back onto the board
   if(!online){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(val)); }catch(e){} return Promise.resolve(val); }
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
     {method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json'}})
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+/* several paths in one request: {"cells/3_4":null,"players/abc":null,...} relative to the path given */
+function dbPatch(path,obj){
+  lastWrite=Date.now();
+  return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
+    {method:'PATCH',body:JSON.stringify(obj),headers:{'Content-Type':'application/json'}})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 
@@ -882,6 +902,65 @@ function settleCastles(){
     pushCell(q,r); changed++;
   }
   return changed;
+}
+/* ── elimination ──
+   A player with no castle standing and no soldier anywhere (in a band, in a tower's garrison, or
+   on the road) is out of the game: their name comes off the player list, and every square they
+   still hold is destroyed. A fallen castle (a ruin) is not a castle standing. Anyone's screen
+   applies this, like the castle upkeep above, so it happens even if the loser never opens the game
+   again. It is one write: the cells, the player, a note that they fell, and the revision stamp. */
+function castlesOf(pid){
+  var n=0; for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.k===CASTLE && !isRuin(c)) n++; }
+  return n;
+}
+function soldiersOf(pid){
+  var n=transitOf(pid);
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid) n+=(c.b||0)+(c.g||0); }
+  return n;
+}
+function settleEliminations(){
+  if(!G||!G.players||dirty||ELIM) return false;
+  if(!Object.keys(G.cells).length) return false;               // an empty board is a loading glitch, not a massacre
+  var ids=Object.keys(G.players).filter(function(pid){ return G.players[pid] && castlesOf(pid)===0 && soldiersOf(pid)===0; });
+  if(!ids.length) return false;
+  var now=Date.now(), patch={}, mineOut=false, outNames=[];
+  G.fallen=G.fallen||{};
+  ids.forEach(function(pid){
+    outNames.push({pid:pid,name:G.players[pid].name});
+    for(var k in G.cells){                                      // every other square they hold is destroyed
+      var c=G.cells[k]; if(c.o!==pid) continue;
+      if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; }   // (crosses for the fallen stay until they fade)
+      else { delete G.cells[k]; patch['cells/'+k]=null; }
+    }
+    Object.keys(G.caravans||{}).forEach(function(id){           // wagons to or from a realm that no longer exists
+      var cv=G.caravans[id]; if(cv && (cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
+    });
+    patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
+    if(pid===ME) mineOut=true; else delete G.players[pid];     // (my own record stays in memory until my screen has said goodbye)
+  });
+  patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+  else { var keep=G.players[ME]; if(mineOut) delete G.players[ME]; pushAll(); if(mineOut) G.players[ME]=keep; }
+  if(online) outNames.forEach(function(o){                      // one line in the chat; the id has no random part, so two screens doing this at once write the same line
+    var t=Math.floor(now/60000)*60000, id=q36(t)+'-out-'+o.pid;
+    chatPut('/m/'+id,{pid:o.pid,n:o.name,t:t,m:'has been eliminated: no castle and no soldiers left. Every square they held is destroyed.'})
+      .then(function(){ return chatPut('/rev',t); }).catch(function(){});
+  });
+  if(mineOut) showEliminated();
+  return true;
+}
+/* the screen of a player who has just been eliminated: it says so, and stops writing anything */
+function showEliminated(){
+  if(ELIM) return;
+  ELIM=true;
+  var n=document.getElementById('outnote'); if(!n) return;
+  n.classList.remove('hide'); n.scrollTop=0;
+  var b=document.getElementById('outnote-go');
+  b.onclick=function(){
+    try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){}
+    location.reload();
+  };
+  try{ b.focus(); }catch(e){}
 }
 /* ── crosses for fallen soldiers ── */
 function addGraves(c,n){
@@ -1169,6 +1248,8 @@ function applyRemote(remote){
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
   G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; foldOldBlade(G);
+  G.fallen=remote.fallen||{};
+  if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
   Object.keys(remote.players).forEach(function(pid){
@@ -3532,12 +3613,14 @@ function renderTyrant(){
     +'<span style="display:block;margin-top:4px">Any other square taken from a Tyrant pays 1 march for each execution they have done (up to '+GL_CELL_MAX+').</span>'+invite;
 }
 function render(){
-  if(!G||!me()) return;
+  if(!G||!me()||ELIM) return;
   G.claims=G.claims||{};
   settleMine();
   settleCaravans();
   settleTreks();
   settleCastles();
+  settleEliminations();
+  if(ELIM) return;                                   // that was me: the goodbye screen is up
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
   document.getElementById('v-timber').textContent=Math.round(pl.res.timber);
@@ -3986,6 +4069,10 @@ function join(){
     ME=tryPid; myName=name; myPin=pinIn;
     try{ localStorage.setItem('marchland.name',name); localStorage.setItem('marchland.pin',pinIn); }catch(e){}
     var isNew=!G.players[ME];
+    if(G.fallen && G.fallen[ME]){                    // this name was eliminated earlier: it may start again, from the beginning
+      delete G.fallen[ME];
+      if(online) dbPut('/marchland/'+gameCode+'/fallen/'+ME,null).catch(function(){});
+    }
     var since=isNew?Date.now():(G.players[ME].evSeen||G.players[ME].seen||0);
     if(isNew) seedPlayer(ME,name); else G.players[ME].name=name;
     G.players[ME].pin=tryHash;                       // first time a name is used it claims its PIN

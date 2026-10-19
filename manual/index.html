@@ -177,6 +177,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
     <dt>Castle upkeep</dt><dd>A castle can&rsquo;t be built on a grain square and must be linked to one by an unbroken road of your own ground. With no farm connected it loses health every tick and falls after 5 days; reconnecting a farm heals it at the same rate. A fallen castle gives no supply and can be seized by a band beside it, destroying it and paying 50 marches</dd>
+    <dt>Elimination</dt><dd>A player with no castle standing and no soldiers (in a band, in a tower garrison or on the road) is out: their name comes off the player list and every square they still hold is destroyed. A fallen castle doesn&rsquo;t count as standing. A player who is out may start again with a fresh keep</dd>
     <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 40 minutes a cell between the two keeps (6 hours at least, 2 days at most). Goods wait at the gate if the receiver is away</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
@@ -1465,6 +1466,50 @@ scene({
    [18.0] And a band beside the ruin can seize it. Fifty marches to the victor!
    [24.4] Keep your fields. Keep your roads. */
 
+/* 7c ── elimination: no castle standing and no soldiers means you are out.
+   Caption-only, like the chapter above; lines to record are below. */
+scene({
+  tag:'Last stand', title:'No castle, no soldiers: you are out',
+  body:'A player who has no castle standing and no soldiers left anywhere is eliminated. Their name comes off the player list, and every square they still hold is destroyed. A fallen castle does not count as standing, and soldiers in a tower\'s garrison or on the road still count as soldiers. So as long as one keep stands, or one soldier lives, you are still in the game.',
+  dur:27,
+  init:function(){
+    M=blank();
+    put(0,0,{o:'you',k:'castle'});
+    [[-2,0],[-2,1],[-1,0],[0,1],[1,1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); });
+    put(-1,1,{o:'you',b:2});
+    [[-1,2],[0,2],[1,2],[2,2]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
+    put(2,1,{o:'rival',k:'castle'});
+    put(-1,2,{o:'rival',b:3});
+    markSupply('you');
+    M.hud=[['Castles','1'],['Soldiers','2']];
+  },
+  beats:[
+    [1.4,function(){ M.note='You hold one castle, and two soldiers stand guard on the road beside it.'; }],
+    [5.0,function(n){ grab('battle',[-1,1],[-1,2],n+2.35,{col:T.p1,dcol:T.p0}); M.note='Red attacks the band.'; }],
+    [7.35,function(n){ put(-1,1,{o:'rival',b:1},n); put(-1,2,{b:0},n); markSupply('you'); M.hud=[['Castles','1'],['Soldiers','0']]; }],
+    [8.2,function(){ M.note='Your last two soldiers fall. But your castle still stands, so you are still in the game.'; }],
+    [12.5,function(){ M.hud=[['Castles','0 — fallen'],['Soldiers','0']]; M.note='Later the castle starves and falls. Now you have no castle standing and no soldiers.'; }],
+    [16.0,function(n){ grab('battle',[0,0],[-1,1],n+2.35,{col:T.p1,dcol:T.p0}); M.note='A band beside the ruin seizes it.'; }],
+    [18.35,function(n){ put(0,0,{o:'rival',k:null,b:1},n); put(-1,1,{b:0},n); markSupply('you'); }],
+    [20.0,function(n){
+      [[-2,0],[-2,1],[-1,0],[0,1],[1,1]].forEach(function(p){ put(p[0],p[1],{o:null,k:null,b:0},n); });
+      M.hud=[['You','eliminated'],['Your squares','destroyed']];
+      M.note='No castle and no soldiers: you are out. Your name comes off the list and every square you still held is destroyed.';
+    }],
+    [24.0,function(){ M.note='Keep one castle standing, or one soldier alive, and you stay in the game.'; }]
+  ],
+  draw:function(now){ drawBoard(now); }
+});
+
+/* lines to record for the Last stand chapter, in the same gruff voice:
+   [0.8]  One keep. Two soldiers. That is all you have left.
+   [5.0]  Red strikes the band!
+   [8.2]  Your soldiers fall. But the castle stands, so you fight on.
+   [12.5] Then the castle starves, and falls.
+   [16.0] Red seizes the ruin.
+   [20.0] No keep. No soldiers. You are out, warrior. Every square you held is destroyed!
+   [24.0] Keep one castle standing, or one soldier alive. And you stay in the war. */
+
 /* 8 ── caravans: gifts of goods between players */
 function artCaravan(g,x,y,s,col,t,face){
   var z=s*0.62, walk=t?Math.sin(t*6):0;
@@ -2225,6 +2270,7 @@ var NARRATION=[
  [[1.2, "n5_1", 2.81, "Stone builds walls, three courses deep."], [4.39, "n5_2", 2.42, "A tower covers every cell around it."], [7.0, "n5_3", 3.19, "Neither stops an attack. They make it cost soldiers."], [10.93, "n5_4", 2.88, "The cell falls. Four of your six fall with it."], [14.45, "n5_5", 4.1, "Towers need men inside. And soldiers eat grain, forever!"]],
  [[1.4, "n6_1", 2.23, "Land gives nothing on its own."], [4.03, "n6_2", 4.34, "A cell pays only if an unbroken road leads home to your castle."], [8.97, "n6_3", 3.6, "Now Red seizes one cell. The neck of your eastern arm!"], [12.78, "n6_4", 4.03, "Those four cells are still yours. But cut off, they yield nothing."], [17.55, "n6_5", 2.35, "You kept the land. You lost the road."], [20.66, "n6_6", 5.93, "Remember this, warrior. Cutting a supply line is often cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 3.38, "A second castle is won by campaign, not bought."], [4.78, "n7_2", 3.22, "No two of your keeps may stand within seven cells."], [8.54, "n7_3", 2.42, "So first, push your border far out."], [11.7, "n7_4", 3.36, "Now the eastern arm draws supply from the new keep."], [15.44, "n7_5", 2.45, "Every castle costs more than the last."], [18.43, "n7_6", 3.36, "And soldiers mustered there stand already at the front!"]],
+ [],
  [],
  [[0.8, "cv_1", 2.78, "A caravan carries gifts to another warrior."], [3.8, "cv_2", 2.71, "It costs no marches. Only the goods."], [6.4, "cv_3", 5.11, "The wagon takes time on the road. The farther apart your keeps, the longer the journey."], [11.9, "cv_4", 3.55, "If Kit is away when it comes, the goods wait at his gate."], [15.6, "cv_5", 2.52, "It arrives! The goods are his to spend."], [18.6, "cv_6", 4.66, "Trade works the same way. Kit sends iron back, by return caravan!"]],
  [[0.8, "n8_1", 2.86, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.7, "Read the count off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.79, "Miss a day, and those steps are lost. Nothing carries over."], [12.4, "n8_4", 3.22, "And no day counts for more than thirty thousand steps."]],
