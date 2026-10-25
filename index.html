@@ -901,6 +901,17 @@ function castleFed(q,r,pid){
   }
   return false;
 }
+/* castleFed for drawing: the road-walk is too heavy to run for every castle on every frame, so each castle's
+answer is remembered for a couple of seconds. (Only the little healing/starving arrow uses this.) */
+var fedMemo={};
+function castleFedCached(c){
+  if(!c||c.q==null||c.r==null||!c.o) return true;
+  var k=key(c.q,c.r), m=fedMemo[k], now=Date.now();
+  if(m&&m.o===c.o&&now-m.t<2000) return m.v;
+  var v=castleFed(c.q,c.r,c.o);
+  fedMemo[k]={t:now,v:v,o:c.o};
+  return v;
+}
 /* Brings every castle's health up to date. Anyone's screen does this for every castle, so a
    keep still starves while its owner is away. Health is only stored while it is below full:
    the clock starts the first time a castle is seen cut off. */
@@ -2680,6 +2691,14 @@ function drawBuilding(c,cx,cy,r,col,detail){
     ctx.globalAlpha=.9; ctx.fillStyle=T['--sink']; ctx.fillRect(bx,by,bw,bh);
     ctx.fillStyle=hf>0.34?T['--p0']:T['--p1']; ctx.fillRect(bx,by,bw*hf,bh);
     ctx.globalAlpha=.7; ctx.strokeStyle=T['--ink']; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,bh);
+    if(hf>0){                                         // a small arrow: up = fed and healing, down = cut off and starving
+      var up=castleFedCached(c), as=Math.max(2.5,bh*1.15), ax=bx+bw+as*1.3, ay=by+bh/2;
+      ctx.globalAlpha=.95; ctx.fillStyle=up?T['--p0']:T['--p1']; ctx.strokeStyle=T['--ink']; ctx.lineWidth=.8;
+      ctx.beginPath();
+      if(up){ ctx.moveTo(ax,ay-as); ctx.lineTo(ax+as,ay+as*.7); ctx.lineTo(ax-as,ay+as*.7); }
+      else  { ctx.moveTo(ax,ay+as); ctx.lineTo(ax+as,ay-as*.7); ctx.lineTo(ax-as,ay-as*.7); }
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
     ctx.restore();
   }
   var need=SPEC[c.k].gar[c.l];
