@@ -491,7 +491,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
 
       <div class="caravan hide" id="caravan">
-        <div class="cv-head"><button type="button" id="cv-x" class="cv-x" aria-label="Close">&#10005;</button><b>Send a caravan</b> <span class="muted">A gift of any goods you hold. It costs no marches, but the wagon takes time on the road.</span></div>
+        <div class="cv-head"><button type="button" id="cv-x" class="cv-x" aria-label="Close">&#10005;</button><b>Send a caravan</b> <span class="muted">A gift of any goods you hold. It costs no marches, but the wagon takes time on the road, and each caravan you have moving costs you 1 grain every tick.</span></div>
         <div class="cv-row">
           <div class="field"><label for="cv-to">Send to</label><select id="cv-to"></select></div>
           <div class="field"><label for="cv-stone">Stone <i id="cvh-stone"></i></label><input id="cv-stone" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
@@ -595,6 +595,22 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <p><i>Any resemblance to actual standings is purely coincidental.</i></p>
     <button type="button" class="rulesnote-go" id="sagenote-watch">Watch the cartoon</button>
     <button type="button" class="rulesnote-go rulesnote-alt" id="sagenote-go">Not now</button>
+  </div>
+</div>
+
+<!-- ── one-time announcement: caravan upkeep (shown once per player, see showCvNote) ── -->
+<div id="cvnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="cvnote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">New rule &middot; read this</p>
+    <h2 id="cvnote-h">&#128668; Wagons eat grain</h2>
+    <p>From now on, <b>every caravan you have on the road costs you 1 grain at each tick</b> (the same 4-hour beat as the harvest) until it arrives.</p>
+    <ul>
+      <li><b>Sending is still free of marches.</b> Only the wagon&rsquo;s upkeep is new.</li>
+      <li><b>Two caravans on the road cost 2 grain a tick, three cost 3,</b> and so on. It stops the moment a caravan arrives.</li>
+      <li><b>Mind your grain.</b> The cost is part of your grain income, so you will see it in the grain line. If your grain runs out, hungry soldiers desert, just as they do for any other shortfall.</li>
+    </ul>
+    <p>Caravans already rolling start costing grain from your next tick.</p>
+    <button type="button" class="rulesnote-go" id="cvnote-go">Got it</button>
   </div>
 </div>
 
@@ -1133,7 +1149,15 @@ function ratesFor(pid){
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
   var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
-  return {out:out,sup:s,own:own,mouths:f+g[0],net:out.grain-(f+g[0]),supset:sup,gar:g,field:f};
+  var wg=wagonsAt(pid,Date.now());                   // and so do the wagons: 1 grain a tick for each caravan on the road
+  return {out:out,sup:s,own:own,mouths:f+g[0]+wg,net:out.grain-(f+g[0]+wg),supset:sup,gar:g,field:f,wagons:wg};
+}
+/* Caravan upkeep: every caravan a player has sent costs them 1 grain at each tick while it is still
+   on the road (sent, not yet arrived). A tick is the same 4-hour beat as the harvest. */
+function wagonsAt(pid,t){
+  var n=0, cv=G.caravans||{};
+  for(var id in cv){ var c=cv[id]; if(c && c.from===pid && c.t<=t && t<c.eta && !(c.got && c.got<=t)) n++; }
+  return n;
 }
 function coverOn(q,r,notPid){        // manned guns of everyone except notPid
   var shots=0;
@@ -1230,8 +1254,9 @@ function catchUp(pid){
   var touched=catchTouched;
   for(var t=0;t<ticks;t++){
     var R=ratesFor(pid);
+    var tickEnd=(pl.lastTick||Date.now())+(t+1)*TICK_MS;                 // the moment this tick ends: which wagons were still rolling then?
     pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
-    pl.res.grain+=R.out.grain-R.mouths;
+    pl.res.grain+=R.out.grain-(R.mouths-R.wagons+wagonsAt(pid,tickEnd));
     if(pl.res.grain<0){                       // hungry soldiers desert, biggest band first
       var gone=Math.ceil(-pl.res.grain/2); pl.res.grain=0;
       bandsOf(pid).sort(function(a,b){ return b.n-a.n; }).forEach(function(bd){
@@ -4063,8 +4088,8 @@ function enterGame(isNew){
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
-  if(isNew){ markNoticeSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
-  else { setTimeout(function(){ if(!showNotice()) showSaga(); },700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
+  if(isNew){ markNoticeSeen(); markCvNoteSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
+  else { setTimeout(showNext,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
 }
 /* ── one-time announcements ──
@@ -4086,7 +4111,7 @@ function closeNotice(){
   var n=document.getElementById('rulesnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',noticeKey,true);
   markNoticeSeen();
-  setTimeout(showSaga,250);                                  // the cartoon announcement follows, once
+  setTimeout(showNext,250);                                  // the cartoon announcement follows, once
 }
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
@@ -4114,6 +4139,7 @@ function closeSaga(){
   var n=document.getElementById('sagenote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',sagaKey,true);
   markSagaSeen();
+  setTimeout(showNext,250);
 }
 function sagaKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeSaga(); } }
 function showSaga(){
@@ -4128,6 +4154,37 @@ function showSaga(){
   try{ w.focus(); }catch(e){}
   return true;
 }
+
+/* One-time announcement: caravan upkeep. Shown once per player, after any other notice, never stacked on one. */
+var CVNOTE_ID='cvgrain1';
+function cvNoteSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[CVNOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+CVNOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markCvNoteSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[CVNOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+CVNOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeCvNote(){
+  var n=document.getElementById('cvnote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',cvNoteKey,true);
+  markCvNoteSeen();
+}
+function cvNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeCvNote(); } }
+function showCvNote(){
+  var n=document.getElementById('cvnote'); if(!n||!G||!me()||cvNoteSeen()) return false;
+  var other=['rulesnote','sagenote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',cvNoteKey,true);
+  var b=document.getElementById('cvnote-go'); b.onclick=closeCvNote; try{ b.focus(); }catch(e){}
+  return true;
+}
+/* the order players meet the announcements in */
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; return showCvNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
@@ -4277,7 +4334,7 @@ function sendCaravan(){
   pushMe().then(function(){ return putPath('/caravans/'+id,c); });
   logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g});
   render();
-  say('Caravan on its way to <b>'+esc(them.name)+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map.');
+  say('Caravan on its way to <b>'+esc(them.name)+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
