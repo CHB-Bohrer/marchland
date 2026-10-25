@@ -1037,10 +1037,36 @@ function pColor(pid){
 }
 function cellsOf(pid){ var n=0; for(var k in G.cells){ if(G.cells[k].o===pid) n++; } return n; }
 
+/* A newcomer must never land on anyone's ground. The seat number only decides a player's colour;
+   where the keep goes is the first starting spot whose surroundings are completely unclaimed:
+   no owned square, keep, ruin or cross near it, no river under it, and no other keep close by.
+   If the board is busy the clear radius shrinks a step at a time, but a spot that holds ANY
+   owned square at the keep itself, or on the first ring around it, is never used. */
+function seatClear(s,rad){
+  if(riverAt(s.q,s.r)) return false;
+  for(var p in G.players){ var o=G.players[p]; if(o && o.q!=null && hexDist(s.q,s.r,o.q,o.r)<Math.max(rad,6)) return false; }
+  for(var k in G.cells){
+    var c=G.cells[k]; if(!c.o && !c.k && !c.gv) continue;
+    var pt=k.split('_');
+    if(hexDist(s.q,s.r,parseInt(pt[0],10),parseInt(pt[1],10))<=rad) return false;
+  }
+  return true;
+}
+function findStartSpot(){
+  var radii=[8,6,4,2,1];
+  for(var ri=0;ri<radii.length;ri++){
+    for(var n=0;n<400;n++){
+      var s=seatFor(n);
+      if(seatClear(s,radii[ri])) return s;
+    }
+  }
+  return null;                                        // the board is full: refuse rather than land on someone
+}
 function seedPlayer(pid,name){
   var used={}; for(var p in G.players) used[G.players[p].seat]=1;
-  var seat=0; while(used[seat]) seat++;              // no upper bound now
-  var s=seatFor(seat);
+  var seat=0; while(used[seat]) seat++;              // no upper bound now (colour slot)
+  var s=findStartSpot();
+  if(!s) return false;
   G.players[pid]={name:name,seat:seat,q:s.q,r:s.r,res:{stone:120,timber:100,iron:60,grain:80},
     field:0,squares:10,lastCollect:Date.now()-864e5,collected:0,lastTick:Date.now(),seen:Date.now()};
   // a small holding and a keep
@@ -1053,8 +1079,11 @@ function seedPlayer(pid,name){
     c.o=pid; writeCell(cur[0],cur[1],c); placed++;
     for(var i=0;i<6;i++){ if(hash2(cur[0]*(seat+3),cur[1]+i)>0.25) q.push([cur[0]+AX[i][0],cur[1]+AX[i][1]]); }
   }
-  var hc=cellOf(s.q,s.r); hc.o=pid; hc.k=CASTLE; hc.l=1; hc.g=1; hc.b=2;     // two soldiers wait at the keep
+  var hc=cellOf(s.q,s.r);
+  if(hc.o && hc.o!==pid){ delete G.players[pid]; return false; }   // last-ditch guard: never overwrite anyone else's square
+  hc.o=pid; hc.k=CASTLE; hc.l=1; hc.g=1; hc.b=2;     // two soldiers wait at the keep
   writeCell(s.q,s.r,hc);
+  return true;
 }
 
 /* ═══ rules ════════════════════════════════════════════════════════════ */
@@ -4107,7 +4136,13 @@ function join(){
       if(online) dbPut('/marchland/'+gameCode+'/fallen/'+ME,null).catch(function(){});
     }
     var since=isNew?Date.now():(G.players[ME].evSeen||G.players[ME].seen||0);
-    if(isNew) seedPlayer(ME,name); else G.players[ME].name=name;
+    if(isNew){
+      if(!seedPlayer(ME,name)){
+        G=null; ME=null;
+        document.getElementById('join-hint').innerHTML='<span class="bad">There is no clear ground left to start on right now.</span> Ask Chris to make room, then try again.';
+        return;
+      }
+    } else G.players[ME].name=name;
     G.players[ME].pin=tryHash;                       // first time a name is used it claims its PIN
     var moved=isNew?[]:migrateBands(ME);
     catchUp(ME);
