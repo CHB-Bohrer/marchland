@@ -930,10 +930,23 @@ function castleFedCached(c){
 }
 /* Brings every castle's health up to date. Anyone's screen does this for every castle, so a
    keep still starves while its owner is away. Health is only stored while it is below full:
-   the clock starts the first time a castle is seen cut off. */
+   the clock starts the first time a castle is seen cut off.
+   It only runs on a board that is known to be current (see boardFresh): a phone that slept
+   for days still holds the board as it was, and writing its castles back would raise ones
+   that have since been moved, taken or removed. */
+/* Castles the steward removed by hand. If a screen that has not reloaded the game writes one of
+   them back from its old copy of the board, the next up-to-date screen takes it away again.
+   30_45: Elisa's first keep, placed on Bohrer's ground by the old seating bug and moved to -8_-41. */
+var REMOVED_KEEPS={'30_45':'p1xlplnb'};
 function settleCastles(){
-  if(!G) return 0;
+  if(!G||!boardFresh()) return 0;
   var now=Date.now(), changed=0;
+  for(var rk in REMOVED_KEEPS){
+    var rc=G.cells[rk];
+    if(rc && rc.k===CASTLE && rc.o===REMOVED_KEEPS[rk]){
+      var rp=rk.split('_'); delete G.cells[rk]; pushCell(parseInt(rp[0],10),parseInt(rp[1],10)); changed++;
+    }
+  }
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||!c.o) continue;
     var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), fed=castleFed(q,r,c.o);
@@ -967,7 +980,7 @@ function soldiersOf(pid){
   return n;
 }
 function settleEliminations(){
-  if(!G||!G.players||dirty||ELIM) return false;
+  if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;   // never judge anyone from an old copy of the board
   if(!Object.keys(G.cells).length) return false;               // an empty board is a loading glitch, not a massacre
   var ids=Object.keys(G.players).filter(function(pid){ return G.players[pid] && castlesOf(pid)===0 && soldiersOf(pid)===0; });
   if(!ids.length) return false;
@@ -1296,6 +1309,16 @@ function catchUp(pid){
    the poll fetches only that (~15 bytes). The board is downloaded only when the
    revision has actually moved — which, in a game paced by walking, is rare. */
 var myRev=0;                                        // last revision this tab knows about
+/* When this screen last confirmed it holds the current board (a pull that found nothing new,
+   or a fresh download). Everything that writes on the board's behalf rather than on a player's
+   tap (castle health, eliminations, harvests, arriving bands and caravans) waits for this, so a
+   tab that was asleep never writes back the board as it was hours or days ago. */
+var lastFresh=0;
+function boardFresh(){
+  if(!online) return true;
+  if(typeof document!=='undefined' && document.hidden) return false;
+  return Date.now()-lastFresh<45000;
+}
 function bumpRev(){
   myRev=Date.now();
   return dbPut('/marchland/'+gameCode+'/rev', myRev);
@@ -1356,7 +1379,7 @@ function pull(){
   dbGet('/marchland/'+gameCode+'/rev').then(function(rev){
     // "different", not "newer": revisions are stamped by each device's own clock,
     // and a phone running a second slow would otherwise have its writes ignored
-    if(!rev || (rev===myRev && !refetch)){ pulling=false; return; } // nothing new: ~15 bytes spent
+    if(!rev || (rev===myRev && !refetch)){ pulling=false; if(rev && lastWrite<started) lastFresh=Date.now(); return; } // nothing new: ~15 bytes spent
     return dbGet('/marchland/'+gameCode).then(function(remote){
       pulling=false;
       // I wrote something while this was in flight, so the copy that came back
@@ -1364,7 +1387,9 @@ function pull(){
       if(lastWrite>=started){ refetch=true; return; }
       refetch=false;
       myRev=rev;
-      if(applyRemote(remote)){
+      var changedBoard=applyRemote(remote);
+      if(remote && remote.players) lastFresh=Date.now();
+      if(changedBoard){
         liveEvents();
         render();
         setSync('board updated '+new Date().toLocaleTimeString());
@@ -3721,11 +3746,13 @@ function renderTyrant(){
 function render(){
   if(!G||!me()||ELIM) return;
   G.claims=G.claims||{};
-  settleMine();
-  settleCaravans();
-  settleTreks();
-  settleCastles();
-  settleEliminations();
+  if(boardFresh()){                                   // only an up-to-date screen writes on the board's behalf
+    settleMine();
+    settleCaravans();
+    settleTreks();
+    settleCastles();
+    settleEliminations();
+  }
   if(ELIM) return;                                   // that was me: the goodbye screen is up
   var pl=me(), R=ratesFor(ME);
   document.getElementById('v-stone').textContent=Math.round(pl.res.stone);
@@ -4195,7 +4222,7 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; tidyBoard(G); foldOldBlade(G); }
+    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; lastFresh=Date.now(); tidyBoard(G); foldOldBlade(G); }
     else G=blankGame(gameCode);
     var ex=G.players[tryPid];
     if(ex && ex.pin && ex.pin!==tryHash){
@@ -4764,14 +4791,25 @@ if(!online){
 // a returning player on this device goes straight to the board
 if(myName && myPin && online) join();
 else loadKnownNames();
-setInterval(function(){ if(G&&me()){ if(catchUp(ME)>0){ render(); push(); flushTouched(); } else if(settleCastles()>0) render(); } },60000);
-setInterval(function(){ if(G&&online) pull(); },20000);          // a walk-paced game needs no more
+setInterval(function(){ if(G&&me()&&boardFresh()){ if(catchUp(ME)>0){ render(); push(); flushTouched(); } else if(settleCastles()>0) render(); } },60000);
+/* A sleeping phone or laptop stops the timers. When they start again after a long gap, the board
+   in memory is old: forget that it was ever current and download it in full before doing anything. */
+var lastBeat=Date.now();
+function wokeUp(){ lastFresh=0; refetch=true; }
+setInterval(function(){
+  var nowT=Date.now(); if(nowT-lastBeat>60000) wokeUp(); lastBeat=nowT;
+  if(G&&online) pull();
+},20000);          // a walk-paced game needs no more
 setInterval(function(){                                 // presence: counted as active for the 24-hour vote
   if(G&&me()&&online&&Date.now()-(me().seen||0)>15*60000){ me().seen=Date.now(); putPath('/players/'+ME+'/seen',me().seen); }
 },60000);
 setInterval(function(){ if(G&&me()) render(); },30000);
 // coming back to the tab should feel instant, so check once on focus
-document.addEventListener('visibilitychange',function(){ if(!document.hidden && G && online) pull(); });
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden) return;
+  wokeUp();                                            // whatever happened while the tab was hidden, fetch the board in full
+  if(G && online) pull();
+});
 window.addEventListener('focus',function(){ if(G&&online) pull(); });
 window.addEventListener('resize',function(){ if(G){ layout(); draw(); } });
 window.addEventListener('beforeunload',function(){ if(dirty) push(); });
