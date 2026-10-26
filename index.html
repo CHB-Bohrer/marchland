@@ -1854,7 +1854,7 @@ function sayMove(){
     +(n>1?'Choose how many from the menu on the map. ':'')
     +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 3 hours. Click the band again to cancel.');
 }
-/* the "how many?" menu sits on the map, just above the selected band, and follows it as the map is panned or zoomed */
+/* the "how many?" menu sits in a corner of the map, out of the way of the cells you can send soldiers to */
 var sendMenuSig='', sendMenuPos='';
 function placeSendMenu(){
   var box=document.getElementById('sendmenu'); if(!box) return;
@@ -1870,9 +1870,10 @@ function placeSendMenu(){
   if(selEl.value!==want) selEl.value=want;
   sendMenuSig=sig;
   if(box.classList.contains('hide')) box.classList.remove('hide');
+  // It used to float just above the band, which covered the very cells you want to send soldiers to.
+  // Now it is parked in the left-hand corner of the map that is farther from the selected band.
   var P=toNear(sel.q,sel.r), bw=box.offsetWidth||130, bh=box.offsetHeight||34;
-  var x=Math.max(4,Math.min(W-bw-4,P[0]-bw/2));
-  var above=P[1]-S*0.95-bh-4, y=above>=4?above:Math.min(H-bh-4,P[1]+S*0.95+4);   // flips below the band near the top edge
+  var x=4, y=(P[1]>H/2)?4:Math.max(4,H-bh-4);
   var pos=Math.round(x)+'px,'+Math.round(y)+'px';
   if(pos!==sendMenuPos){ box.style.transform='translate('+pos+')'; sendMenuPos=pos; }
 }
