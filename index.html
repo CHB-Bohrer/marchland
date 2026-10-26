@@ -2741,14 +2741,15 @@ function drawBuilding(c,cx,cy,r,col,detail){
     ctx.globalAlpha=.9; ctx.fillStyle=T['--sink']; ctx.fillRect(bx,by,bw,bh);
     ctx.fillStyle=hf>0.34?T['--p0']:T['--p1']; ctx.fillRect(bx,by,bw*hf,bh);
     ctx.globalAlpha=.7; ctx.strokeStyle=T['--ink']; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,bh);
-    if(hf>0){                                         // a small arrow: up = fed and healing, down = cut off and starving
-      var up=castleFedCached(c), as=Math.max(2.5,bh*1.15), ax=bx+bw+as*1.3, ay=by+bh/2;
-      ctx.globalAlpha=.95; ctx.fillStyle=up?T['--p0']:T['--p1']; ctx.strokeStyle=T['--ink']; ctx.lineWidth=.8;
-      ctx.beginPath();
-      if(up){ ctx.moveTo(ax,ay-as); ctx.lineTo(ax+as,ay+as*.7); ctx.lineTo(ax-as,ay+as*.7); }
-      else  { ctx.moveTo(ax,ay+as); ctx.lineTo(ax+as,ay-as*.7); ctx.lineTo(ax-as,ay-as*.7); }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-    }
+    ctx.restore();
+  }
+  if(c.k===CASTLE && c.o && c.o!==ME && SHOW_NAMES && r>=9){      // whose keep is this? the owner's name sits above it (the Aa button switches it off)
+    var nmx=nameOf(c.o); if(nmx.length>12) nmx=nmx.slice(0,11)+'\u2026';
+    var fs=Math.max(8,Math.min(13,r*0.36)), barUp=(c.h!=null)?Math.max(2,r*0.09)+3:0;
+    ctx.save(); ctx.font='600 '+fs+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    var tw=ctx.measureText(nmx).width, ny=cy-r*0.84-barUp;
+    ctx.globalAlpha=.85; ctx.fillStyle=T['--surface']; ctx.fillRect(cx-tw/2-3,ny-fs*0.62,tw+6,fs*1.24);
+    ctx.globalAlpha=1; ctx.fillStyle=col; ctx.fillText(nmx,cx,ny);
     ctx.restore();
   }
   var need=SPEC[c.k].gar[c.l];
