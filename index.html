@@ -431,9 +431,9 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
     <div class="panel">
       <div class="ledger">
-        <div class="stat"><span class="k">Stone</span><span class="v" id="v-stone">0</span><span class="u">walls, towers</span></div>
-        <div class="stat"><span class="k">Timber</span><span class="v" id="v-timber">0</span><span class="u">castles</span></div>
-        <div class="stat"><span class="k">Iron</span><span class="v" id="v-iron">0</span><span class="u">soldiers</span></div>
+        <div class="stat"><span class="k">Stone</span><span class="v" id="v-stone">0</span><span class="u" id="u-stone" title="walls, towers">+0 / tick</span></div>
+        <div class="stat"><span class="k">Timber</span><span class="v" id="v-timber">0</span><span class="u" id="u-timber" title="castles">+0 / tick</span></div>
+        <div class="stat"><span class="k">Iron</span><span class="v" id="v-iron">0</span><span class="u" id="u-iron" title="soldiers">+0 / tick</span></div>
         <div class="stat" id="s-grain"><span class="k">Grain</span><span class="v" id="v-grain">0</span><span class="u" id="u-grain">+0 net</span></div>
         <div class="stat"><span class="k">Soldiers</span><span class="v" id="v-field">0</span><span class="u" id="u-field">in bands</span></div>
         <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
@@ -3767,6 +3767,7 @@ function render(){
   document.getElementById('u-march').textContent= owed ? owed+' owed from next claim' : 'squares';
   document.getElementById('s-march').classList.toggle('warn',owed>0);
   document.getElementById('u-grain').textContent=(R.net>=0?'+':'')+R.net+' / tick';
+  ['stone','timber','iron'].forEach(function(rs){ var e=document.getElementById('u-'+rs); if(e) e.textContent='+'+R.out[rs]+' / tick'; });   // nothing eats these, so the net is the harvest
   document.getElementById('s-grain').classList.toggle('warn',R.net<0);
   document.getElementById('v-gar').textContent=R.gar[0]+'/'+R.gar[1];
   document.getElementById('u-gar').textContent=R.gar[0]<R.gar[1]?(R.gar[1]-R.gar[0])+' short — decaying':'manned';
