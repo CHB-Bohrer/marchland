@@ -2197,10 +2197,30 @@ function breakBridge(q,r){
   addGraves(c,need);
   guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ addGraves(gc,gc.b||0); delete gc.b; pushCell(g[0],g[1]); } });   // defenders fall where they stood
   var from=G.cells[key(band.q,band.r)]; from.b=band.n-need; if(!from.b) delete from.b;
+  // Your own soldiers standing on your own bridge step off onto the land beside it, rather than vanishing with the span.
+  var saved=0, savedTo=null;
+  if(!victim && c.b>0){
+    var best=null, bs=-1;
+    for(var si=0;si<6;si++){
+      var sq=q+AX[si][0], sr=r+AX[si][1], sc=G.cells[key(sq,sr)];
+      if(!sc||sc.o!==ME||building(sc)) continue;
+      var score=(groundAt(sq,sr)!==RIVER?2:0)+((sc.b>0)?1:0);          // dry land first, and keep them together with a band already there
+      if(score>bs){ bs=score; best=[sq,sr]; }
+    }
+    if(!best){                                          // no neighbour of yours: the nearest cell of yours at all
+      var bd=1e9;
+      for(var sk in G.cells){ var cc=G.cells[sk]; if(cc.o!==ME||building(cc)||sk===key(q,r)) continue; var pp=sk.split('_'), dq=parseInt(pp[0],10), dr=parseInt(pp[1],10), dd=hexDist(q,r,dq,dr); if(dd<bd){ bd=dd; best=[dq,dr]; } }
+    }
+    if(best){
+      var dest=cellOf(best[0],best[1]); saved=c.b; dest.b=(dest.b||0)+saved; writeCell(best[0],best[1],dest); savedTo=best;
+    } else {
+      return nope('<span class="bad">Your soldiers are standing on that bridge</span> and there is no ground of yours to put them on. Move them first.');
+    }
+  }
   c.o=null; c.b=0; c.w=0; c.f=0; writeCell(q,r,c);
   logMove('brk',q,r,[band.q,band.r],victim,need);
-  render(); pushCell(band.q,band.r); pushCell(q,r); pushMe();
-  say('<b>Bridge down</b> for '+BREAK_COST+' marches'+(need?', and <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost</span>':'')+'. Nothing crosses here until someone builds a new one, which takes a day.');
+  render(); pushCell(band.q,band.r); pushCell(q,r); if(savedTo) pushCell(savedTo[0],savedTo[1]); pushMe();
+  say('<b>Bridge down</b> for '+BREAK_COST+' marches'+(need?', and <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost</span>':'')+'. '+(saved?'The <b>'+saved+'</b> soldier'+(saved>1?'s':'')+' who stood on it stepped back onto your ground. ':'')+'Nothing crosses here until someone builds a new one, which takes a day.');
 }
 
 /* ═══ artwork ══════════════════════════════════════════════════════════
