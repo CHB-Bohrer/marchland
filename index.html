@@ -2988,6 +2988,7 @@ function draw(){
   if(amb) ambBirds(ctx,now);
   if(HW) halloSky(ctx,spook,now);
   if(hallo()) halloNight(ctx,now);
+  if(hallo()) halloStorm(ctx,now);
   drawCoach(now);
   placeSendMenu();
   placeCellMenu();
@@ -3219,7 +3220,7 @@ function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hid
 function ambLoop(ts){
   ambRaf=0;
   if(!ambWanted()) return;
-  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && S>=AMB_MIN_S){ ambLast=ts; draw(); }   // the move and pointer loops draw every frame anyway
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || hallo())){ ambLast=ts; draw(); }   // the move and pointer loops draw every frame anyway
   ambRaf=requestAnimationFrame(ambLoop);
 }
 function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
@@ -3680,6 +3681,69 @@ function halloNight(g,now){                           // the board itself at nig
   var mg=g.createRadialGradient(W*0.9,-H*0.05,0,W*0.9,-H*0.05,Math.max(W,H)*0.7);
   mg.addColorStop(0,'rgba(190,170,255,0.10)'); mg.addColorStop(1,'rgba(190,170,255,0)');
   g.fillStyle=mg; g.fillRect(0,0,W,H);
+  g.restore();
+}
+/* the storm: a heavy grey-green gloom, slanting rain in two layers, and every so often a bolt of lightning that
+   flickers twice and lights the whole board. Pure overlay, drawn last, so the artwork under it is untouched.
+   With animations off it is only the gloom - no rain, no flashes. */
+var storm={next:clock()+3, f:null};
+function stormHash(i,k){ var x=Math.sin(i*127.1+k*311.7)*43758.5453; return x-Math.floor(x); }
+function stormBolt(){
+  var x=W*(0.12+0.76*Math.random()), y=-8, tgt=H*(0.42+0.4*Math.random()), main=[[x,y]], branches=[];
+  while(y<tgt){
+    y+=H*(0.035+0.05*Math.random()); x+=(Math.random()-0.5)*W*0.075; main.push([x,y]);
+    if(Math.random()<0.3 && y>H*0.12 && y<tgt-H*0.05){
+      var bx=x, by=y, dir=Math.random()<0.5?-1:1, br=[[bx,by]], steps=3+Math.floor(Math.random()*3);
+      for(var i=0;i<steps;i++){ bx+=dir*W*(0.015+0.03*Math.random()); by+=H*(0.025+0.035*Math.random()); br.push([bx,by]); }
+      branches.push(br);
+    }
+  }
+  return {main:main, branches:branches};
+}
+function halloStorm(g,now){
+  g.save();
+  g.fillStyle='rgba(7,12,20,0.24)'; g.fillRect(0,0,W,H);                         // the gloom
+  var vg=g.createRadialGradient(W/2,H/2,Math.min(W,H)*0.2,W/2,H/2,Math.hypot(W,H)*0.55);
+  vg.addColorStop(0,'rgba(0,0,8,0)'); vg.addColorStop(1,'rgba(0,0,8,0.42)');
+  g.fillStyle=vg; g.fillRect(0,0,W,H);
+  if(REDUCE){ g.restore(); return; }
+  var slant=0.3, n=Math.max(70,Math.min(340,Math.round(W*H/4200)));
+  g.lineCap='round';
+  for(var layer=0;layer<2;layer++){                                              // far rain: fine and faint; near rain: longer, faster, brighter
+    var cnt=layer?Math.round(n*0.45):n, spd=layer?980:560, len=layer?19:10, span=H+len, drift=H*slant;
+    g.strokeStyle=layer?'rgba(210,224,248,0.46)':'rgba(180,198,228,0.26)'; g.lineWidth=layer?1.5:1;
+    g.beginPath();
+    for(var i=0;i<cnt;i++){
+      var yy=((stormHash(i,3+layer)*span+now*spd*(0.9+0.2*stormHash(i,9)))%span)-len;
+      var xx=stormHash(i,5+layer)*(W+drift)-drift+yy*slant;
+      g.moveTo(xx,yy); g.lineTo(xx+len*slant,yy+len);
+    }
+    g.stroke();
+  }
+  if(!storm.f && now>storm.next) storm.f={t0:now, bolt:stormBolt()};
+  var f=storm.f;
+  if(f){
+    var u=now-f.t0;
+    if(u>0.95){ storm.f=null; storm.next=now+4+Math.random()*9; }
+    else {
+      var e=Math.min(1,Math.exp(-u*6)+0.8*Math.exp(-Math.pow((u-0.24)/0.07,2)));   // a hard flash, then a second flicker
+      g.fillStyle='rgba(196,212,255,'+(0.4*e).toFixed(3)+')'; g.fillRect(0,0,W,H);
+      var tx=f.bolt.main[0][0], sg=g.createRadialGradient(tx,0,0,tx,0,Math.max(W,H)*0.6);
+      sg.addColorStop(0,'rgba(230,236,255,'+(0.5*e).toFixed(3)+')'); sg.addColorStop(1,'rgba(230,236,255,0)');
+      g.fillStyle=sg; g.fillRect(0,0,W,H);
+      if(u<0.5){
+        var be=Math.min(1,e*1.2);
+        [[f.bolt.main,1]].concat(f.bolt.branches.map(function(b){ return [b,0.55]; })).forEach(function(pl){
+          var pts=pl[0], w=pl[1];
+          g.lineJoin='round';
+          g.strokeStyle='rgba(150,172,255,'+(0.5*be).toFixed(3)+')'; g.lineWidth=8*w;
+          g.beginPath(); pts.forEach(function(p,i){ i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]); }); g.stroke();
+          g.strokeStyle='rgba(255,255,255,'+be.toFixed(3)+')'; g.lineWidth=2.4*w;
+          g.beginPath(); pts.forEach(function(p,i){ i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]); }); g.stroke();
+        });
+      }
+    }
+  }
   g.restore();
 }
 function halloSky(g,spook,now){
