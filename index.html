@@ -1063,13 +1063,15 @@ function castleAlert(pid){
 function eachCell(fn){ for(var k in G.cells){ var p=k.split('_'); fn(cellOf(parseInt(p[0],10),parseInt(p[1],10))); } }
 function me(){ return G.players[ME]; }
 /* Player colours. Four colours were not enough once more than four people joined,
-   so seats now draw from fifteen, picked to stay distinct from each other, from the
+   so seats now draw from thirty-eight, picked to stay distinct from each other, from the
    rivers and from the grey of empty ground, in a light and a dark version. The first
    four are the original four, so the first players (and the manual) look as before.
    Every player on the board gets a different colour: a seat takes its own slot, and
-   if that is somehow taken, the next free one. Past fifteen, colours are generated. */
-var PAL_LIGHT=['#1C6B57','#B23F2E','#3E5E86','#8F6F1C','#B955A4','#B85F17','#693296','#3E891A','#137A80','#232F6E','#7D3850','#7E6CD9','#7A4306','#B5586D','#747B2F'];
-var PAL_DARK =['#41BC97','#E2705B','#7FA5CE','#D2A544','#EE8BDB','#F0934A','#A97BE0','#93C948','#45C7C4','#6E7CF0','#D9577F','#CDBEF9','#B3784F','#F6A9B4','#D8D772'];
+   if that is somehow taken, the next free one. Past thirty-eight, colours are generated. */
+var PAL_LIGHT=['#1C6B57','#B23F2E','#3E5E86','#8F6F1C','#B955A4','#B85F17','#693296','#3E891A','#137A80','#232F6E','#7D3850','#7E6CD9','#7A4306','#B5586D','#747B2F',
+  '#13EC29','#A00DA0','#EC9513','#0A0A7B','#96B946','#1034C6','#46B980','#176D28','#7B0A4E','#7B0A15','#B96946','#C61059','#7E3730','#650DA0','#60245A','#10C66B','#7DC610','#604824','#245460','#3A176D','#0A7B4E','#C64710','#39A00D'];
+var PAL_DARK =['#41BC97','#E2705B','#7FA5CE','#D2A544','#EE8BDB','#F0934A','#A97BE0','#93C948','#45C7C4','#6E7CF0','#D9577F','#CDBEF9','#B3784F','#F6A9B4','#D8D772',
+  '#8EEB98','#E363E3','#EBC68E','#4040DD','#C9DB9F','#869AEA','#9FDBBD','#46D863','#DD409F','#DD4050','#DBB19F','#EA86AE','#CD827A','#B063E3','#C15CB7','#86EAB8','#C2EA86','#C1995C','#5CADC1','#8046D8','#40DD9F','#EAA486','#89E363'];
 var palDark=false, colorIdx={}, colorSig='';
 function refreshColors(){
   var ps=(G&&G.players)||{}, ids=Object.keys(ps).sort(function(a,b){ return ((ps[a].seat||0)-(ps[b].seat||0))||(a<b?-1:1); });
