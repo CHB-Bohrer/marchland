@@ -1085,8 +1085,11 @@ function paletteAt(i){
   if(i<P.length) return P[i];
   return 'hsl('+Math.round((i*137.508+20)%360)+(palDark?',58%,68%)':',55%,38%)');
 }
+/* colours picked by hand for particular players (by player id), light and dark: Theo is highlighter yellow */
+var PLAYER_COLOR_OVERRIDE={ 'p1rurnrd':['#F2E600','#FFFF1F'] };
 function pColor(pid){
   if(!pid||!G||!G.players[pid]) return T['--ink-2']||(palDark?'#8DA1A2':'#54666A');
+  if(PLAYER_COLOR_OVERRIDE[pid]) return PLAYER_COLOR_OVERRIDE[pid][palDark?1:0];
   if(colorIdx[pid]==null) refreshColors();
   return paletteAt(colorIdx[pid]||0);
 }
