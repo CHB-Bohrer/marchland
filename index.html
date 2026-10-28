@@ -614,6 +614,16 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: the gods and foul language (shown once per player, see showGodsNote) ── -->
+<div id="godsnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="godsnote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">A warning from above</p>
+    <h2 id="godsnote-h">&#9889; The gods are listening</h2>
+    <p><b>The gods do not like foul language in the chats.</b> Keep your tongue clean, warriors &mdash; the heavens are watching every word, and their patience is not endless.</p>
+    <button type="button" class="rulesnote-go" id="godsnote-go">So it shall be</button>
+  </div>
+</div>
+
 <!-- ── pointer to the reason an action was refused (shown only when that reason is off screen) ── -->
 <button type="button" id="why" class="why hide" aria-live="polite"><span class="why-x" aria-hidden="true">&#10005;</span><span class="why-msg" id="why-msg"></span><span class="why-go"><span id="why-word">Why</span><span class="why-arrow" id="why-arrow" aria-hidden="true">&darr;</span></span></button>
 
@@ -871,6 +881,7 @@ function writeCell(q,r,c){
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
   if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
   if(c.f) G.cells[k].f=c.f;
+  if(c.bn && c.bn>Date.now()) G.cells[k].bn=c.bn;       // land on fire until this moment: it yields nothing
   if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
   if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
 }
@@ -894,6 +905,8 @@ function tidyBoard(g){
 /* a bridge that is still going up: owned, but nothing crosses it or draws supply through it yet.
    A held river cell with no finish time is a bridge that was already there. */
 function building(c){ return !!(c && c.f && c.f>Date.now()); }
+/* land on fire: still held, still part of the road, but it yields nothing until the fire (c.bn) burns out */
+function burning(c,at){ return !!(c && c.bn && c.bn>(at||Date.now())); }
 
 /* ── castle health ── */
 function castleH(c){ return c.h==null?CASTLE_MAX_H:c.h; }
@@ -1149,11 +1162,12 @@ function garrisonNeed(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=SPEC[c.k].gar[c.l]; }
   return [have,need];
 }
-function ratesFor(pid){
+function ratesFor(pid,at){
   var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
   for(var k in G.cells){
     var c=G.cells[k]; if(c.o!==pid||building(c)) continue; own++;
     if(!sup[k]) continue; s++;
+    if(burning(c,at)) continue;                        // scorched ground gives nothing while it burns
     // ground held from before rivers ran through it keeps the yield of the land it was;
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
@@ -1266,8 +1280,8 @@ function catchUp(pid){
   if(ticks<1) return 0;
   var touched=catchTouched;
   for(var t=0;t<ticks;t++){
-    var R=ratesFor(pid);
-    var tickEnd=(pl.lastTick||Date.now())+(t+1)*TICK_MS;                 // the moment this tick ends: which wagons were still rolling then?
+    var tickEnd=(pl.lastTick||Date.now())+(t+1)*TICK_MS;
+    var R=ratesFor(pid,tickEnd);                                         // (the moment this tick ends: which wagons were still rolling, and which land was still burning)
     pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
     pl.res.grain+=R.out.grain-(R.mouths-R.wagons+wagonsAt(pid,tickEnd));
     if(pl.res.grain<0){                       // hungry soldiers desert, biggest band first
@@ -2808,6 +2822,21 @@ function drawGraves(x,y,s,n,q,r){
   }
   ctx.restore();
 }
+/* land on fire: a few flickering flames and a haze of smoke over the square */
+function drawBlaze(x,y,s,q,r,t){
+  if(s<9) return;
+  var n=s>=18?3:2;
+  ctx.save();
+  ctx.globalAlpha=.22; ctx.fillStyle='#C9503B'; ctx.beginPath(); ctx.ellipse(x,y+s*0.05,s*0.46,s*0.34,0,0,6.284); ctx.fill();   // scorched glow
+  for(var i=0;i<n;i++){
+    var fx=x+(artHash(wrapC(q),wrapC(r),210+i)-0.5)*s*0.7, fy=y+s*(0.12+artHash(wrapC(q),wrapC(r),230+i)*0.18);
+    var fl=1+0.14*Math.sin((t||0)*7+i*2.1), fh=s*0.34*fl, fw=s*0.13;
+    ctx.globalAlpha=.92; ctx.fillStyle='#E8832B';
+    ctx.beginPath(); ctx.moveTo(fx-fw,fy); ctx.quadraticCurveTo(fx-fw*0.7,fy-fh*0.55,fx-fw*0.2,fy-fh*0.3); ctx.quadraticCurveTo(fx,fy-fh*1.1,fx+fw*0.25,fy-fh*0.3); ctx.quadraticCurveTo(fx+fw*0.8,fy-fh*0.55,fx+fw,fy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#F5C542'; ctx.beginPath(); ctx.moveTo(fx-fw*0.5,fy); ctx.quadraticCurveTo(fx,fy-fh*0.75,fx+fw*0.5,fy); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
 /* the guillotine: two posts, a crossbeam, a slanted blade on a rope, a basket, and the Tyrant's banner.
    With animations on, the blade drops every few seconds and is hauled back up. */
 function drawGuillotine(g,x,y,s,col,t,live){
@@ -2937,6 +2966,7 @@ function draw(){
     else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
+    if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000);
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
@@ -4286,6 +4316,7 @@ function closeCvNote(){
   var n=document.getElementById('cvnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',cvNoteKey,true);
   markCvNoteSeen();
+  setTimeout(showNext,250);
 }
 function cvNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeCvNote(); } }
 function showCvNote(){
@@ -4297,8 +4328,36 @@ function showCvNote(){
   var b=document.getElementById('cvnote-go'); b.onclick=closeCvNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: the gods and foul language. Shown once per player, never stacked on another notice. */
+var GODS_ID='gods1';
+function godsSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[GODS_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+GODS_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markGodsSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[GODS_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+GODS_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeGodsNote(){
+  var n=document.getElementById('godsnote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',godsNoteKey,true);
+  markGodsSeen();
+}
+function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
+function showGodsNote(){
+  var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',godsNoteKey,true);
+  var b=document.getElementById('godsnote-go'); b.onclick=closeGodsNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; return showCvNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; return showGodsNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
