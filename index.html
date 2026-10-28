@@ -624,6 +624,21 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: updates coming in early November (shown once per player, see showNovNote) ── -->
+<div id="novnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="novnote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the throne &middot; read this</p>
+    <h2 id="novnote-h">&#128227; Big changes are coming in November</h2>
+    <p><b>At the start of November, some fairly major updates arrive in Marchland.</b> The board is about to shift under your feet, so be ready.</p>
+    <ul>
+      <li><b>Look after your realm now.</b> Keep your castles fed, your soldiers garrisoned and your borders watched.</li>
+      <li><b>Spend what you are hoarding.</b> Don&rsquo;t leave marches and goods sitting idle going into the change.</li>
+      <li><b>Check the game when you can.</b> Once the update lands, a notice here will tell you what is new.</li>
+    </ul>
+    <button type="button" class="rulesnote-go" id="novnote-go">We shall be ready</button>
+  </div>
+</div>
+
 <!-- ── pointer to the reason an action was refused (shown only when that reason is off screen) ── -->
 <button type="button" id="why" class="why hide" aria-live="polite"><span class="why-x" aria-hidden="true">&#10005;</span><span class="why-msg" id="why-msg"></span><span class="why-go"><span id="why-word">Why</span><span class="why-arrow" id="why-arrow" aria-hidden="true">&darr;</span></span></button>
 
@@ -4350,6 +4365,7 @@ function closeGodsNote(){
   var n=document.getElementById('godsnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',godsNoteKey,true);
   markGodsSeen();
+  setTimeout(showNext,250);
 }
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
@@ -4361,8 +4377,36 @@ function showGodsNote(){
   var b=document.getElementById('godsnote-go'); b.onclick=closeGodsNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: major updates coming at the start of November. Shown once per player, never stacked on another notice. */
+var NOV_ID='nov1';
+function novSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[NOV_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+NOV_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markNovSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[NOV_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+NOV_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeNovNote(){
+  var n=document.getElementById('novnote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',novNoteKey,true);
+  markNovSeen();
+}
+function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote(); } }
+function showNovNote(){
+  var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',novNoteKey,true);
+  var b=document.getElementById('novnote-go'); b.onclick=closeNovNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; return showGodsNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
