@@ -1119,6 +1119,39 @@ function settlePurge(){
   if(mineOut) showEliminated();
   return true;
 }
+/* ── removal on request ──
+   Chris asked for the players Lily and Trevor to be deleted: their accounts go, every square they hold is wiped and
+   the ground is free. Done once (G.removed records it); whichever up-to-date screen sees them first does it. */
+var REMOVE_ID='rm1', REMOVE_NAMES=['lily','trevor'];
+function settleRemovals(){
+  if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var now=Date.now(), patch={}, mineOut=false, k, c;
+  var ids=Object.keys(G.players).filter(function(pid){
+    var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
+    return REMOVE_NAMES.indexOf(n)>=0 && !(G.removed&&G.removed[pid+REMOVE_ID]);
+  });
+  if(!ids.length) return false;
+  G.fallen=G.fallen||{}; G.removed=G.removed||{};
+  ids.forEach(function(pid){
+    for(k in G.cells){
+      c=G.cells[k]; if(c.o!==pid) continue;
+      if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; }
+      else { delete G.cells[k]; patch['cells/'+k]=null; }
+    }
+    Object.keys(G.caravans||{}).forEach(function(id){
+      var cv=G.caravans[id]; if(cv && (cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
+    });
+    patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
+    patch['removed/'+pid+REMOVE_ID]=now; G.removed[pid+REMOVE_ID]=now;   // (a later newcomer with the same name is not touched)
+    if(pid===ME) mineOut=true; else delete G.players[pid];
+  });
+  patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+  else { var keep=G.players[ME]; if(mineOut) delete G.players[ME]; pushAll(); if(mineOut) G.players[ME]=keep; }
+  if(mineOut) showEliminated();
+  return true;
+}
 /* the screen of a player who has just been eliminated: it says so, and stops writing anything */
 function showEliminated(){
   if(ELIM) return;
@@ -1471,7 +1504,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; G.purge=remote.purge||null; foldOldBlade(G);
+  G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; G.purge=remote.purge||null; G.removed=remote.removed||null; foldOldBlade(G);
   G.fallen=remote.fallen||{};
   if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
   // adopt everyone else's record; keep my own, which only this tab edits
@@ -3969,6 +4002,7 @@ function render(){
     settleTreks();
     settleCastles();
     settlePurge();
+    settleRemovals();
     settleEliminations();
   }
   if(ELIM) return;                                   // that was me: the goodbye screen is up
