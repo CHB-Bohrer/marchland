@@ -401,10 +401,11 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
       <div class="steps" style="margin-top:12px">
         <div class="field"><label for="handle" id="handle-label">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:170px" autocomplete="nickname"></div>
+        <div class="field"><label for="realname">Real name</label><input id="realname" maxlength="24" placeholder="First &amp; last" style="width:150px" autocomplete="name"></div>
         <div class="field"><label for="pin">PIN (any number)</label><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="••••" style="width:90px" autocomplete="off"></div>
         <button id="join" class="go">Enter</button>
       </div>
-      <p class="muted" style="margin-top:12px" id="join-hint">Please use your own first name, so nobody plays as the wrong person by mistake. Your PIN is a number of any length that you choose the first time you enter that name; after that the name needs it. No sign-up, no email.</p>
+      <p class="muted" style="margin-top:12px" id="join-hint">Please use your own first name, so nobody plays as the wrong person by mistake. Your real name is now required and is shown next to your user name, so everyone knows who is who. Your PIN is a number of any length that you choose the first time you enter that name; after that the name needs it. No sign-up, no email.</p>
     </div>
   </div>
 
@@ -621,6 +622,23 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <h2 id="godsnote-h">&#9889; The gods are listening</h2>
     <p><b>The gods do not like foul language in the chats.</b> Keep your tongue clean, warriors &mdash; the heavens are watching every word, and their patience is not endless.</p>
     <button type="button" class="rulesnote-go" id="godsnote-go">So it shall be</button>
+  </div>
+</div>
+
+<!-- ── one-time announcement: the hidden names and real names (shown once per player, see showShadowNote) ── -->
+<div id="shadownote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="shadownote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the throne &middot; read this</p>
+    <h2 id="shadownote-h">&#128293; The hidden names are exposed</h2>
+    <p><b>Three accounts have been found hiding behind made-up names: &ldquo;Garbage Man&rdquo;, &ldquo;Tricia&rdquo; and &ldquo;PT&rdquo;.</b> Nobody was ever told who stands behind them, and the steps they claimed were no more than guesses.</p>
+    <p>I will say this plainly: <b>I knew the evil name &ldquo;Tricia&rdquo; meant something evil was afoot.</b> Now the whole realm knows it too.</p>
+    <ul>
+      <li><b>Their land burns.</b> Every square held by those three names is set on a great fire for <b>2 days</b>. It yields nothing while it burns.</li>
+      <li><b>Then it is gone.</b> When the fires die, those lands vanish and the ground is free for anyone to take.</li>
+      <li><b>Real names from now on.</b> Everyone must show their <b>real name</b> next to their user name. You will be asked for it the next time you enter, and it appears beside your user name for all to see.</li>
+    </ul>
+    <p>Play honestly, warriors. The gods are watching.</p>
+    <button type="button" class="rulesnote-go" id="shadownote-go">Understood</button>
   </div>
 </div>
 
@@ -868,6 +886,8 @@ function pinHash(pid,pin){
   for(var i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); g=Math.imul(g,33)^s.charCodeAt(i); }
   return 'k'+(h>>>0).toString(36)+(g>>>0).toString(36);
 }
+/* a player's user name with their real name beside it, e.g. "Bohrer (Chris Bohrer)" */
+function full(p){ if(!p) return ''; return p.name+(p.rn?' ('+p.rn+')':''); }
 var myName='', myPin='';
 try{ myName=localStorage.getItem('marchland.name')||''; myPin=localStorage.getItem('marchland.pin')||''; }catch(e){}
 
@@ -896,7 +916,7 @@ function writeCell(q,r,c){
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
   if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
   if(c.f) G.cells[k].f=c.f;
-  if(c.bn && c.bn>Date.now()) G.cells[k].bn=c.bn;       // land on fire until this moment: it yields nothing
+  if(c.bn && c.bn>Date.now()){ G.cells[k].bn=c.bn; if(c.bx) G.cells[k].bx=1; }       // land on fire until this moment: it yields nothing (bx: a purge fire, the land is wiped when it ends)
   if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
   if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
 }
@@ -1035,6 +1055,67 @@ function settleEliminations(){
     chatPut('/m/'+id,{pid:o.pid,n:o.name,t:t,m:'has been eliminated: no castle and no soldiers left. Every square they held is destroyed.'})
       .then(function(){ return chatPut('/rev',t); }).catch(function(){});
   });
+  if(mineOut) showEliminated();
+  return true;
+}
+/* ── the shadow purge ──
+   Three accounts (Garbage Man, Tricia, PT) were exposed as hidden names. Their land is set on a big fire for 2 days,
+   and when the fire ends every square they still hold is wiped, their accounts are removed, and the ground is free.
+   Whichever up-to-date screen sees the board first starts it (G.purge records the start, the end and who is in it),
+   and whichever screen sees it after the end finishes it. */
+var PURGE_ID='shadow1', PURGE_MS=2*86400000;
+function purgePids(){
+  var ids=[];
+  Object.keys(G.players).forEach(function(pid){
+    var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
+    if(n==='garbageman'||n==='tricia'||n==='pt') ids.push(pid);
+  });
+  return ids;
+}
+function purgeChat(m,now){
+  if(!online) return;
+  var t=Math.floor(now/60000)*60000, id=q36(t)+'-purge-'+(G.purge?G.purge.done?'end':'start':'x');
+  chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+function settlePurge(){
+  if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  var now=Date.now(), P=G.purge, k, c, patch={};
+  if(!P){
+    var ids=purgePids(); if(!ids.length) return false;
+    var end=now+PURGE_MS, nm=ids.map(function(p){ return G.players[p].name; }).join(', ');
+    for(k in G.cells){ c=G.cells[k]; if(ids.indexOf(c.o)>=0){ c.bn=end; c.bx=1; patch['cells/'+k]=c; } }
+    P=G.purge={id:PURGE_ID,start:now,end:end,pids:ids,names:nm,done:0};
+    patch['purge']=P; patch['rev']=now; myRev=now;
+    if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+    purgeChat('The land of the hidden names ('+nm+') is set ablaze. It burns for 2 days, then it is gone and the ground is free.',now);
+    return true;
+  }
+  if(P.done||now<P.end) return false;
+  var ids2=(P.pids||[]).filter(function(pid){ return G.players[pid]; }), mineOut=false;
+  G.fallen=G.fallen||{};
+  for(k in G.cells){
+    c=G.cells[k]; if(!c.bx) continue;
+    if((P.pids||[]).indexOf(c.o)>=0){
+      if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; }
+      else { delete G.cells[k]; patch['cells/'+k]=null; }
+    } else { delete c.bn; delete c.bx; patch['cells/'+k]=c; }   // someone else took it: the fire just goes out
+  }
+  for(k in G.cells){                                           // anything else the purged names still hold
+    c=G.cells[k]; if((P.pids||[]).indexOf(c.o)<0) continue;
+    delete G.cells[k]; patch['cells/'+k]=null;
+  }
+  Object.keys(G.caravans||{}).forEach(function(id){
+    var cv=G.caravans[id]; if(cv && ((P.pids||[]).indexOf(cv.to)>=0||(P.pids||[]).indexOf(cv.from)>=0)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
+  });
+  ids2.forEach(function(pid){
+    patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
+    if(pid===ME) mineOut=true; else delete G.players[pid];
+  });
+  P.done=now; patch['purge']=P; patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+  else { var keep=G.players[ME]; if(mineOut) delete G.players[ME]; pushAll(); if(mineOut) G.players[ME]=keep; }
+  purgeChat('The fires have died. The land of the hidden names is gone and the ground is free to take.',now);
   if(mineOut) showEliminated();
   return true;
 }
@@ -1390,7 +1471,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; foldOldBlade(G);
+  G.gl=remote.gl||null; G.tyrant=remote.tyrant||null; G.purge=remote.purge||null; foldOldBlade(G);
   G.fallen=remote.fallen||{};
   if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
   // adopt everyone else's record; keep my own, which only this tab edits
@@ -1530,7 +1611,7 @@ function hoursLeft(ts){
   var h=(ts-Date.now())/36e5;
   return h<1 ? Math.max(1,Math.round(h*60))+'m' : Math.round(h)+'h';
 }
-function nameOf(pid){ var p=G.players[pid]; return p?p.name:'someone who left'; }
+function nameOf(pid){ var p=G.players[pid]; return p?full(p):'someone who left'; }
 function namesOf(pids){ return pids.map(function(p){ return esc(nameOf(p)); }).join(' & '); }
 
 /* runs before every render: applies my voided claims, locks decided votes, prunes */
@@ -1819,7 +1900,7 @@ function raiseGuillotine(q,r){
 function tyrantChat(txt){
   if(!online||!me()) return;
   var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
-  chatPut('/m/'+id,{pid:ME,n:me().name,t:t,m:txt}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+  chatPut('/m/'+id,{pid:ME,n:full(me()),t:t,m:txt}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 /* what is missing for a cost, and where it comes from */
@@ -2063,7 +2144,7 @@ function cellActions(q,r){
   }
   Object.keys(G.players).forEach(function(pid){
     var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
-    A('Send goods to '+esc(o.name),'no marches',function(){ openCaravanOnMap(pid); });
+    A('Send goods to '+esc(full(o)),'no marches',function(){ openCaravanOnMap(pid); });
   });
   return out;
 }
@@ -2843,14 +2924,14 @@ function drawGraves(x,y,s,n,q,r){
   ctx.restore();
 }
 /* land on fire: a few flickering flames and a haze of smoke over the square */
-function drawBlaze(x,y,s,q,r,t){
+function drawBlaze(x,y,s,q,r,t,big){
   if(s<9) return;
-  var n=s>=18?3:2;
+  var n=big?(s>=18?7:4):(s>=18?3:2), gs=big?1.9:1;
   ctx.save();
-  ctx.globalAlpha=.22; ctx.fillStyle='#C9503B'; ctx.beginPath(); ctx.ellipse(x,y+s*0.05,s*0.46,s*0.34,0,0,6.284); ctx.fill();   // scorched glow
+  ctx.globalAlpha=big?.42:.22; ctx.fillStyle='#C9503B'; ctx.beginPath(); ctx.ellipse(x,y+s*0.05,s*(big?0.62:0.46),s*(big?0.5:0.34),0,0,6.284); ctx.fill();   // scorched glow
   for(var i=0;i<n;i++){
-    var fx=x+(artHash(wrapC(q),wrapC(r),210+i)-0.5)*s*0.7, fy=y+s*(0.12+artHash(wrapC(q),wrapC(r),230+i)*0.18);
-    var fl=1+0.14*Math.sin((t||0)*7+i*2.1), fh=s*0.34*fl, fw=s*0.13;
+    var fx=x+(artHash(wrapC(q),wrapC(r),210+i)-0.5)*s*(big?0.9:0.7), fy=y+s*(0.12+artHash(wrapC(q),wrapC(r),230+i)*0.18);
+    var fl=1+0.14*Math.sin((t||0)*7+i*2.1), fh=s*0.34*fl*gs, fw=s*0.13*(big?1.3:1);
     ctx.globalAlpha=.92; ctx.fillStyle='#E8832B';
     ctx.beginPath(); ctx.moveTo(fx-fw,fy); ctx.quadraticCurveTo(fx-fw*0.7,fy-fh*0.55,fx-fw*0.2,fy-fh*0.3); ctx.quadraticCurveTo(fx,fy-fh*1.1,fx+fw*0.25,fy-fh*0.3); ctx.quadraticCurveTo(fx+fw*0.8,fy-fh*0.55,fx+fw,fy); ctx.closePath(); ctx.fill();
     ctx.fillStyle='#F5C542'; ctx.beginPath(); ctx.moveTo(fx-fw*0.5,fy); ctx.quadraticCurveTo(fx,fy-fh*0.75,fx+fw*0.5,fy); ctx.closePath(); ctx.fill();
@@ -2986,7 +3067,7 @@ function draw(){
     else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
-    if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000);
+    if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!G.cells[key(q,r)].bx);
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
     if(c.b>0 && c.o) bands.push([c,p,col]);
@@ -3061,7 +3142,7 @@ function draw(){
     ctx.restore();
     if(!SHOW_NAMES) return;                              // the player has switched the name labels off: just the arrow
     if(S>=TRIBE_LABEL_MAX_S) return;                    // zoomed in: just the arrow, the name labels would crowd the map
-    var label=p.name+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
+    var label=full(p)+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
     ctx.font='500 11px ui-monospace, monospace';
     var tw=ctx.measureText(label).width;
     var lx=Math.min(Math.max(ax-tw/2,4), W-tw-8), ly=ay+(ay<H/2?22:-14);
@@ -3859,7 +3940,7 @@ function renderDaily(){
   document.getElementById('daily').innerHTML='<b>Steps claimed in the last 24 hours</b> &middot; '+sum.toLocaleString()+' together<br>'
     +rows.map(function(r){
       return '<span style="white-space:nowrap;margin-right:14px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+pColor(r.pid)+';margin-right:5px"></span>'
-        +esc(r.p.name)+' <b class="n" style="font-family:var(--mono)">'+r.n.toLocaleString()+'</b></span>';
+        +esc(full(r.p))+' <b class="n" style="font-family:var(--mono)">'+r.n.toLocaleString()+'</b></span>';
     }).join('');
 }
 function renderTyrant(){
@@ -3887,6 +3968,7 @@ function render(){
     settleCaravans();
     settleTreks();
     settleCastles();
+    settlePurge();
     settleEliminations();
   }
   if(ELIM) return;                                   // that was me: the goodbye screen is up
@@ -3924,7 +4006,7 @@ function render(){
   lock('collect',done);
   var rows=Object.keys(G.players).map(function(pid){
     var p=G.players[pid];
-    return {pid:pid,name:p.name,cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
+    return {pid:pid,name:full(p),cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
   }).sort(function(a,b){ return b.cells-a.cells; });
   document.getElementById('standings').innerHTML=rows.map(function(r,i){
     return '<tr><td class="n">'+(i+1)+'</td>'
@@ -4067,7 +4149,7 @@ function renderChart(list){
         if(h) bars+='<rect x="'+x+'" y="'+(VH-h)+'" width="'+BW+'" height="'+h+'" style="fill:'+col+'" pointer-events="none"/>';
         bars+='<rect class="hit" x="'+(x-1)+'" y="0" width="'+(BW+GAP)+'" height="'+VH+'"><title>'+esc(p.name)+' · '+label+'</title></rect>';
       });
-      return '<div class="crow"><div class="who"><span class="dot" style="background:'+col+'"></span>'+esc(p.name)+'</div>'
+      return '<div class="crow"><div class="who"><span class="dot" style="background:'+col+'"></span>'+esc(full(p))+'</div>'
         +'<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none" role="img" aria-label="'+esc(p.name)+': '+tot.toLocaleString()+' steps claimed in the last 14 days">'
         +'<line x1="0" y1="'+(VH-.5)+'" x2="'+VW+'" y2="'+(VH-.5)+'" style="stroke:var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/>'
         +bars+'</svg>'
@@ -4201,7 +4283,7 @@ document.getElementById('rival').addEventListener('click',function(){
   });
   if(!best) return say('Nobody else has joined this march yet. Send them the invite link above.');
   var bc=nearCopy(best.q,best.r,viewQ,viewR); centreOn(bc[0],bc[1]); draw();
-  say('Centred on <b>'+esc(best.name)+'</b>&rsquo;s keep &mdash; '+bd+' cells from yours. Drag the map to move, pinch or use +/&minus; to zoom.');
+  say('Centred on <b>'+esc(full(best))+'</b>&rsquo;s keep &mdash; '+bd+' cells from yours. Drag the map to move, pinch or use +/&minus; to zoom.');
 });
 document.getElementById('collect').addEventListener('click',collect);
 document.getElementById('stepsin').addEventListener('keydown',function(e){ if(e.key==='Enter') collect(); });
@@ -4247,7 +4329,7 @@ function enterGame(isNew){
   document.getElementById('join-panel').classList.add('hide');
   document.getElementById('setup-panel').classList.add('hide');
   document.getElementById('game').classList.remove('hide');
-  document.getElementById('myname').textContent=me()?me().name:'—';
+  document.getElementById('myname').textContent=me()?full(me()):'—';
   document.getElementById('mydot').style.background=pColor(ME);
   document.getElementById('invite').value=location.href.split('#')[0];
   viewQ=me().q; viewR=me().r;
@@ -4377,6 +4459,35 @@ function showGodsNote(){
   var b=document.getElementById('godsnote-go'); b.onclick=closeGodsNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: the hidden names and real names. Shown once per player, never stacked on another notice. */
+var SHADOW_ID='shadow1';
+function shadowSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[SHADOW_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+SHADOW_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markShadowSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[SHADOW_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+SHADOW_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeShadowNote(){
+  var n=document.getElementById('shadownote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',shadowNoteKey,true);
+  markShadowSeen();
+  setTimeout(showNext,250);
+}
+function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
+function showShadowNote(){
+  var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',shadowNoteKey,true);
+  var b=document.getElementById('shadownote-go'); b.onclick=closeShadowNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* One-time announcement: major updates coming at the start of November. Shown once per player, never stacked on another notice. */
 var NOV_ID='nov1';
 function novSeen(){
@@ -4398,7 +4509,7 @@ function closeNovNote(){
 function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote(); } }
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -4406,7 +4517,7 @@ function showNovNote(){
   return true;
 }
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
@@ -4420,10 +4531,18 @@ function join(){
     if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; lastFresh=Date.now(); tidyBoard(G); foldOldBlade(G); }
     else G=blankGame(gameCode);
     var ex=G.players[tryPid];
+    var rnIn=(document.getElementById('realname').value||'').trim().replace(/\s+/g,' ').slice(0,24);
+    var realName=rnIn||(ex&&ex.rn)||'';
     if(ex && ex.pin && ex.pin!==tryHash){
       G=null;
       document.getElementById('join-hint').innerHTML='<span class="bad">That PIN does not match the name &ldquo;'+esc(ex.name)+'&rdquo;.</span> Check the name and try again, or ask Chris to reset it.';
       try{ localStorage.removeItem('marchland.pin'); }catch(e){}
+      return;
+    }
+    if(realName.replace(/[^A-Za-zÀ-ɏ]/g,'').length<2){      // the real name is now required, beside the user name
+      G=null;
+      document.getElementById('join-hint').innerHTML='<span class="bad">Enter your real name.</span> Everyone must now show their real name next to their user name. Type it in the &ldquo;Real name&rdquo; box and press Enter.';
+      try{ document.getElementById('realname').focus(); }catch(e){}
       return;
     }
     ME=tryPid; myName=name; myPin=pinIn;
@@ -4441,7 +4560,8 @@ function join(){
         return;
       }
     } else G.players[ME].name=name;
-    G.players[ME].pin=tryHash;                       // first time a name is used it claims its PIN
+    G.players[ME].rn=realName;                       // real name, shown next to the user name everywhere
+    G.players[ME].pin=tryHash;                    // first time a name is used it claims its PIN
     var moved=isNew?[]:migrateBands(ME);
     catchUp(ME);
     enterGame(isNew);
@@ -4457,16 +4577,17 @@ function join(){
 }
 /* Names already on the board, so a returning player picks theirs instead of
    having to remember exactly how they typed it the first time. */
+var knownRn={};
 function loadKnownNames(){
   if(!online) return;
   dbGet('/marchland/'+GAME_CODE+'/players').then(function(ps){
     if(!ps) return;
     var names=[];
-    for(var pid in ps){ if(ps[pid]&&ps[pid].name) names.push(ps[pid].name); }
+    for(var pid in ps){ if(ps[pid]&&ps[pid].name){ names.push(ps[pid].name); knownRn[ps[pid].name]=ps[pid].rn||''; } }
     if(!names.length) return;
     names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
     var sel=document.getElementById('known-pick');
-    names.forEach(function(n){ var o=document.createElement('option'); o.value=n; o.textContent=n; sel.appendChild(o); });
+    names.forEach(function(n){ var o=document.createElement('option'); o.value=n; o.textContent=n+(knownRn[n]?' ('+knownRn[n]+')':''); sel.appendChild(o); });
     document.getElementById('known').classList.remove('hide');
     document.getElementById('handle-label').textContent='Or a new name';
   }).catch(function(){});                           // no list is fine; typing still works
@@ -4474,6 +4595,7 @@ function loadKnownNames(){
 document.getElementById('known-pick').addEventListener('change',function(){
   if(!this.value) return;
   document.getElementById('handle').value=this.value;
+  if(knownRn[this.value]) document.getElementById('realname').value=knownRn[this.value];
   var pe=document.getElementById('pin');
   if(!(pe.value||'').trim()){ document.getElementById('join-hint').textContent='Now enter your PIN for '+this.value+', then press Enter.'; pe.focus(); return; }
   join();
@@ -4481,6 +4603,7 @@ document.getElementById('known-pick').addEventListener('change',function(){
 document.getElementById('join').addEventListener('click',join);
 document.getElementById('handle').addEventListener('keydown',function(e){ if(e.key==='Enter') join(); });
 document.getElementById('pin').addEventListener('keydown',function(e){ if(e.key==='Enter') join(); });
+document.getElementById('realname').addEventListener('keydown',function(e){ if(e.key==='Enter') join(); });
 document.getElementById('copy').addEventListener('click',function(){
   var i=document.getElementById('invite');
   i.select();
@@ -4521,12 +4644,12 @@ function cvPanel(){
   var sel=document.getElementById('cv-to'), keep=sel.value;
   var others=Object.keys(G.players).filter(function(p){ return p!==ME; })
     .sort(function(a,b){ return G.players[a].name.toLowerCase().localeCompare(G.players[b].name.toLowerCase()); });
-  var opts=others.length ? others.map(function(p){ return '<option value="'+p+'">'+esc(G.players[p].name)+'</option>'; }).join('') : '<option value="">nobody else yet</option>';
+  var opts=others.length ? others.map(function(p){ return '<option value="'+p+'">'+esc(full(G.players[p]))+'</option>'; }).join('') : '<option value="">nobody else yet</option>';
   if(sel.getAttribute('data-sig')!==opts){ sel.innerHTML=opts; sel.setAttribute('data-sig',opts); if(keep && G.players[keep]) sel.value=keep; }   // rebuilt only when the list changes, so an open menu isn't snatched away
   GOODS.forEach(function(k){ document.getElementById('cvh-'+k).textContent='· '+Math.floor(pl.res[k]||0); });
   var to=sel.value, eta=document.getElementById('cv-eta');
   if(to){ var a=G.players[ME], b=G.players[to], d=hexDist(a.q,a.r,b.q,b.r);
-    eta.innerHTML='The road to <b>'+esc(b.name)+'</b>&rsquo;s keep is '+d+' cells, so a caravan arrives in about <b>'+fmtDur(cvTravel(ME,to))+'</b>.'; }
+    eta.innerHTML='The road to <b>'+esc(full(b))+'</b>&rsquo;s keep is '+d+' cells, so a caravan arrives in about <b>'+fmtDur(cvTravel(ME,to))+'</b>.'; }
   else eta.textContent='Once someone else joins, you can send them goods.';
   var mine=Object.keys(G.caravans||{}).map(function(id){ var c=G.caravans[id]; return c; })
     .filter(function(c){ return (c.from===ME||c.to===ME) && !c.got && c.eta>Date.now()-60000; })
@@ -4556,7 +4679,7 @@ function sendCaravan(){
   pushMe().then(function(){ return putPath('/caravans/'+id,c); });
   logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g});
   render();
-  say('Caravan on its way to <b>'+esc(them.name)+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
+  say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
@@ -4851,7 +4974,7 @@ function chatBadge(){
   b.textContent=n>9?'9+':String(n); b.classList.toggle('hide',!n);
   document.getElementById('chat-toggle').setAttribute('aria-label',(chat.open?'Hide':'Show')+' the chat history'+(n?', '+n+' new message'+(n>1?'s':''):''));
 }
-function chatWho(m){ var p=G&&G.players[m.pid]; return p?p.name:(m.n||'someone'); }
+function chatWho(m){ var p=G&&G.players[m.pid]; return p?full(p):(m.n||'someone'); }
 /* the bar always shows the newest message; the history opens above it */
 function chatPreview(){
   var l=chatList(), m=l[l.length-1], el=document.getElementById('chat-preview');
@@ -4928,7 +5051,7 @@ function chatSend(){
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   chat.lastSend=Date.now();
   var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
-  var m={pid:ME, n:me().name, t:t, m:txt};
+  var m={pid:ME, n:full(me()), t:t, m:txt};
   chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, pending:true};
   inp.value=''; chatNote(''); chat.toEnd=true; chatRender();
   chatPut('/m/'+id,m).then(function(){
