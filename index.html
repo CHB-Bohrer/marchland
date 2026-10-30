@@ -995,6 +995,19 @@ function settleCastles(){
       var rp=rk.split('_'); delete G.cells[rk]; pushCell(parseInt(rp[0],10),parseInt(rp[1],10)); changed++;
     }
   }
+  /* PT's keeps are struck down at once (they used to stand, burning, for the whole 2-day purge, and could not be stormed).
+     Checked by NAME on every pass, not just by the pids recorded when the purge began, so a keep that PT raised
+     afterwards, or under a second account of the same name, goes too. The ground under it stays and keeps burning. */
+  var ptIds={}; Object.keys(G.players||{}).forEach(function(pid){
+    if(((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'')==='pt') ptIds[pid]=1;
+  });
+  for(var pk in G.cells){
+    var pc=G.cells[pk]; if(pc.k!==CASTLE||!ptIds[pc.o]) continue;
+    var pp=pk.split('_');
+    pc.k=null; pc.l=0; pc.g=0; pc.d=0; delete pc.h; delete pc.ht; delete pc.b;   // the keep, its garrison and any band on it are gone
+    if(!(pc.bn && pc.bn>now)){ pc.bn=(G.purge&&G.purge.end>now)?G.purge.end:now+PURGE_MS; pc.bx=1; }   // and the land under it burns with the rest of PT's land
+    pushCell(parseInt(pp[0],10),parseInt(pp[1],10)); changed++;
+  }
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||!c.o) continue;
     var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), fed=castleFed(q,r,c.o);
