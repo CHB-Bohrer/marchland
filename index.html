@@ -674,6 +674,16 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── shown to a player who has no sponsor yet: they cannot play until one approves (see lockProbation) ── -->
+<div id="locknote" class="rulesnote hide" role="alertdialog" aria-modal="true" aria-labelledby="locknote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">A sponsor is needed</p>
+    <h2 id="locknote-h">&#128220; You must find a sponsor to keep playing</h2>
+    <p id="locknote-text"></p>
+    <button type="button" class="rulesnote-go" id="locknote-go">Ask a sponsor</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the Marchland Saga cartoon (shown once per player, see showSaga) ── -->
 <div id="sagenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="sagenote-h">
   <div class="rulesnote-card">
@@ -897,9 +907,10 @@ function dbGet(path){
 }
 var lastWrite=0;                                    // a pull that started before this is stale
 var ELIM=false;                                     // set when this tab's own player has been eliminated: nothing more is written for them
+var PLOCK=false;                                    // set when this player must find a sponsor before playing on: nothing more is written for them
 var HALT=false;                                     // set when the board has moved on to a newer version than this page: nothing more is written
 function dbPut(path,val){
-  if(ELIM||HALT) return Promise.resolve(null);         // an eliminated player's tab must never write itself back onto the board
+  if(ELIM||HALT||PLOCK) return Promise.resolve(null); // an eliminated player's tab must never write itself back onto the board
   if(!online){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(val)); }catch(e){} return Promise.resolve(val); }
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
@@ -908,7 +919,7 @@ function dbPut(path,val){
 }
 /* several paths in one request: {"cells/3_4":null,"players/abc":null,...} relative to the path given */
 function dbPatch(path,obj){
-  if(ELIM||HALT) return Promise.resolve(null);
+  if(ELIM||HALT||PLOCK) return Promise.resolve(null);
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
     {method:'PATCH',body:JSON.stringify(obj),headers:{'Content-Type':'application/json'}})
@@ -922,7 +933,7 @@ function dbGetTag(path){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); var t=r.headers.get('ETag'); return r.json().then(function(v){ return {v:v,tag:t}; }); });
 }
 function dbPutIf(path,val,tag){
-  if(ELIM||HALT) return Promise.resolve({ok:false,halted:true});
+  if(ELIM||HALT||PLOCK) return Promise.resolve({ok:false,halted:true});
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',{method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json','if-match':tag||'null_etag','X-Firebase-ETag':'true'}})
     .then(function(r){
@@ -4911,7 +4922,8 @@ function renderDaily(){
     }).join('');
 }
 function render(){
-  if(!G||!me()||ELIM||HALT) return;
+  if(!G||!me()||ELIM||HALT||PLOCK) return;
+  if(online && !isSteward() && onProbation(ME,G)){ lockProbation(); return; }   // no sponsor yet: no playing
   G.claims=G.claims||{};
   if(boardFresh()){                                   // only an up-to-date screen writes on the board's behalf
     settleMine();
@@ -4922,6 +4934,7 @@ function render(){
     settleCastles();
     settlePurge();
     settleRemovals();
+    settleProbation();
     settleEliminations();
   }
   if(ELIM) return;                                   // that was me: the goodbye screen is up
@@ -5459,7 +5472,88 @@ function sponsorStrikes(pid,b){
   sponseesOf(pid,b).forEach(function(s){ breachesOf(s,b).forEach(function(x){ list.push({id:x.id+'@'+s,reason:x.reason+' &mdash; '+esc(spName(s,b))+', whom you sponsored',t:x.t}); }); });
   return list;
 }
-function canSponsor(pid,b){ b=b||G; return !!(b.players&&b.players[pid]) && sponsorStrikes(pid,b).length<STRIKES_MAX; }
+function canSponsor(pid,b){ b=b||G; return !!(b.players&&b.players[pid]) && !barredSponsor(pid,b) && !onProbation(pid,b) && sponsorStrikes(pid,b).length<STRIKES_MAX; }
+/* ── who may never sponsor ──
+   Sir Charlton is barred for good: he is not offered in the sponsor picker, requests addressed to him never reach him,
+   he cannot answer one, and a sponsorship in his name does not lift anyone's probation. Matched on the user name or the
+   real name (letters only, any case), and on the ids of the obvious spellings, so a change of case or spacing does not
+   get round it. */
+var BARRED_PIDS={}; ['Sir Charlton','Charlton','SirCharlton'].forEach(function(n){ BARRED_PIDS[pidFor(n)]=1; });
+function nameKey(n){ return (n||'').toLowerCase().replace(/[^a-z]/g,''); }
+function barredSponsor(pid,b){
+  b=b||G; if(BARRED_PIDS[pid]) return true;
+  var p=b&&b.players&&b.players[pid], s=b&&b.sponsorships&&b.sponsorships[pid];
+  return /charlton/.test(nameKey(p&&p.name)+'|'+nameKey(p&&p.rn)+'|'+nameKey(s&&s.name)+'|'+nameKey(s&&s.rn));
+}
+/* ── players who must find a sponsor ──
+   Bam (Wick F), Patrick (Patrick D), Get Cooked (D S), The true king (P L) and The Gods (S G) joined before sponsors
+   existed. Each must be vouched for by someone who can sponsor (the steward, Bohrer, or any other sponsor in good
+   standing; never Sir Charlton) before PROBATION_DUE, four days after the order of 31 Oct 2026. Until one of them
+   approves, they cannot play: their screen shows a scroll instead of the board, and signing in takes them to the
+   request to a sponsor. If the deadline passes with no sponsor, whichever up-to-date screen sees it first removes the
+   account (settleProbation): every square wiped, wagons gone, a line in the chat. Their old founding record is kept
+   but marked gone, so the name can only come back through the ordinary sponsored newcomer request.
+   A probationer is cleared only by a sponsorship written after PROBATION_FROM by someone other than "founding". */
+var PROBATION_NAMES=['bam','patrick','getcooked','thetrueking','thegods'];
+var PROBATION_FROM=Date.UTC(2026,9,31,18,29), PROBATION_DUE=Date.UTC(2026,10,4,18,29), PROBATION_ID='sp1';
+function onProbation(pid,b){
+  b=b||G; var p=b&&b.players&&b.players[pid];
+  if(!p || PROBATION_NAMES.indexOf(nameKey(p.name))<0) return false;
+  var s=sponsorRec(pid,b);
+  return !(s && s.by && s.by!=='founding' && !s.fake && !s.gone && (s.t||0)>=PROBATION_FROM && !barredSponsor(s.by,b));
+}
+function probationLeft(){
+  var ms=PROBATION_DUE-Date.now(); if(ms<=0) return 'no time';
+  var d=Math.floor(ms/864e5), h=Math.floor(ms%864e5/36e5);
+  return (d?d+' day'+(d>1?'s':'')+' and ':'')+h+' hour'+(h===1?'':'s');
+}
+function probationText(){
+  return 'You joined before sponsors, and every player now needs someone to vouch for them. <b>You cannot play until a sponsor approves you.</b> Ask Bohrer, or any other sponsor, to vouch for you: sign in again and pick who. '
+    +'If nobody has by <b>'+esc(new Date(PROBATION_DUE).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}))+'</b> ('+probationLeft()+' from now), your account will be deleted.';
+}
+function lockProbation(){
+  if(PLOCK) return; PLOCK=true;
+  var n=document.getElementById('locknote'); if(!n) return;
+  document.getElementById('locknote-text').innerHTML=probationText();
+  n.classList.remove('hide'); n.scrollTop=0;
+  var b=document.getElementById('locknote-go');
+  b.onclick=function(){ location.reload(); };            // the name and PIN stay saved, so signing in again goes straight to the sponsor request
+  try{ b.focus(); }catch(e){}
+}
+/* the removal itself: the same as removal on request (settleRemovals), for anyone still without a sponsor once the time is up */
+function settleProbation(){
+  if(!G||!G.players||dirty||ELIM||PLOCK||!boardFresh()) return false;
+  if(Date.now()<PROBATION_DUE) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  var now=Date.now(), patch={}, mineOut=false, k, c, names=[];
+  var ids=Object.keys(G.players).filter(function(pid){ return onProbation(pid,G) && !isSteward(pid) && !(G.removed&&G.removed[pid+PROBATION_ID]); });
+  if(!ids.length) return false;
+  G.fallen=G.fallen||{}; G.removed=G.removed||{}; G.sponsorships=G.sponsorships||{};
+  ids.forEach(function(pid){
+    names.push(G.players[pid].name);
+    for(k in G.cells){
+      c=G.cells[k]; if(c.o!==pid) continue;
+      if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; }
+      else { delete G.cells[k]; patch['cells/'+k]=null; }
+    }
+    Object.keys(G.caravans||{}).forEach(function(id){
+      var cv=G.caravans[id]; if(cv && (cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
+    });
+    Object.keys(G.treks||{}).forEach(function(id){ var t=G.treks[id]; if(t&&t.o===pid){ delete G.treks[id]; patch['treks/'+id]=null; } });
+    patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
+    patch['removed/'+pid+PROBATION_ID]=now; G.removed[pid+PROBATION_ID]=now;
+    if(G.sponsorships[pid]){ G.sponsorships[pid].gone=now; patch['sponsorships/'+pid+'/gone']=now; }   // the old record stays, but no longer lets the name back in
+    delete G.players[pid];
+  });
+  patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+  if(online){
+    var t=Math.floor(now/60000)*60000, id=q36(t)+'-probation';
+    chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:names.join(', ')+(names.length>1?' were':' was')+' not vouched for in time. The account'+(names.length>1?'s are':' is')+' deleted and the ground is free.'})
+      .then(function(){ return chatPut('/rev',t); }).catch(function(){});
+  }
+  return true;
+}
 function notifyStewardMsg(title,msg){
   try{ fetch('https://ntfy.sh/',{method:'POST',mode:'no-cors',body:JSON.stringify({topic:NTFY_TOPIC,title:title,message:msg,click:'https://chb-bohrer.github.io/marchland/',tags:['scroll']})}).catch(function(){}); }catch(e){}
 }
@@ -5479,7 +5573,8 @@ function waitSponsor(pid,rec){
   var n=document.getElementById('waitnote'), body=document.getElementById('waitnote-body'), who=esc(rec.sponsorName||'your sponsor');
   function paint(extra){
     body.innerHTML='<p class="sc-eyebrow">Asking to join</p><h2 id="waitnote-h">Waiting for '+who+'</h2>'
-      +'<p>Your request to join as <b>'+esc(rec.name)+'</b> ('+esc(rec.rn)+') has gone to '+who+'. When they vouch for you, this page opens the board by itself.</p>'
+      +'<p>Your request to '+(rec.probation?'keep playing':'join')+' as <b>'+esc(rec.name)+'</b> ('+esc(rec.rn)+') has gone to '+who+'. When they vouch for you, this page opens the board by itself.</p>'
+      +(rec.probation?'<p class="sc-note">You cannot play until then. If nobody has vouched for you by '+esc(new Date(PROBATION_DUE).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}))+', your account is deleted.</p>':'')
       +(extra||'')+'<div class="sc-btns"><button type="button" class="sc-btn" id="sp-withdraw">Withdraw my request</button></div>';
     document.getElementById('sp-withdraw').onclick=function(){
       clearTimeout(spWaitT); dbPut('/marchland/'+gameCode+'/pending/'+pid,null).then(bumpRev).catch(function(){});
@@ -5508,7 +5603,7 @@ function waitSponsor(pid,rec){
 function requestsForMe(){
   var now=Date.now();
   return Object.keys(G.pending||{}).map(function(pid){ var p=G.pending[pid]; return p&&{pid:pid,p:p}; })
-    .filter(function(x){ return x && !x.p.ok && !x.p.no && (x.p.sponsor===ME || (isSteward() && now-x.p.t>SPONSOR_ESCALATE_MS)); })
+    .filter(function(x){ return x && !x.p.ok && !x.p.no && ((x.p.sponsor===ME && !barredSponsor(ME,G)) || (isSteward() && (x.p.probe || now-x.p.t>SPONSOR_ESCALATE_MS))); })
     .sort(function(a,b){ return a.p.t-b.p.t; });
 }
 function renderSponsorBtn(){
@@ -5525,6 +5620,7 @@ function openRequests(){
     buttons:[{label:'Close',value:null}]}).then(function(res){ if(res.value) answerRequest(res.value.pid,res.value.p); });
 }
 function answerRequest(pid,p){
+  if(barredSponsor(ME,G)) return say('You may not sponsor anyone.');
   scrollDialog({eyebrow:'Vouch for a new player', title:esc(p.name)+' <span class="sc-sub">real name: '+esc(p.rn)+'</span>',
     html:'<p>Only vouch for someone you know in real life. What you write is kept for good with their name.</p>'
       +'<div class="sc-field"><label for="sp-how">How do you know them, and for how long?</label><textarea id="sp-how" rows="3" maxlength="400" style="font-size:16px"></textarea></div>'
@@ -5546,8 +5642,13 @@ function answerRequest(pid,p){
     }
     var how=(res.box.querySelector('#sp-how').value||'').trim().slice(0,400), rec={by:ME,how:how,t:t};
     var patch={}; patch['pending/'+pid+'/ok']=rec; patch['sponsorships/'+pid]={by:ME,how:how,t:t,name:p.name,rn:p.rn};   // the statement is kept for good, now
+    if(G.players[pid] && onProbation(pid,G)){                         // a player already on the board, clearing their probation: their old founding record is kept inside the new one
+      var old=sponsorRec(pid); if(old) patch['sponsorships/'+pid].prev={by:old.by,how:old.how,t:old.t};
+      patch['players/'+pid+'/sp']={by:ME,how:how,t:t};
+    }
     dbPatch(base,patch).then(bumpRev).then(function(){
       G.pending[pid].ok=rec; G.sponsorships=G.sponsorships||{}; G.sponsorships[pid]=patch['sponsorships/'+pid];
+      if(patch['players/'+pid+'/sp'] && G.players[pid]) G.players[pid].sp=patch['players/'+pid+'/sp'];
       renderSponsorBtn(); say('<span class="good">You vouched for '+esc(p.name)+'.</span> They enter the board the next time their page checks, within a minute.');
     },fail);
   });
@@ -5565,10 +5666,11 @@ function openProfile(pid){
 }
 /* ── the steward's tools ── */
 function openSponsorships(){
+  var prob=Object.keys(G.players).filter(function(pid){ return onProbation(pid,G); });
   var rows=Object.keys(G.sponsorships||{}).map(function(pid){ var s=G.sponsorships[pid]; return {pid:pid,s:s}; }).sort(function(a,b){ return b.s.t-a.s.t; });
   scrollDialog({eyebrow:'Steward', title:'Every sponsorship',
-    html:rows.length?'<table class="sc-table"><tr><th>Who</th><th>Vouched by</th><th>What they wrote</th><th>When</th></tr>'+rows.map(function(x){
-      return '<tr><td>'+esc(x.s.name||nameOf(x.pid))+(x.s.rn?' ('+esc(x.s.rn)+')':'')+(G.players[x.pid]?'':' <i>gone</i>')+'</td><td>'+(x.s.by==='founding'?'<i>founding</i>':esc(nameOf(x.s.by)))+'</td><td>'+esc(x.s.how||'')+'</td><td>'+new Date(x.s.t).toLocaleDateString()+'</td></tr>'; }).join('')+'</table>':'<p>None yet.</p>',
+    html:(prob.length?'<p><b>Without a sponsor, locked out, deleted in '+probationLeft()+':</b> '+prob.map(function(pid){ return esc(full(G.players[pid])); }).join(', ')+'.</p>':'')+(rows.length?'<table class="sc-table"><tr><th>Who</th><th>Vouched by</th><th>What they wrote</th><th>When</th></tr>'+rows.map(function(x){
+      return '<tr><td>'+esc(x.s.name||nameOf(x.pid))+(x.s.rn?' ('+esc(x.s.rn)+')':'')+(G.players[x.pid]?'':' <i>gone</i>')+'</td><td>'+(x.s.by==='founding'?'<i>founding</i>':esc(nameOf(x.s.by)))+'</td><td>'+esc(x.s.how||'')+'</td><td>'+new Date(x.s.t).toLocaleDateString()+'</td></tr>'; }).join('')+'</table>':'<p>None yet.</p>'),
     buttons:[{label:'Close',value:null,primary:true}]});
 }
 function playerList(){ return Object.keys(G.players).sort(function(a,b){ return (G.players[a].name||'').toLowerCase().localeCompare((G.players[b].name||'').toLowerCase()); }); }
@@ -6203,6 +6305,21 @@ function join(){
     if(online && migrationPending(G).length && !isSteward(tryPid)){ G=null; showWait('update',join); return; }
     hideWait();
     var spRec=(G.sponsorships||{})[tryPid], pend=(G.pending||{})[tryPid], approved=null, hintEl=document.getElementById('join-hint');
+    if(spRec && spRec.gone) spRec=null;              // an account that was deleted for want of a sponsor comes back only through a sponsor
+    if(G.players[tryPid] && online && !isSteward(tryPid) && onProbation(tryPid,G)){      // already playing, but with no sponsor yet: locked out until one approves
+      if(Date.now()>=PROBATION_DUE){ settleProbation(); G=null; hintEl.innerHTML='<span class="bad">The time to find a sponsor ran out, and this account has been deleted.</span> You can come back as a new player, with a sponsor to vouch for you.'; return; }
+      if(pend && pend.pin!==tryHash){ G=null; hintEl.innerHTML='<span class="bad">A request under this name is already waiting, with a different PIN.</span>'; return; }
+      if(pend && !pend.no){ var pn2=nameOf(pend.sponsor); G=null; waitSponsor(tryPid,{name:pend.name,rn:pend.rn,sponsorName:pn2,probation:true}); return; }
+      var B2=G, spPid2=sponsorPick&&sponsorPick.value, pl2=B2.players[tryPid]; G=null; loadSponsors(B2);
+      hintEl.innerHTML='<span class="bad">You cannot play until a sponsor approves you.</span> '+probationText();
+      if(!spPid2) return;
+      if(!canSponsor(spPid2,B2)){ hintEl.innerHTML='<span class="bad">'+esc(full(B2.players[spPid2]||{name:'That player'}))+' can&rsquo;t sponsor anyone.</span> Pick someone else under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
+      var req2={name:pl2.name,pin:tryHash,rn:realName,sponsor:spPid2,t:Date.now(),probe:1}, spn2=full(B2.players[spPid2]);
+      hintEl.textContent='Sending your request…';
+      dbPut('/marchland/'+gameCode+'/pending/'+tryPid,req2).then(function(){ return dbPut('/marchland/'+gameCode+'/rev',Date.now()); })
+        .then(function(){ waitSponsor(tryPid,{name:pl2.name,rn:realName,sponsorName:spn2,probation:true}); },function(){ hintEl.textContent='Could not send the request — check your connection.'; });
+      return;
+    }
     if(!G.players[tryPid] && online && !isSteward(tryPid) && Object.keys(G.players).length){
       if(spRec && spRec.fake){ G=null; hintEl.innerHTML='<span class="bad">This name was removed as a fake player.</span> Ask the steward if this is a mistake.'; return; }
       if(pend && pend.pin!==tryHash){ G=null; hintEl.innerHTML='<span class="bad">A request to join under this name is already waiting, with a different PIN.</span>'; return; }
