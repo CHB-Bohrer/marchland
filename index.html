@@ -503,7 +503,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <canvas id="board"></canvas>
         <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
         <div id="cellmenu" class="cellmenu scroll hide" role="menu" aria-label="What you can do here"><div class="sc-title"></div><div class="sc-items"></div></div>
-        <div id="sendmenu" class="sendmenu scroll hide"><span class="sm-l" id="sendsel-l">Send</span><button type="button" id="sendsel" class="spick" aria-labelledby="sendsel-l sendsel"></button></div>
+        <div id="sendmenu" class="sendmenu scroll hide"><span class="sm-l" id="sendsel-l">Send</span><button type="button" id="sendsel" class="spick" aria-labelledby="sendsel-l sendsel"></button><span class="sm-l hide" id="sendtb-l">trebuchets</span><button type="button" id="sendtb" class="spick hide" aria-labelledby="sendtb-l sendtb"></button><span class="sm-eta" id="sendeta"></span></div>
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
           <button id="zout" aria-label="Zoom out">−</button>
@@ -552,7 +552,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <span>/// cut off from supply</span>
         <span><span class="sw" style="background:var(--steel);border-color:var(--steel)"></span> number = band of soldiers</span>
         <span>the map wraps at its edges</span>
-        <span>dotted ring = field of fire</span>
+        <span>dotted ring = a tower&rsquo;s reach or a castle&rsquo;s guns</span>
         <span>dashed cell = you can take it</span>
       </div>
     </div>
@@ -734,7 +734,7 @@ var CASTLE_MAX_H=30, CASTLE_BOUNTY=50;
 var GRAVE_MS=5*864e5, GRAVE_MAX=12;
 var BRIDGE_MS=24*36e5, BRIDGE_COST={timber:40,stone:20};   // plus one march; ready a day later
 var SPEC={};
-SPEC[TOWER] ={range:[0,1,2,3],volley:[0,2,4,6],gar:[0,1,2,4],cost:{stone:40,timber:30}};   // towers hit hard
+SPEC[TOWER] ={range:[0,1,2,3],cost:{stone:40,timber:30}};   // a tower is a pool of health (10, 20 or 30); its range weakens attackers nearby (see defenderLine)
 SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,stone:60}};
 /* Starting keeps are generated on rings around the origin rather than picked from
    a fixed list, so the fifth player gets their own ground instead of spawning on
@@ -1323,9 +1323,10 @@ function supplied(pid){
   }
   return set;
 }
+function garNeed(c){ return (c && c.k===CASTLE && !isRuin(c)) ? (SPEC[CASTLE].gar[c.l]||0) : 0; }   // only castles are manned now
 function garrisonNeed(pid){
   var have=0,need=0;
-  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=SPEC[c.k].gar[c.l]; }
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=garNeed(c); }
   return [have,need];
 }
 function ratesFor(pid,at){
@@ -1343,7 +1344,8 @@ function ratesFor(pid,at){
   var g=garrisonNeed(pid), pl=G.players[pid];
   var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
   var wg=wagonsAt(pid,Date.now());                   // and so do the wagons: 1 grain a tick for each caravan on the road
-  return {out:out,sup:s,own:own,mouths:f+g[0]+wg,net:out.grain-(f+g[0]+wg),supset:sup,gar:g,field:f,wagons:wg};
+  var tg=trebsOf(pid)*TREB_GRAIN;                     // and the trebuchets, 2 a tick each
+  return {out:out,sup:s,own:own,mouths:f+g[0]+wg+tg,net:out.grain-(f+g[0]+wg+tg),supset:sup,gar:g,field:f,wagons:wg,trebs:tg};
 }
 /* Caravan upkeep: every caravan a player has sent costs them 1 grain at each tick while it is still
    on the road (sent, not yet arrived). A tick is the same 4-hour beat as the harvest. */
@@ -1352,11 +1354,11 @@ function wagonsAt(pid,t){
   for(var id in cv){ var c=cv[id]; if(c && c.from===pid && c.t<=t && t<c.eta && !(c.got && c.got<=t)) n++; }
   return n;
 }
-function coverOn(q,r,notPid){        // manned guns of everyone except notPid
+function coverOn(q,r,notPid){        // the guns of manned castles of everyone except notPid (towers no longer shoot; see defenderLine)
   var shots=0;
   for(var k in G.cells){
     var c=G.cells[k];
-    if(!c.k||!c.o||c.o===notPid||!c.g) continue;
+    if(c.k!==CASTLE||!c.o||c.o===notPid||!c.g||isRuin(c)) continue;
     var p=k.split('_');
     if(hexDist(q,r,parseInt(p[0],10),parseInt(p[1],10))<=SPEC[c.k].range[c.l]) shots+=SPEC[c.k].volley[c.l];
   }
@@ -1450,16 +1452,27 @@ function catchUp(pid){
     var R=ratesFor(pid,tickEnd);                                         // (the moment this tick ends: which wagons were still rolling, and which land was still burning)
     pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
     pl.res.grain+=R.out.grain-(R.mouths-R.wagons+wagonsAt(pid,tickEnd));
-    if(pl.res.grain<0){                       // hungry soldiers desert, biggest band first
+    if(pl.res.grain<0){                       // hungry soldiers desert (and trebuchets are abandoned), biggest group first
       var gone=Math.ceil(-pl.res.grain/2); pl.res.grain=0;
-      bandsOf(pid).sort(function(a,b){ return b.n-a.n; }).forEach(function(bd){
-        if(gone<=0) return; var c=G.cells[bd.k], t=Math.min(c.b,gone); c.b-=t; gone-=t; if(!c.b) delete c.b; touched[bd.k]=1;
+      var groups=bandsOf(pid).map(function(bd){ return {k:bd.k,n:bd.n,f:'b'}; });
+      for(var tk0 in G.cells){ var tc0=G.cells[tk0]; if(tc0.o===pid && tc0.tb>0) groups.push({k:tk0,n:tc0.tb,f:'tb'}); }
+      groups.sort(function(a,b){ return (b.n-a.n)||(a.f===b.f?0:(a.f==='b'?-1:1)); }).forEach(function(gp){
+        if(gone<=0) return; var c=G.cells[gp.k], t=Math.min(c[gp.f],gone); c[gp.f]-=t; gone-=t;
+        if(gp.f==='tb'){ c.tr=arr(c.tr).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } } else if(!c.b) delete c.b;
+        touched[gp.k]=1;
       });
+    }
+    // a damaged tower mends 1 health a tick for 1 stone, if there is stone; it never loses health by itself
+    for(var hk in G.cells){
+      var hc=G.cells[hk]; if(hc.o!==pid||hc.k!==TOWER||hc.h==null) continue;
+      if(hc.h>=towerMax(hc.l)){ delete hc.h; touched[hk]=1; continue; }
+      if((pl.res.stone||0)<1) continue;
+      pl.res.stone-=1; hc.h+=1; if(hc.h>=towerMax(hc.l)) delete hc.h; touched[hk]=1;
     }
     // garrison top-up then decay
     for(var k in G.cells){
       var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue;
-      var need=SPEC[c.k].gar[c.l];
+      var need=garNeed(c);
       if(c.g<need && fieldOf(pid)>0){         // the nearest band sends men in
         var p=k.split('_'), want=need-c.g, before=fieldOf(pid);
         drawSoldiers(pid,parseInt(p[0],10),parseInt(p[1],10),want).forEach(function(x){ touched[key(x[0],x[1])]=1; });
@@ -1508,10 +1521,42 @@ function pushAll(){
   if(me()) me().seen=Date.now();
   return dbPut('/marchland/'+gameCode,G).then(bumpRev).then(ok,fail);
 }
+/* My own record is written whole, but only if nobody has changed it since this tab last wrote or read it (an
+   ETag). Someone else does change it now and then: a player who takes one of my squares carries off a share of my
+   stores, and the steward writes a field or two. Then the write is refused (412): the change they made to my stores
+   is added into mine, the fields only others write are taken over, and the write is tried again. So this tab can
+   never write my old stores back over a deduction. Two writes from this tab never race: a second waits for the first. */
+var meTag=null, meBase=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp'];
+function snapRes(r){ var o={}; GOODS.forEach(function(k){ o[k]=(r&&r[k])||0; }); return o; }
+function absorbMine(v){
+  var pl=me(); if(!pl||!v) return;
+  if(v.res && meBase) GOODS.forEach(function(k){ var d=(v.res[k]||0)-(meBase[k]||0); if(d) pl.res[k]=(pl.res[k]||0)+d; });
+  if(v.res) meBase=snapRes(v.res);
+  OTHERS_WRITE.forEach(function(f){ if(v[f]!==undefined) pl[f]=v[f]; });
+}
 function pushMe(){
   if(!G||!me()) return Promise.resolve();
   me().seen=Date.now();
-  return dbPut('/marchland/'+gameCode+'/players/'+ME, me()).then(bumpRev).then(ok,fail);
+  if(!online) return dbPut('/marchland/'+gameCode+'/players/'+ME, me()).then(bumpRev).then(ok,fail);
+  if(meBusy){ meAgain=true; return meBusy; }
+  meBusy=pushMeNow(0).then(function(){ meBusy=null; if(meAgain){ meAgain=false; return pushMe(); } },function(e){ meBusy=null; meAgain=false; throw e; }).then(ok,fail);
+  return meBusy;
+}
+function pushMeNow(tries){
+  var path='/marchland/'+gameCode+'/players/'+ME;
+  var ready=meTag?Promise.resolve():dbGetTag(path).then(function(x){ meTag=x.tag||'null_etag'; if(x.v) absorbMine(x.v); });
+  return ready.then(function(){
+    if(!me()) return;
+    return dbPutIf(path,me(),meTag).then(function(x){
+      if(x.ok){ meTag=x.tag||null; meBase=snapRes(me().res); return bumpRev(); }
+      if(x.halted) return;
+      meTag=x.tag||null;
+      if(x.v) absorbMine(x.v);
+      else if(G.fallen && G.fallen[ME]) return;                     // my record is gone because I was eliminated: never write it back
+      if(tries>=5) throw new Error('my record keeps changing');
+      return pushMeNow(tries+1);
+    });
+  });
 }
 function pushCell(q,r){
   if(!G) return Promise.resolve();
@@ -1557,6 +1602,8 @@ function applyRemote(remote){
     if(pid!==ME) G.players[pid]=remote.players[pid];
   });
   if(!mine && remote.players[ME]) G.players[ME]=remote.players[ME];
+  var rv=remote.players[ME];                          // someone else changed my stores (spoils taken): fold it in now, not just at my next write
+  if(mine && rv && rv.res && meBase && !meBusy && GOODS.some(function(k){ return (rv.res[k]||0)!==(meBase[k]||0); })){ absorbMine(rv); meTag=null; }
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
@@ -1844,46 +1891,360 @@ function spendMarch(q,r){
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
   if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Tap it and choose <b>Build a bridge</b>; it takes a day.');
   if(!adjacentTo(q,r,ME)) return nope('Marches extend a border — pick a cell touching your own ground.');
-  if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Take or cut the road to its grain squares and cut it off &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
-  var cost=c.o?2:1, prev=c.o, pw=c.w||0;
-  var keep=isRuin(c);                                 // a fallen castle can be seized
-  var tow=c.k===TOWER, tl=tow?c.l:(keep?c.l:0), tg=tow?(c.g||0):0;   // a tower can be torn down; a castle only once it has fallen
-  var razed=tow||keep;
-  if(pl.squares<cost) return nope('Not enough marches — that cell costs '+cost+'. Claim today&rsquo;s steps.');
+  if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Batter it with trebuchets, or cut it off from its grain squares &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
   if(!c.o){
+    if(pl.squares<1) return nope('Not enough marches — that cell costs 1. Claim today&rsquo;s steps.');
     var from0=fromFor(q,r,ME);
-    pl.squares-=cost; c.o=ME; writeCell(q,r,c);
+    pl.squares-=1; c.o=ME; writeCell(q,r,c);
     logMove('m',q,r,from0,null,0);
     render(); pushCell(q,r); pushMe();
     return say('Cell taken for <b>1</b> march. <b>'+avail()+'</b> left.');
   }
-  // someone else's ground: a band of mine has to be standing next to it
-  var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need=guns+(c.w||0)+guard.n;
-  var mine=[];
-  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)) mine.push({q:nq,r:nr,n:n.b}); }
-  mine.sort(function(a,b){ return b.n-a.n; });
-  var why=[]; if(guns) why.push(guns+' to cross the guns'); if(c.w) why.push(c.w+' to break the wall'); if(guard.n) why.push(guard.n+' to beat the band guarding it');
-  if(!mine.length) return nope('<span class="bad">No soldiers next to that '+(tow?'tower':keep?'fallen castle':'cell')+'.</span> '+(tow?'Tearing down a tower':keep?'Seizing a fallen castle':'Taking someone else&rsquo;s ground')+' needs one of your bands standing beside it'+(need?' with at least '+(need+1)+' in it ('+why.join(', ')+', and one to hold it)':'')+'. Use <b>Move soldiers</b> to bring a band up.');
-  var band=mine[0];
-  if(band.n<need+1) return nope('<span class="bad">That band is too small.</span> '+(tow?'Tearing the tower down':keep?'Seizing the castle':'Taking the cell')+' costs '+need+' soldier'+(need>1?'s':'')+' ('+why.join(', ')+') and one more has to survive to hold it. Your band beside it has '+band.n+'.');
-  var victim=c.o;
-  pl.squares-=cost; c.w=0; c.o=ME; delete c.wd;
-  if(c.cs) c.cs={n:1};                                // whatever still stands here (a bridge) cost the captor nothing, so it refunds nothing
-  addGraves(c,need+(tow?tg:0));                       // attackers who fell here, and the men inside a tower that was torn down
-  if(tow){ c.k=null; c.l=0; c.g=0; c.d=0; }           // the tower falls, and the men inside it with it
-  if(keep){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; pl.squares+=CASTLE_BOUNTY; }   // the ruin is razed, and the captor is paid
-  guard.cells.forEach(function(g){ var gc=G.cells[key(g[0],g[1])]; if(gc){ addGraves(gc,gc.b||0); delete gc.b; pushCell(g[0],g[1]); } });   // defenders fall where they stood
-  var fromCell=G.cells[key(band.q,band.r)]; delete fromCell.b;
-  c.b=band.n-need;                                   // the survivors march in
-  writeCell(q,r,c);
-  logMove('b',q,r,[band.q,band.r],prev,need,{pw:pw||null,pk:tow?TOWER:(keep?CASTLE:null),pl:razed?tl:null,pg:razed?tg:null});
-  render(); pushCell(band.q,band.r); pushCell(q,r); pushMe();
-  var m=(tow?'Tower torn down for <b>':keep?'Castle seized for <b>':'Cell taken for <b>')+cost+'</b> marches.';
-  if(keep) m+=' <span class="good">+'+CASTLE_BOUNTY+' marches for taking the castle!</span>';
-  if(need) m+=' <span class="bad">'+need+' soldier'+(need>1?'s':'')+' lost</span> &mdash; their crosses will stand there for 5 days.';
-  if(tow && tg) m+=' <span class="good">The '+tg+' defender'+(tg>1?'s':'')+' inside fell with it.</span>';
-  if(guard.n) m+=' <span class="good">'+esc(nameOf(victim))+'&rsquo;s band of '+guard.n+' fell defending it.</span>';
-  say(m+' '+c.b+' soldier'+(c.b>1?'s march':' marches')+' in to hold it. <b>'+avail()+'</b> marches left.');
+  // someone else's ground: a band of mine beside it fights a chain of duels for it
+  if(pl.squares<ATTACK_COST) return nope('Not enough marches — an attack costs '+ATTACK_COST+', win or lose. Claim today&rsquo;s steps.');
+  attackPrompt(q,r);
+}
+
+/* ═══ battle: a chain of duels ═══════════════════════════════════════════
+   Taking someone's square is a fight, settled one duel at a time. The defenders form a line,
+   front to back: the wall courses on the square, then the soldiers guarding it (as guardOn
+   counts them), the castle guns that cover it (as coverOn counts them), the tower on it (one
+   unit for every 5 points of health it has left), and last any trebuchets standing there. One
+   attacking soldier at a time faces the front unit: with that unit's chance he removes it,
+   otherwise he dies and it stays. The band takes the square if the line is emptied, and the
+   attack fails if the band is. Every standing tower of the defender whose range reaches the
+   square makes each duel harder (0.05, 0.10 or 0.15 by level, its own square included while
+   it stands), but no chance falls below 0.10.
+   battleOdds works the outcome out exactly, and both the preview and the real fight use it,
+   so the number shown is the real chance. The real fight is rolled from a random seed taken
+   when the attacker confirms; the seed goes in the event, so a replay re-runs the same fight.
+   Rules run in the players' browsers, so a modified browser could lie about a roll; the seed
+   only makes an honest fight repeatable. */
+var DUEL_P={wall:0.65, guard:0.50, gun:0.60, tower:0.60, treb:0.90};
+var TOWER_PENALTY=[0,0.05,0.10,0.15], DUEL_MIN=0.10, TOWER_UNIT_H=5, TOWER_MAX_H=[0,10,20,30], ATTACK_COST=2;
+var UNIT_CODE={wall:'w',guard:'g',gun:'c',tower:'t',treb:'b'}, UNIT_FROM={w:'wall',g:'guard',c:'gun',t:'tower',b:'treb'};
+var UNIT_NAME={wall:['wall course','wall courses'],guard:['guarding soldier','guarding soldiers'],gun:['castle gun','castle guns'],tower:['tower unit','tower units'],treb:['trebuchet','trebuchets']};
+function towerMax(l){ return TOWER_MAX_H[Math.max(1,Math.min(3,l||1))]; }
+function towerH(c){ return c.h==null?towerMax(c.l):Math.max(0,c.h); }
+function towerUnits(c){ return Math.ceil(towerH(c)/TOWER_UNIT_H); }
+/* the defenders of (q,r) as the attacker (ME) would meet them */
+function defenderLine(q,r){
+  var c=cellOf(q,r), own=c.o, units=[], guard=guardOn(q,r,own), guns=own?coverOn(q,r,ME):0, i;
+  for(i=0;i<(c.w||0);i++) units.push({t:'wall'});
+  for(i=0;i<guard.n;i++) units.push({t:'guard'});
+  for(i=0;i<guns;i++) units.push({t:'gun'});
+  var tu=c.k===TOWER?towerUnits(c):0, tEnd=units.length+tu;
+  for(i=0;i<tu;i++) units.push({t:'tower'});
+  for(i=0;i<(c.tb||0);i++) units.push({t:'treb'});
+  var pen=0, ownPen=0, towers=0;
+  if(own) for(var k in G.cells){
+    var tc=G.cells[k]; if(tc.k!==TOWER||tc.o!==own||towerH(tc)<=0) continue;
+    var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10);
+    if(hexDist(q,r,tq,tr)>SPEC[TOWER].range[tc.l||1]) continue;
+    towers++;
+    if(key(tq,tr)===key(q,r)) ownPen=TOWER_PENALTY[tc.l||1]; else pen+=TOWER_PENALTY[tc.l||1];
+  }
+  units.forEach(function(u,j){ var p=DUEL_P[u.t]-pen-(j<tEnd?ownPen:0); u.p=Math.round(Math.max(DUEL_MIN,Math.min(1,p))*100)/100; });
+  return {units:units, p:units.map(function(u){ return u.p; }), guard:guard, guns:guns, tu:tu, towers:towers, pen:Math.round((pen+ownPen)*100)/100, cell:c};
+}
+/* exact outcome of a duel chain: attackers against a line of win chances (front first).
+   win: chance the attackers empty the line; expLoss: soldiers they can expect to lose; expKill: defender units expected to fall */
+function battleOdds(attackers,line){
+  var p=(line||[]).map(function(u){ return typeof u==='number'?u:u.p; }), n=p.length, A=Math.max(0,attackers|0);
+  if(!n) return {win:A>0?1:0, lose:A>0?0:1, expLoss:0, expKill:0};
+  var P=[], s, i, win=0, lose=0, expLoss=0, expKill=0;
+  for(s=0;s<=A;s++){ P.push(new Array(n+1).fill(0)); }
+  P[A][0]=1;
+  for(i=0;i<n;i++) for(s=A;s>=1;s--){
+    var m=P[s][i]; if(!m) continue;
+    P[s][i+1]+=m*p[i]; P[s-1][i]+=m*(1-p[i]);
+  }
+  for(s=1;s<=A;s++){ win+=P[s][n]; expLoss+=P[s][n]*(A-s); }
+  for(i=0;i<n;i++){ lose+=P[0][i]; expKill+=P[0][i]*i; }
+  expLoss+=lose*A; expKill+=win*n;
+  return {win:win, lose:lose, expLoss:expLoss, expKill:expKill};
+}
+function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
+function newSeed(){ try{ return crypto.getRandomValues(new Uint32Array(1))[0]; }catch(e){ return Math.floor(Math.random()*4294967296); } }
+/* the fight itself: the same order of duels battleOdds counts. log: 1 a defender fell, 0 an attacker fell */
+function fightOut(attackers,line,seed){
+  var p=line.map(function(u){ return typeof u==='number'?u:u.p; }), rng=mulberry32(seed>>>0), s=attackers, i=0, log=[];
+  while(s>0 && i<p.length){ var hit=rng()<p[i]; log.push(hit?1:0); if(hit) i++; else s--; }
+  return {won:i>=p.length, left:s, killed:i, lost:attackers-s, log:log};
+}
+function lineCounts(units,from,to){
+  var n={}; units.slice(from||0,to==null?units.length:to).forEach(function(u){ n[u.t]=(n[u.t]||0)+1; }); return n;
+}
+function lineText(units){
+  var n=lineCounts(units), out=[];
+  ['wall','guard','gun','tower','treb'].forEach(function(t){ if(n[t]) out.push(n[t]+' '+UNIT_NAME[t][n[t]>1?1:0]); });
+  return out.length?andList(out):'nobody at all';
+}
+function pct(x){ return x>=0.995&&x<1?'99%':(x>0&&x<0.005?'under 1%':Math.round(x*100)+'%'); }
+/* the band of mine that would attack (q,r): the biggest standing beside it */
+function attackBand(q,r){
+  var best=null;
+  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)&&(!best||n.b>best.n)) best={q:nq,r:nr,n:n.b}; }
+  return best;
+}
+/* ── spoils of capture ──
+   Whoever takes a square from someone also carries off a share of what that player has banked:
+   1/N of each good, where N is how many squares they held just before (the taken one included),
+   rounded down. Someone losing their last square loses everything. The loser's stores are read
+   from the database with their ETag, the share taken off, and written back only if nothing
+   changed in between (a 412 means read again and retry). The loser's own screen folds this
+   change into its copy before it writes (see pushMe), so it can never write the old stores back. */
+function spoilsShare(res,n){ var out={}; GOODS.forEach(function(k){ var have=Math.max(0,Math.floor((res&&res[k])||0)); out[k]=n<=1?have:Math.floor(have/n); }); return out; }
+function hasGoods(g){ return !!g && GOODS.some(function(k){ return g[k]>0; }); }
+function takeSpoils(loser,n){
+  if(!online){ var lp=G.players[loser]; if(!lp) return Promise.resolve({}); var sh=spoilsShare(lp.res,n); GOODS.forEach(function(k){ lp.res[k]=(lp.res[k]||0)-sh[k]; }); return Promise.resolve(sh); }
+  var path='/marchland/'+gameCode+'/players/'+loser+'/res';
+  function attempt(tries){
+    return dbGetTag(path).then(function(x){
+      if(!x.v) return {};
+      var sh=spoilsShare(x.v,n); if(!hasGoods(sh)) return sh;
+      var left={}; GOODS.forEach(function(k){ left[k]=(x.v[k]||0)-sh[k]; });
+      return dbPutIf(path,left,x.tag).then(function(y){
+        if(y.ok){ if(G.players[loser]) G.players[loser].res=left; return sh; }
+        if(y.halted||tries>=6) return {};
+        return attempt(tries+1);
+      });
+    });
+  }
+  return attempt(0).then(function(sh){ if(hasGoods(sh)) bumpRev(); return sh; },function(){ return {}; });
+}
+function goodsText(g){ var p=[]; GOODS.forEach(function(k){ if(g&&g[k]>0) p.push(g[k]+' '+k); }); return p.join(', '); }
+
+/* ── the attack: a preview on a scroll, then the fight ── */
+var fighting=false;
+function attackPrompt(q,r,note){
+  var pl=me(), c=cellOf(q,r), band=attackBand(q,r), L=defenderLine(q,r);
+  if(!band) return nope('<span class="bad">No soldiers next to that square.</span> Taking someone else&rsquo;s ground needs one of your bands standing beside it. Use <b>Move soldiers</b> to bring a band up.');
+  var o=battleOdds(band.n,L.p), who=esc(nameOf(c.o)), ruin=isRuin(c), loserN=Math.max(1,cellsOf(c.o));
+  var sp=spoilsShare((G.players[c.o]||{}).res,loserN), what=c.k===TOWER?'tower':ruin?'fallen castle':c.t===RIVER?'bridge':'square';
+  var html=(note?'<p class="sc-note">'+note+'</p>':'')
+    +'<p>Your band of <b>'+band.n+'</b> beside it faces, front to back: <b>'+lineText(L.units)+'</b>.</p>'
+    +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p>'
+    +'<p>Soldiers you can expect to lose: <b>'+(Math.round(o.expLoss*10)/10)+'</b> of '+band.n+'.</p>'
+    +(L.towers?'<p><i>'+(L.towers>1?L.towers+' of their towers reach':'One of their towers reaches')+' this square and make'+(L.towers>1?'':'s')+' every duel harder (&minus;'+Math.round(L.pen*100)+'%).</i></p>':'')
+    +(hasGoods(sp)?'<p>If you win you carry off '+(loserN>1?'1/'+loserN+' of what':'all that')+' '+who+' has banked: about <b>'+goodsText(sp)+'</b>.</p>':'')
+    +(ruin?'<p>Seizing the ruin pays <b>'+CASTLE_BOUNTY+' marches</b>.</p>':'')
+    +'<p><i>Costs '+ATTACK_COST+' marches, win or lose. Defenders you bring down stay down even if you fail.</i></p>';
+  scrollDialog({eyebrow:'Battle', title:'Attack '+who+'&rsquo;s '+what+'?', html:html, cancel:false,
+    buttons:[{label:'Hold back',value:false},{label:'Attack &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){
+    if(res.value) attackNow(q,r,band,L.p);
+  });
+}
+function attackNow(q,r,band0,shown){
+  var pl=me(), k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null;
+  if(fighting) return; fighting=true; say('The bands close&hellip;');
+  cellFresh(q,r).then(function(f){
+    if(f.c) G.cells[k]=f.c; else delete G.cells[k];
+    var c=cellOf(q,r), prev=c.o;
+    if(!prev || prev===ME){ throw {msg:'That square has changed hands already.'}; }
+    if(c.k===CASTLE && !isRuin(c)) throw {msg:'That castle stands again &mdash; it can&rsquo;t be stormed.'};
+    var band=attackBand(q,r), L=defenderLine(q,r);
+    if(!band) throw {msg:'<span class="bad">Your band beside it has gone.</span>'};
+    if(band.n!==band0.n || JSON.stringify(L.p)!==JSON.stringify(shown)){ fighting=false; return attackPrompt(q,r,'The defences changed while you were deciding. These are the new odds.'); }
+    if(pl.squares<ATTACK_COST) throw {msg:'Not enough marches &mdash; an attack costs '+ATTACK_COST+'. Claim today&rsquo;s steps.'};
+    var seed=newSeed(), res=fightOut(band.n,L.p,seed), kn=lineCounts(L.units,0,res.killed);
+    var snaps={}, snap=function(kk){ if(!(kk in snaps)) snaps[kk]=G.cells[kk]?JSON.parse(JSON.stringify(G.cells[kk])):null; };   // to put things back if the write is refused
+    snap(key(band.q,band.r)); L.guard.cells.forEach(function(g){ snap(key(g[0],g[1])); });
+    var loserN=Math.max(1,cellsOf(prev)), ruin=isRuin(c), pw=c.w||0, pk=c.k, plv=c.l, pg=c.g||0, ph=c.k===TOWER?towerH(c):null, collapsed=false;
+    // the defenders who fell, front to back
+    if(kn.wall){ c.w=Math.max(0,pw-kn.wall); delete c.wd; }
+    var gl=kn.guard||0, touched=[];
+    L.guard.cells.forEach(function(g){
+      if(gl<=0) return; var gc=G.cells[key(g[0],g[1])]; if(!gc||!(gc.b>0)) return;
+      var d=Math.min(gc.b,gl); gc.b-=d; gl-=d; addGraves(gc,d); if(!gc.b) delete gc.b;
+      if(key(g[0],g[1])!==k) touched.push(g);
+    });
+    if(kn.tower){ var h=towerH(c)-kn.tower*TOWER_UNIT_H; if(h<=0){ collapsed=true; c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; if(c.cs) delete c.cs.k; } else c.h=h; }
+    if(kn.treb){ c.tb=Math.max(0,(c.tb||0)-kn.treb); c.tr=(c.tr||[]).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } }
+    addGraves(c,res.lost);                                          // attackers who fell here
+    var from=G.cells[key(band.q,band.r)], bounty=0;
+    pl.squares-=ATTACK_COST;
+    if(res.won){
+      c.o=ME; c.w=0; delete c.wd; delete c.tb; delete c.tr; c.b=res.left;
+      if(ruin){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; bounty=CASTLE_BOUNTY; pl.squares+=bounty; }   // the ruin is razed, and the captor is paid
+      if(c.cs) c.cs={n:1};                                          // whatever still stands here cost the captor nothing
+      if(from){ delete from.b; }
+    } else if(from){ from.b=res.left; if(!from.b) delete from.b; }
+    writeCell(q,r,c);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=ATTACK_COST-bounty; throw {msg:'That square changed at the last moment. Nothing happened &mdash; look again and try once more.'}; }
+      pushCell(band.q,band.r); touched.forEach(function(g){ pushCell(g[0],g[1]); });
+      var ev={v:2, seed:seed, n:band.n, ln:L.p.map(function(x){ return Math.round(x*100); }), lt:L.units.map(function(u){ return UNIT_CODE[u.t]; }).join(''),
+        won:res.won?1:0, kl:res.killed, pw:pw||null, pk:pk||null, pl:pk?plv:null, pg:pk?pg:null, cb:bounty||null};
+      var after=res.won?takeSpoils(prev,loserN):Promise.resolve({});
+      return after.then(function(sp){
+        if(hasGoods(sp)){ GOODS.forEach(function(g){ pl.res[g]=(pl.res[g]||0)+sp[g]; }); ev.sp=sp; ev.label='+'+goodsText(sp); }
+        logMove('duel',q,r,[band.q,band.r],prev,res.lost,ev);
+        if(collapsed) logMove('collapse',q,r,null,prev,0,{v:2,by:'duel'});
+        if(hasGoods(sp)) logMove('spoils',q,r,null,prev,0,{v:2,sp:sp});
+        render(); pushMe();
+        var kills=lineText(L.units.slice(0,res.killed)), m;
+        if(res.won) m='<span class="good"><b>Won.</b></span> '+(res.killed?'Down went '+kills+'. ':'')+(res.lost?'<span class="bad">'+res.lost+' of yours fell</span>':'None of yours fell')+'; '+res.left+' march'+(res.left>1?'':'es')+' in to hold it.'
+          +(bounty?' <span class="good">+'+bounty+' marches for the castle.</span>':'')+(hasGoods(sp)?' <span class="good">Spoils: '+goodsText(sp)+'.</span>':'');
+        else m='<span class="bad"><b>Beaten back.</b></span> All '+band.n+' of your band fell'+(res.killed?', taking down '+kills+' first (they stay down)':'')+'.';
+        say(m+' <b>'+avail()+'</b> marches left.');
+      });
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; no attack was made.'); })
+    .then(function(){ fighting=false; });
+}
+
+/* ═══ trebuchets ═════════════════════════════════════════════════════════
+   A siege engine, easy to kill and fired only by hand. Built at a castle square of yours, it eats
+   2 grain a tick wherever soldiers' grain is counted, and starves the way a soldier does. It walks
+   with your bands over your own ground (or alone), at the same pace. Each one can throw a stone
+   once every 4 hours at an enemy wall, tower or castle within 3 squares: 5 stone a shot, exactly 2
+   damage, never a miss (a wall course takes two hits to fall; partial damage is kept in wd). It
+   never targets soldiers, bands, caravans, roads or bridges. On a square it is the last defender
+   in the line and loses 90 per cent of duels, and taking its square destroys it. A square keeps
+   the count in tb and, in tr, the moment each one can next fire; shots unused do not stack. */
+var TREB_COST={timber:60,iron:40,stone:30}, TREB_GRAIN=2, TREB_SHOT=5, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
+function arr(x){ if(Array.isArray(x)) return x.filter(function(v){ return v!=null; }); if(!x||typeof x!=='object') return []; return Object.keys(x).sort(function(a,b){ return a-b; }).map(function(k){ return x[k]; }); }   // (the database can hand an array back as an object)
+function trebsOf(pid){
+  var n=0, k, T=(G&&G.treks)||{};
+  for(k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.tb>0) n+=c.tb; }
+  for(k in T){ var t=T[k]; if(t && t.o===pid && t.tb>0) n+=t.tb; }
+  return n;
+}
+function trebReady(c,now){ now=now||Date.now(); var tr=arr(c.tr), n=0; for(var i=0;i<(c.tb||0);i++) if(!(tr[i]>now)) n++; return n; }
+function trebNext(c){ var tr=arr(c.tr).slice(0,c.tb||0).filter(function(t){ return t>Date.now(); }).sort(function(a,b){ return a-b; }); return tr[0]||0; }
+function buildTreb(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!(c.o===ME && c.k===CASTLE)) return nope('Trebuchets are built at your castles.');
+  if(isRuin(c)) return nope('That castle has fallen &mdash; nothing is built at a ruin.');
+  for(var k in TREB_COST){ if((pl.res[k]||0)<TREB_COST[k]) return nope('Not enough materials &mdash; a trebuchet needs '+costLine(TREB_COST)+'. '+shortBy(TREB_COST)); }
+  for(var k2 in TREB_COST) pl.res[k2]-=TREB_COST[k2];
+  var tr=arr(c.tr).slice(0,c.tb||0); tr.push(Date.now());          // ready to throw at once
+  c.tb=(c.tb||0)+1; c.tr=tr;
+  writeCell(q,r,c); logMove('tbk',q,r,fromFor(q,r,ME),null,0,{v:2,n:c.tb});
+  render(); pushCell(q,r); pushMe();
+  say('<b>Trebuchet built.</b> It can throw a stone at an enemy wall, tower or castle up to '+TREB_RANGE+' squares away, once every 4 hours, for '+TREB_SHOT+' stone a shot. It eats '+TREB_GRAIN+' grain a tick. Tap this square and choose <b>Fire</b>.');
+}
+/* what a trebuchet on (q,r) could aim at: enemy walls, towers and standing castles within range */
+function fireTargets(q,r){
+  var out=[];
+  for(var k in G.cells){
+    var c=G.cells[k]; if(!c.o||c.o===ME) continue;
+    var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10), d=hexDist(q,r,tq,tr);
+    if(d>TREB_RANGE) continue;
+    var nm=esc(nameOf(c.o));
+    if(c.k===TOWER) out.push({q:tq,r:tr,what:'tower',d:d,label:nm+'&rsquo;s tower'+(c.l>1?' '+ROMAN[c.l]:''),cost:d+' away &middot; health '+towerH(c)+' of '+towerMax(c.l)});
+    if(c.k===CASTLE && !isRuin(c)) out.push({q:tq,r:tr,what:'castle',d:d,label:nm+'&rsquo;s castle',cost:d+' away &middot; health '+castleH(c)+' of '+CASTLE_MAX_H});
+    if((c.w||0)>0) out.push({q:tq,r:tr,what:'wall',d:d,label:nm+'&rsquo;s wall ('+ROMAN[c.w]+(c.wd?', cracked':'')+')',cost:d+' away'});
+  }
+  return out.sort(function(a,b){ return a.d-b.d || (a.label<b.label?-1:1); });
+}
+function fireMenu(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!(c.o===ME && c.tb>0)) return nope('Pick a square of yours with a trebuchet on it.');
+  var ready=trebReady(c);
+  if(!ready) return nope('No trebuchet here is ready &mdash; the next can throw in <b>'+hoursLeft(trebNext(c))+'</b>. Each throws once every 4 hours.');
+  var list=fireTargets(q,r);
+  if(!list.length) return nope('Nothing to aim at: no enemy wall, tower or castle stands within '+TREB_RANGE+' squares of this one. Move the trebuchet closer with your soldiers.');
+  var why=(pl.res.stone||0)<TREB_SHOT?'Needs '+TREB_SHOT+' stone (you have '+Math.floor(pl.res.stone||0)+')':'';
+  scrollDialog({eyebrow:'Trebuchet &middot; '+ready+' ready', title:'Choose a target',
+    html:'<p>A stone does exactly '+TREB_DMG+' damage and never misses. A wall course falls after two hits. Each shot costs '+TREB_SHOT+' stone.</p>',
+    list:list.map(function(t){ return {label:t.label,cost:t.cost,why:why,value:t}; }), cancel:null,
+    buttons:[{label:'Not now',value:null}]}).then(function(res){
+    var t=res.value; if(t && t.what) fireNow(q,r,t.q,t.r,t.what);
+  });
+}
+var firing=false;
+function fireNow(q,r,tq,tr,what){
+  var pl=me(), tk=key(tq,tr), before=G.cells[tk]?JSON.parse(JSON.stringify(G.cells[tk])):null;
+  if(firing) return;
+  var sc=cellOf(q,r);
+  if(!(sc.o===ME && trebReady(sc)>0)) return nope('No trebuchet on that square is ready.');
+  if(hexDist(q,r,tq,tr)>TREB_RANGE) return nope('Too far &mdash; a trebuchet reaches '+TREB_RANGE+' squares.');
+  if((pl.res.stone||0)<TREB_SHOT) return nope('A shot costs '+TREB_SHOT+' stone. '+shortBy({stone:TREB_SHOT}));
+  firing=true; say('Loading the sling&hellip;');
+  cellFresh(tq,tr).then(function(f){
+    if(f.c) G.cells[tk]=f.c; else delete G.cells[tk];
+    var c=cellOf(tq,tr), prev=c.o, out='', collapsed=false, fell=false;
+    if(!prev||prev===ME) throw {msg:'That square is no longer an enemy&rsquo;s.'};
+    if(what==='wall'){
+      if(!(c.w>0)) throw {msg:'That wall has already fallen.'};
+      c.wd=(c.wd||0)+1;
+      if(c.wd>=2){ c.w-=1; delete c.wd; out=c.w?'A course falls: wall '+ROMAN[c.w]+' left':'The last course falls'; } else out='The wall cracks: one more hit brings a course down';
+    } else if(what==='tower'){
+      if(c.k!==TOWER) throw {msg:'That tower is gone.'};
+      var h=towerH(c)-TREB_DMG;
+      if(h<=0){ collapsed=true; c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; if(c.cs) delete c.cs.k; out='The tower collapses'; }
+      else { c.h=h; out='Tower health '+h+' of '+towerMax(c.l); }
+    } else if(what==='castle'){
+      if(c.k!==CASTLE||isRuin(c)) throw {msg:'That castle has already fallen.'};
+      var ch=Math.max(0,castleH(c)-TREB_DMG); c.h=ch; if(c.ht==null) c.ht=Date.now();
+      if(ch<=0){ fell=true; c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; out='The castle falls: it is a ruin now'; }   // the garrison walks out, as when it starves
+      else out='Castle health '+ch+' of '+CASTLE_MAX_H;
+    } else throw {msg:'A trebuchet only aims at walls, towers and castles.'};
+    writeCell(tq,tr,c);
+    return cellPutIf(tq,tr,G.cells[tk]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[tk]=before; else delete G.cells[tk]; throw {msg:'The target changed as you loosed. Nothing was thrown &mdash; try again.'}; }
+      var s2=cellOf(q,r), trs=arr(s2.tr).slice(0,s2.tb||0), now=Date.now();
+      while(trs.length<(s2.tb||0)) trs.push(0);
+      for(var i=0;i<trs.length;i++) if(!(trs[i]>now)){ trs[i]=now+TREB_RELOAD; break; }   // that one reloads for 4 hours
+      s2.tr=trs; writeCell(q,r,s2); pushCell(q,r);
+      pl.res.stone-=TREB_SHOT;
+      logMove('fire',tq,tr,[q,r],prev,0,{v:2,tg:what,label:collapsed?'Collapsed':fell?'Fallen':'−'+TREB_DMG,out:out});
+      if(collapsed) logMove('collapse',tq,tr,null,prev,0,{v:2,by:'fire'});
+      render(); pushMe();
+      say('<b>Loosed.</b> '+out+'. '+(trebReady(s2)?trebReady(s2)+' more ready here.':'This trebuchet reloads for 4 hours.'));
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing was thrown.'); })
+    .then(function(){ firing=false; });
+}
+/* dismantling one gives back half of what it cost */
+function dismantleTreb(q,r){
+  var pl=me(), k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null, back=halfOf(TREB_COST);
+  if(razing[k]) return;
+  razing[k]=1;
+  cellFresh(q,r).then(function(f){
+    var fc=f.c?JSON.parse(JSON.stringify(f.c)):null;
+    if(!fc||fc.o!==ME||!(fc.tb>0)) throw {msg:'There is no trebuchet of yours here any more.'};
+    var trs=arr(fc.tr).slice(0,fc.tb).sort(function(a,b){ return b-a; });   // the one reloading longest goes first
+    trs.shift(); fc.tb-=1; fc.tr=trs; if(!fc.tb){ delete fc.tb; delete fc.tr; }
+    fc.q=q; fc.r=r; writeCell(q,r,fc);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; throw {msg:'That square changed while you were dismantling. Try once more.'}; }
+      for(var g in back) pl.res[g]=(pl.res[g]||0)+back[g];
+      logMove('dm',q,r,null,null,0,{v:2,dm:'treb',label:refundLine(back)});
+      render(); pushMe();
+      say('<b>A trebuchet is dismantled.</b> <span class="good">'+refundLine(back)+'.</span>');
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing was dismantled.'); })
+    .then(function(){ delete razing[k]; });
+}
+/* ── the engine itself: a timber frame on a sled, the throwing arm, the counterweight, the sling ── */
+function artTrebuchet(g,x,y,s,col,t,n,arm){
+  g.save(); g.translate(x,y);
+  var lw=Math.max(0.8,s*0.05);
+  blob(g,0,s*0.05,s*0.62,s*0.1,NAT.shadow);
+  g.lineCap='round'; g.lineJoin='round';
+  g.strokeStyle=NAT.wood2; g.lineWidth=lw*1.5;
+  g.beginPath(); g.moveTo(-s*0.55,0); g.lineTo(s*0.55,0); g.stroke();                      // the base
+  g.strokeStyle=NAT.wood; g.lineWidth=lw*1.2;
+  g.beginPath(); g.moveTo(-s*0.32,0); g.lineTo(0,-s*0.62); g.lineTo(s*0.32,0); g.stroke();   // the A-frame
+  g.beginPath(); g.moveTo(-s*0.18,-s*0.28); g.lineTo(s*0.18,-s*0.28); g.stroke();
+  var a=arm==null?-0.55:arm, L1=s*0.78, L2=s*0.26, px=0, py=-s*0.62;                         // the arm, pivoting at the top
+  var lx=px+Math.cos(Math.PI+a)*L1, ly=py+Math.sin(Math.PI+a)*L1, cx=px+Math.cos(a)*L2, cy=py+Math.sin(a)*L2;
+  g.strokeStyle=NAT.wood2; g.lineWidth=lw*1.1; g.beginPath(); g.moveTo(lx,ly); g.lineTo(cx,cy); g.stroke();
+  g.fillStyle=NAT.stone2; g.strokeStyle=NAT.line; g.lineWidth=lw*0.5;                           // the counterweight box
+  g.fillRect(cx-s*0.1,cy,s*0.2,s*0.18); g.strokeRect(cx-s*0.1,cy,s*0.2,s*0.18);
+  g.strokeStyle=NAT.rope; g.lineWidth=lw*0.5; g.beginPath(); g.moveTo(lx,ly); g.lineTo(lx-s*0.06,ly+s*0.2); g.stroke();   // the sling
+  blob(g,lx-s*0.06,ly+s*0.22,s*0.05,s*0.05,NAT.rock);
+  blob(g,0,-s*0.62,s*0.05,s*0.05,NAT.line);
+  g.fillStyle=col; g.beginPath(); g.moveTo(0,-s*0.62); g.lineTo(s*0.2,-s*0.7); g.lineTo(0,-s*0.78); g.closePath(); g.fill();   // a pennant in the owner's colour
+  g.restore();
+  if(n>1){                                                                                    // how many stand here
+    var bx=x+s*0.48, by=y-s*0.58, br=Math.max(6,s*0.2);
+    g.save(); g.beginPath(); g.arc(bx,by,br,0,6.284); g.fillStyle=T['--surface']||'#F2F4EE'; g.fill(); g.lineWidth=1.5; g.strokeStyle=col; g.stroke();
+    g.fillStyle=T['--ink']||'#16242A'; g.font='600 '+Math.round(br*1.2)+'px ui-monospace, monospace'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(String(n),bx,by+0.5); g.restore();
+  }
 }
 
 /* Crossing a river takes a bridge: a march and some materials to start, and a
@@ -1931,17 +2292,17 @@ function build(q,r,kind){
     if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
   for(var k in cost){ if(pl.res[k]<cost[k]) return nope('Not enough materials — '+(kind===CASTLE?'a castle':'a tower')+' needs '+costLine(cost)+'. '+shortBy(cost)); }
-  if(fieldOf(ME)<SPEC[kind].gar[1]) return nope('No one to man it. Muster a soldier first.');
+  if(kind===CASTLE && fieldOf(ME)<SPEC[CASTLE].gar[1]) return nope('No one to man it. Muster a soldier first.');
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   var from=fromFor(q,r,ME), pw=c.w||0;
-  var sent=drawSoldiers(ME,q,r,1);                   // the nearest band sends a man
-  c=cellOf(q,r); c.k=kind; c.l=1; c.g=1; delete c.h; delete c.ht;   // (any wall on the square stays standing around it)
+  var sent=kind===CASTLE?drawSoldiers(ME,q,r,1):[];   // the nearest band sends a man to a castle; a tower needs nobody
+  c=cellOf(q,r); c.k=kind; c.l=1; c.g=kind===CASTLE?1:0; delete c.h; delete c.ht;   // (any wall on the square stays standing around it)
   if(c.cs) delete c.cs.n; spendAdd(c,'k',cost,{});
   writeCell(q,r,c); logMove(kind===TOWER?'tw':'cs',q,r,from,null,0,pw?{pw:pw}:null);
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
-    ? 'Watchtower raised. Keep a soldier in it and its guns cost attackers soldiers.'
+    ? 'Watchtower raised, at full health ('+towerMax(1)+'). Every attack on your ground within '+SPEC[TOWER].range[1]+' square of it is harder, and it stands in the way of anyone taking its own square.'
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep its road to a farm open: if no grain square is connected to it, it loses health and falls in 5 days.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
@@ -1967,18 +2328,21 @@ function upgrade(q,r){
   if(c.o!==ME||!c.k) return nope('Click one of your own towers or castles.');
   if(isRuin(c)) return nope('That castle has fallen &mdash; it cannot be upgraded until a connected farm brings its health back.');
   if(c.l>=3) return nope('Already at level III.');
-  var lvl=c.l+1, cost=SPEC[c.k].cost, extra=SPEC[c.k].gar[lvl]-c.g;
+  var lvl=c.l+1, cost=SPEC[c.k].cost, extra=c.k===CASTLE?Math.max(0,SPEC[CASTLE].gar[lvl]-c.g):0;
   for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return nope('Upgrade needs '+cost[k]*lvl+' '+k+'. You have '+Math.floor(pl.res[k])+'.'); }
   var have=fieldOf(ME);
-  if(have<extra) return nope('Level '+ROMAN[lvl]+' needs '+SPEC[c.k].gar[lvl]+' men inside — you are '+(extra-have)+' short. Muster more soldiers.');
+  if(have<extra) return nope('Level '+ROMAN[lvl]+' needs '+SPEC[CASTLE].gar[lvl]+' men inside — you are '+(extra-have)+' short. Muster more soldiers.');
   for(var k2 in cost) pl.res[k2]-=cost[k2]*lvl;
   var sent=drawSoldiers(ME,q,r,extra);
   c=cellOf(q,r); var paid={}; for(var k3 in cost) paid[k3]=cost[k3]*lvl;
-  spendAdd(c,'k',paid,c.cs&&c.cs.k?null:spentOn(c,'k',q,r)); c.l=lvl; c.g+=extra;
+  spendAdd(c,'k',paid,c.cs&&c.cs.k?null:spentOn(c,'k',q,r));
+  if(c.k===TOWER && c.h!=null) c.h+=towerMax(lvl)-towerMax(lvl-1);   // a damaged tower keeps its damage, with more health on top
+  c.l=lvl; c.g+=extra;
   writeCell(q,r,c); logMove('up',q,r,fromFor(q,r,ME),null,0,{lvl:lvl,bk:c.k,n:Math.max(1,extra)});
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
-  say('Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
+  say(c.k===TOWER ? 'Upgraded to <b>level '+ROMAN[lvl]+'</b> — health '+towerH(c)+' of '+towerMax(lvl)+', and attacks within '+SPEC[TOWER].range[lvl]+' squares are harder by '+Math.round(TOWER_PENALTY[lvl]*100)+'%.'
+    : 'Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
 }
 function wall(q,r){
   var pl=me(), c=cellOf(q,r);
@@ -2004,28 +2368,42 @@ function muster(q,r){
 }
 
 /* ── moving a band ── */
-var sel=null, sendN=0, selTrek=null;                 // selected band, how many to send (0 = all), and a walking band picked for new orders
-function sendLabel(){ var c=sel&&G.cells[key(sel.q,sel.r)]; var n=c&&c.b||0; return sendN&&sendN<n?sendN+' of '+n:'all '+n; }
+var sel=null, sendN=0, sendT=0, selTrek=null;        // selected square, how many soldiers and trebuchets to send (0 = all, -1 = none), and a walking band picked for new orders
+function sendCount(want,have){ return !have||want<0?0:(want&&want<have?want:have); }
+function sendLabel(){
+  var c=sel&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0, nt=c&&c.tb||0, sn=sendCount(sendN,n), st=sendCount(sendT,nt), out=[];
+  if(n) out.push(sn===n?'all '+n+' soldier'+(n>1?'s':''):sn?sn+' of '+n+' soldiers':'no soldiers');
+  if(nt) out.push(st===nt?(nt>1?'all '+nt+' trebuchets':'the trebuchet'):st?st+' of '+nt+' trebuchets':'no trebuchets');
+  return out.join(' and ');
+}
 function sayMove(){
-  var c=G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
-  say('Band of <b>'+n+'</b> selected, sending <b>'+sendLabel()+'</b>. '
-    +(n>1?'Choose how many from the menu on the map. ':'')
-    +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 3 hours. Click the band again to cancel.');
+  var c=G.cells[key(sel.q,sel.r)], n=c&&c.b||0, nt=c&&c.tb||0;
+  say('Selected: sending <b>'+sendLabel()+'</b>. '
+    +(n>1||nt?'Choose how many from the scroll on the map. ':'')
+    +'Now click any of your cells to send them there. It costs no marches, but they walk 1 cell every 3 hours. Click the square again to cancel.');
 }
 /* the "how many?" scroll is parked in the corner of the map farthest from the band, and never over a square
    the band could be sent to: of the four corners it takes the one that covers none of your ground, or the least */
-var sendMenuSig='', sendMenuPos='', sendSpotSig='', sendPick=null;
+var sendMenuSig='', sendMenuPos='', sendSpotSig='', sendPick=null, sendTPick=null;
 function placeSendMenu(){
   var box=document.getElementById('sendmenu'); if(!box) return;
-  var c=sel&&(mode==='move'||mode==='menu')&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0;
-  if(!sel||(mode!=='move'&&mode!=='menu')||n<2){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; if(sendPick) sendPick.close(false); } return; }
-  if(!sendPick) sendPick=scrollPick(document.getElementById('sendsel'),{label:'How many soldiers to send',title:'How many go?',
+  var c=sel&&(mode==='move'||mode==='menu')&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0, nt=c&&c.tb||0;
+  if(!sel||(mode!=='move'&&mode!=='menu')||(n<2&&!nt)){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; if(sendPick) sendPick.close(false); if(sendTPick) sendTPick.close(false); } return; }
+  if(!sendPick) sendPick=scrollPick(document.getElementById('sendsel'),{label:'How many soldiers to send',title:'How many soldiers go?',
     onPick:function(v){ if(!sel) return; sendN=parseInt(v,10)||0; sayMove(); draw(); }});
-  var opts=[{value:0,label:'All '+n,short:'all '+n}];
-  for(var i=n-1;i>=1;i--) opts.push({value:i,label:i+(i===Math.floor(n/2)&&n>2?' (half)':''),short:String(i)});
-  sendPick.setOptions(opts);
-  var want=String(sendN&&sendN<n?sendN:0); if(sendPick.value!==want) sendPick.set(want);
-  sendMenuSig=n+':'+sendN;
+  if(!sendTPick) sendTPick=scrollPick(document.getElementById('sendtb'),{label:'How many trebuchets to send',title:'How many trebuchets go?',
+    onPick:function(v){ if(!sel) return; sendT=parseInt(v,10)||0; sayMove(); draw(); }});
+  var counts=function(have,unit,none){
+    var o=[{value:0,label:'All '+have,short:'all '+have}];
+    for(var i=have-1;i>=1;i--) o.push({value:i,label:i+(i===Math.floor(have/2)&&have>2?' (half)':''),short:String(i)});
+    if(none) o.push({value:-1,label:'None',short:'no'});
+    return o;
+  };
+  document.getElementById('sendsel').classList.toggle('hide',!n); document.getElementById('sendsel-l').textContent=n?'Send':'';
+  document.getElementById('sendtb').classList.toggle('hide',!nt); var tbl=document.getElementById('sendtb-l'); tbl.classList.toggle('hide',!nt); tbl.textContent=n?'and trebuchets':'Send trebuchets';
+  if(n){ sendPick.setOptions(counts(n,'soldier',nt>0)); var want=String(sendN<0&&nt?-1:(sendN&&sendN<n?sendN:0)); if(sendPick.value!==want) sendPick.set(want); }
+  if(nt){ sendTPick.setOptions(counts(nt,'trebuchet',n>0)); var wt=String(sendT<0&&n?-1:(sendT&&sendT<nt?sendT:0)); if(sendTPick.value!==wt) sendTPick.set(wt); }
+  sendMenuSig=n+':'+sendN+':'+nt+':'+sendT;
   if(box.classList.contains('hide')){ box.classList.remove('hide'); unfurl(box); sendSpotSig=''; }
   var bw=box.offsetWidth||150, bh=box.offsetHeight||52, m=14, spotSig=[sel.q,sel.r,viewQ,viewR,Math.round(panX),Math.round(panY),S,W,H,bw,bh,cellsGen].join(',');
   if(spotSig===sendSpotSig) return;
@@ -2045,26 +2423,28 @@ function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
   if(selTrek) return redirectTrek(q,r);              // a walking band is selected: this click is its new destination
   if(!sel){
-    if(c.o!==ME || !(c.b>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground, or a band walking on the road.');
-    sel={q:q,r:r}; sendN=0; draw(); return sayMove();
+    if(c.o!==ME || !(c.b>0||c.tb>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground, a trebuchet, or a band walking on the road.');
+    sel={q:q,r:r}; sendN=0; sendT=0; draw(); return sayMove();
   }
   if(key(q,r)===key(sel.q,sel.r)){ sel=null; draw(); return say('Cancelled.'); }
   if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. To take that cell, stand a band next to it, then tap it and choose <b>Take this square</b>.');
-  var from=G.cells[key(sel.q,sel.r)], n=from&&from.b||0;
-  if(!n){ sel=null; draw(); return nope('That band is gone.'); }
-  var send=sendN&&sendN<n?sendN:n;
+  var from=G.cells[key(sel.q,sel.r)], n=from&&from.b||0, nt=from&&from.tb||0;
+  if(!n&&!nt){ sel=null; draw(); return nope('That band is gone.'); }
+  var send=sendCount(sendN,n), sendt=sendCount(sendT,nt);
+  if(!send&&!sendt) return nope('Nobody is set to go &mdash; choose how many soldiers or trebuchets on the scroll.');
   var d=roadLength(ME,sel.q,sel.r,q,r);
   if(d<0) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground between here and there.');
   // the walk costs no marches; the men leave the cell now and step onto the far one when the time is up
   var oq=sel.q, or=sel.r, now=Date.now(), ms=d*TREK_MS_CELL, id=ME+'-'+now.toString(36);
   var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapC(oq),wrapC(or)], to:[wrapC(q),wrapC(r)]};
+  if(sendt){ var trs=arr(from.tr).slice(0,nt); while(trs.length<nt) trs.push(0); tk.tb=sendt; tk.tr=trs.slice(0,sendt); from.tr=trs.slice(sendt); from.tb=nt-sendt; if(!from.tb){ delete from.tb; delete from.tr; } }
   G.treks=G.treks||{}; G.treks[id]=tk;
   from.b-=send; if(!from.b) delete from.b;
   sel=null;
-  logMove('mv',q,r,[oq,or],null,0,{n:send});
+  logMove('mv',q,r,[oq,or],null,0,{n:send,tb:sendt||null});
   render();
   putPath('/treks/'+id,tk).then(function(){ return pushCell(oq,or); });
-  say('<b>'+send+'</b> soldier'+(send>1?'s':'')+' set off along '+d+' cell'+(d>1?'s':'')+' of road &mdash; no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>, and guard nothing until they do.');
+  say('<b>'+(send?send+' soldier'+(send>1?'s':''):'')+(send&&sendt?' and ':'')+(sendt?sendt+' trebuchet'+(sendt>1?'s':''):'')+'</b> set off along '+d+' cell'+(d>1?'s':'')+' of road &mdash; no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>, and guard nothing until they do.');
 }
 /* where a walking band is right now: its map coordinates (on the copy of the world nearest the view) and screen point */
 function trekAt(tk,t){
@@ -2223,6 +2603,7 @@ function scrollDialog(o){
     wrap.className='sc-dlg'; wrap.setAttribute('role','dialog'); wrap.setAttribute('aria-modal','true'); wrap.setAttribute('aria-labelledby',hid);
     wrap.innerHTML='<div class="scroll"><div class="sc-body">'+(o.eyebrow?'<p class="sc-eyebrow">'+o.eyebrow+'</p>':'')
       +'<h2 id="'+hid+'">'+o.title+'</h2>'+(o.html||'')
+      +(o.list?'<div class="sc-items" role="listbox" aria-label="'+(o.listLabel||'Choices')+'" style="margin:0 -20px">'+o.list.map(function(x,i){ return optHtml(x,i,'option',false).replace('data-i=','data-l='); }).join('')+'</div>':'')
       +'<div class="sc-btns">'+btns.map(function(b,i){ return '<button type="button" class="sc-btn'+(b.primary?' primary':'')+'" data-b="'+i+'">'+b.label+'</button>'; }).join('')+'</div></div></div>';
     document.body.appendChild(wrap); unfurl(wrap.firstChild);
     function done(v){
@@ -2240,14 +2621,17 @@ function scrollDialog(o){
       var i=f.indexOf(document.activeElement);
       if(e.shiftKey && i<=0){ e.preventDefault(); f[f.length-1].focus(); } else if(!e.shiftKey && i===f.length-1){ e.preventDefault(); f[0].focus(); }
     }
+    if(o.list) scrollKeys(wrap.querySelector('.sc-items'),function(){ done(o.cancel===undefined?null:o.cancel); });
     wrap.addEventListener('click',function(e){
+      var li=e.target.closest('[data-l]');
+      if(li){ var it=o.list[parseInt(li.getAttribute('data-l'),10)]; if(it && it.why){ shake(li); return; } if(it) done(it.value); return; }
       var b=e.target.closest('[data-b]');
       if(b) done(btns[parseInt(b.getAttribute('data-b'),10)].value);
       else if(e.target===wrap && o.cancel!==undefined) done(o.cancel);
     });
     document.addEventListener('keydown',key,true);
     if(o.onOpen) o.onOpen(wrap);
-    var f=wrap.querySelector('[autofocus]')||wrap.querySelector('.sc-btn.primary')||wrap.querySelector('button');
+    var f=wrap.querySelector('[autofocus]')||wrap.querySelector('.sc-items .sc-opt')||wrap.querySelector('.sc-btn.primary')||wrap.querySelector('button');
     if(f) try{ f.focus({preventScroll:true}); }catch(e){ f.focus(); }
   });
 }
@@ -2272,12 +2656,14 @@ function bestBandBeside(q,r){
 function cellTitle(c){
   var wet=c.t===RIVER, who=c.o?(c.o===ME?'Your ':esc(nameOf(c.o))+'&rsquo;s '):'', what;
   if(c.k===CASTLE) what=isRuin(c)?'fallen castle':'castle'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
-  else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
+  else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l);
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
   if(c.o&&c.b>0) sub.push('band of '+c.b);
-  if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]);
+  if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]+(c.wd?' (cracked)':''));
+  if(c.o&&c.tb>0) sub.push(c.tb+' trebuchet'+(c.tb>1?'s':''));
+  if(c.k===CASTLE&&c.h!=null&&!isRuin(c)) sub.push('health '+castleH(c)+' of '+CASTLE_MAX_H);
   return t+(sub.length?'<span class="sc-sub">'+sub.join(' &middot; ')+'</span>':'');
 }
 function refundLine(r){ var p=[]; GOODS.forEach(function(k){ if(r[k]>0) p.push(r[k]+' '+k); }); return p.length?'+'+p.join(', ')+' back':'nothing back'; }
@@ -2289,34 +2675,41 @@ function cellActions(q,r){
     if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Pick a square touching your ground':marches(1));
     else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Build from your own bank':(marches(1)||lackText(BRIDGE_COST)));
   } else if(!own){
-    var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need=guns+(c.w||0)+guard.n, need2=guns+guard.n;
+    var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need2=guns+guard.n, L=defenderLine(q,r), band=attackBand(q,r);
     var bandWhy=function(n){ return !beside?'Needs one of your bands standing beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
-    var whyTake=!adj?'Pick a square touching your ground':(bandWhy(need)||marches(2));
-    var price='2 marches'+(need?' &middot; '+need+' soldier'+(need>1?'s':'')+' lost':'');
+    var whyTake=!adj?'Pick a square touching your ground':(!band?'Needs one of your bands standing beside it':marches(ATTACK_COST));
+    var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'');
     var take=function(){ spendMarch(q,r); };
     if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
     else if(c.k===CASTLE) A('Seize the fallen castle',price+' &middot; +'+CASTLE_BOUNTY+' marches',take,whyTake);
-    else if(c.k===TOWER) A('Tear down the tower',price,take,whyTake);
+    else if(c.k===TOWER) A('Attack the tower',price,take,whyTake);
     else if(wet) A('Take this bridge',price,take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
   } else if(building(c)){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
   } else {
-    if(c.b>0) A('Move soldiers','free &middot; '+(TREK_MS_CELL/36e5)+' h a square',function(){ startMove(q,r); });
+    if(c.b>0||c.tb>0) A(c.b>0&&c.tb>0?'Move soldiers and trebuchets':c.tb>0?'Move trebuchets':'Move soldiers','free &middot; '+(TREK_MS_CELL/36e5)+' h a square',function(){ startMove(q,r); });
+    if(c.tb>0){
+      var rdy=trebReady(c), tgt=fireTargets(q,r).length;
+      A('Fire'+(rdy?' ('+rdy+' ready)':''),TREB_SHOT+' stone &middot; '+TREB_DMG+' damage &middot; range '+TREB_RANGE,function(){ fireMenu(q,r); },
+        !rdy?'Next ready in '+hoursLeft(trebNext(c)):(!tgt?'No enemy wall, tower or castle within '+TREB_RANGE+' squares':lackText({stone:TREB_SHOT})));
+      A('Dismantle a trebuchet',refundLine(halfOf(TREB_COST)),function(){ dismantleTreb(q,r); });
+    }
     if(wet){
       A('Tear down your bridge',refundLine(demolishRefund(c,'bridge',q,r)),function(){ tearDown(q,r,'bridge'); });
     } else {
       var mine=fieldOf(ME);
       if(c.k){
         if(c.k===CASTLE) A('Muster a soldier','25 iron &middot; 40 grain',function(){ muster(q,r); },isRuin(c)?'A fallen castle can&rsquo;t muster':lackText({iron:25,grain:40}));
+        if(c.k===CASTLE) A('Build a trebuchet',costLine(TREB_COST)+' &middot; eats '+TREB_GRAIN+' grain a tick',function(){ buildTreb(q,r); },isRuin(c)?'Nothing is built at a ruin':lackText(TREB_COST));
         var lvl=c.l+1, uc={}; for(var k in SPEC[c.k].cost) uc[k]=SPEC[c.k].cost[k]*lvl;
         A('Upgrade to level '+ROMAN[Math.min(3,lvl)],costLine(uc),function(){ upgrade(q,r); },c.l>=3?'Already level III':(isRuin(c)?'A fallen castle can&rsquo;t be upgraded':lackText(uc)));
       }
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
       if(!c.k){
         var tc=SPEC[TOWER].cost;
-        A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc)||(mine<SPEC[TOWER].gar[1]?'Needs a soldier to man it':''));
+        A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
         var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs a road of your ground to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
@@ -2333,7 +2726,7 @@ function cellActions(q,r){
   return out;
 }
 function bandWhy2(beside){ return beside?'':'Needs one of your bands standing beside it'; }
-function startMove(q,r){ selTrek=null; sel={q:q,r:r}; sendN=0; draw(); sayMove(); }
+function startMove(q,r){ selTrek=null; sel={q:q,r:r}; sendN=0; sendT=0; draw(); sayMove(); }
 var menuFrom=null;                                   // what had the focus before the square menu opened, to give it back
 function renderCellMenu(){
   var box=document.getElementById('cellmenu'), at=menuAt; if(!at||!G||!me()) return;
@@ -2438,8 +2831,10 @@ function settleTreks(){
     }
     delete G.treks[id]; gone.push(id);
     if(!spot) return;                                  // nowhere left to stand
-    var c=cellOf(spot[0],spot[1]); c.b=(c.b||0)+(t.n||0); writeCell(spot[0],spot[1],c); touched.push(spot);
-    lines.push(t.n+' soldier'+(t.n>1?'s':'')+' reached '+(spot[0]===t.to[0]&&spot[1]===t.to[1]?'their destination':'your nearest ground (their destination was lost)'));
+    var c=cellOf(spot[0],spot[1]); c.b=(c.b||0)+(t.n||0);
+    if(t.tb>0){ var ctr=arr(c.tr).slice(0,c.tb||0); while(ctr.length<(c.tb||0)) ctr.push(0); var ttr=arr(t.tr); while(ttr.length<t.tb) ttr.push(0); c.tb=(c.tb||0)+t.tb; c.tr=ctr.concat(ttr.slice(0,t.tb)); }
+    writeCell(spot[0],spot[1],c); touched.push(spot);
+    lines.push((t.n?t.n+' soldier'+(t.n>1?'s':''):'')+(t.n&&t.tb?' and ':'')+(t.tb?t.tb+' trebuchet'+(t.tb>1?'s':''):'')+' reached '+(spot[0]===t.to[0]&&spot[1]===t.to[1]?'their destination':'your nearest ground (their destination was lost)'));
   });
   if(!touched.length && !gone.length) return;
   touched.forEach(function(p){ pushCell(p[0],p[1]); });
@@ -2456,7 +2851,7 @@ function drawTreks(now,amb){
     var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
     if(id===selTrek){ ctx.save(); ctx.strokeStyle=T['--ink']; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(P[0],P[1],Math.max(14,S*0.8),0,6.284); ctx.stroke(); ctx.restore(); }
-    var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,Math.max(1,tk.n||1));
+    var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,tk.n||0);
     // the road still to walk: a dashed line from where they are to where they are going, so a band
     // reads as "heading there" even when the map is too small to make out the walkers themselves
     ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=.7; ctx.lineWidth=Math.max(1.5,S*0.09); ctx.setLineDash([Math.max(3,S*0.28),Math.max(3,S*0.2)]);
@@ -2464,11 +2859,12 @@ function drawTreks(now,amb){
     ctx.beginPath(); ctx.moveTo(P[0],P[1]); ctx.lineTo(PB[0],PB[1]); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha=.9; ctx.beginPath(); ctx.arc(PB[0],PB[1],Math.max(3,S*0.16),0,6.284); ctx.fillStyle=col; ctx.fill(); ctx.restore();
     if(S>=16){                                       // close in: the men themselves, walking
+      if(tk.tb>0) artTrebuchet(ctx,P[0]-face*S*0.55,P[1]+S*0.32,S*0.5,col,now,tk.tb);   // a trebuchet hauled along behind
       for(var i=0;i<cnt;i++){
         var off=(i-(cnt-1)/2)*h*0.5;
         artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,col,{face:face, ph:amb?now*11+i*1.3:0});
       }
-      var lab=(tk.n||1)+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
+      var lab=(tk.n||'')+(tk.tb?(tk.n?' + ':'')+tk.tb+' treb':'')+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
       artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),col,1);
     } else {                                         // zoomed out: a numbered badge like a standing band, but with a dashed ring and a pointer toward where it is headed
       var s=Math.max(11,S*0.5), R=s*0.62, ang=Math.atan2(PB[1]-P[1],PB[0]-P[0]);
@@ -2479,7 +2875,7 @@ function drawTreks(now,amb){
       ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(ax+Math.cos(ang)*ah,ay+Math.sin(ang)*ah);
       ctx.lineTo(ax+Math.cos(ang+2.4)*ah,ay+Math.sin(ang+2.4)*ah); ctx.lineTo(ax+Math.cos(ang-2.4)*ah,ay+Math.sin(ang-2.4)*ah); ctx.closePath(); ctx.fill();
       ctx.fillStyle=T['--ink']; ctx.font='600 '+Math.round(s*0.78)+'px ui-monospace, monospace';
-      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(tk.n||1),P[0],P[1]+0.5);
+      ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tk.n?String(tk.n):'T',P[0],P[1]+0.5);
       ctx.restore();
     }
   });
@@ -2998,8 +3394,8 @@ function artArrow(g,x0,y0,x1,y1,k,h){                 // k 0–1 along a lobbed 
           · upgrade (bk, lvl) · muster · claim (n soldiers, label)
    pos(q,r) gives screen [x,y]; s is the hex radius on screen. ANIM_REVEAL is when the
    map should start showing the finished result under the animation (0: nothing hidden). */
-var ANIM_DUR={move:1.6, march:1.6, battle:3.0, build:1.8, wall:2.1, raise:2.9, upgrade:2.2, muster:1.9, claim:2.7, raze:1.7};
-var ANIM_REVEAL={move:1.15, march:1.15, battle:2.35, build:1.4, wall:1.55, raise:2.35, upgrade:1.45, muster:0, claim:0, raze:0.45};
+var ANIM_DUR={move:1.6, march:1.6, battle:3.0, build:1.8, wall:2.1, raise:2.9, upgrade:2.2, muster:1.9, claim:2.7, raze:1.7, shot:2.0, loot:1.8};
+var ANIM_REVEAL={move:1.15, march:1.15, battle:2.35, build:1.4, wall:1.55, raise:2.35, upgrade:1.45, muster:0, claim:0, raze:0.45, shot:1.25, loot:0};
 var ART_ROMAN=['','I','II','III'];
 function crewSpot(B,s,i,n){ var ang=Math.PI*(0.15+0.7*(n>1?i/(n-1):0.5)); return [B[0]+Math.cos(ang)*s*0.62*(i%2?1:-1), B[1]+s*0.34+Math.sin(ang)*s*0.12]; }
 function drawWorks(g,a,t,A,B,s,h){
@@ -3062,6 +3458,20 @@ function drawWorks(g,a,t,A,B,s,h){
     if(kr>0&&kr<1){ g.save(); g.globalAlpha*=1-kr; g.strokeStyle=NAT.oreHi; g.lineWidth=Math.max(1.5,s*0.06);
       g.beginPath(); g.arc(B[0],B[1],s*(0.45+0.7*kr),0,Math.PI*2); g.stroke(); g.restore(); }
     artLabel(g,B[0],B[1]-s*1.05-ease3((t-R)/0.6)*s*0.25,'Level '+ART_ROMAN[a.lvl||2],Math.max(10,s*0.38),a.col,t>R-0.1?Math.min(1,(t-R+0.1)/0.2):0);
+    return;
+  }
+  if(a.kind==='shot'){                                 // a stone hurled from the trebuchet, arcing to the target, and a puff where it lands
+    var ks2=(t-0.15)/1.1, lift=Math.hypot(B[0]-A[0],B[1]-A[1])*0.45+s*0.8;
+    if(t<0.4) artDust(g,A[0],A[1]+s*0.2,s*0.3,t/0.4);
+    if(ks2>0&&ks2<1){ var sx=A[0]+(B[0]-A[0])*ks2, sy=A[1]-s*0.4+(B[1]-A[1]+s*0.4)*ks2-lift*4*ks2*(1-ks2);
+      blob(g,sx,sy,Math.max(1.6,s*0.08),Math.max(1.6,s*0.08),NAT.rock2); blob(g,sx-s*0.02,sy-s*0.02,Math.max(0.8,s*0.035),Math.max(0.8,s*0.035),NAT.rockHi); }
+    if(t>1.2){ artDust(g,B[0],B[1],s*0.6,(t-1.2)/0.7); artSpark(g,B[0],B[1]-s*0.1,s*0.4,(t-1.2)/0.35); }
+    artLabel(g,B[0],B[1]-s*0.95-ease3((t-1.25)/0.7)*s*0.25,a.label||'',Math.max(10,s*0.34),a.col,t>1.25?Math.min(1,(t-1.25)/0.2):0);
+    return;
+  }
+  if(a.kind==='loot'){                                 // the spoils carried off, floating up from the square
+    artSpark(g,B[0],B[1]-s*0.2,s*0.45,t/0.5);
+    artLabel(g,B[0],B[1]-s*0.6-ease3(t/1.2)*s*0.5,a.label||'',Math.max(10,s*0.34),a.col,Math.min(1,t/0.2));
     return;
   }
   if(a.kind==='raze'){                                 // something torn down: a billow of dust, stones tumbling out, and what came back
@@ -3138,7 +3548,12 @@ function drawAnim(g,a,now,pos,s){
       artSpark(g,meet[0]+jx,meet[1]-h*0.55+jy,h*0.5,(t-st2)/0.3);
       artDust(g,meet[0]+jx*1.2,meet[1]+jy*0.5,s*0.4,(t-st2+0.1)/0.7);
     }
-    artFlag(g,B[0]+s*0.1,B[1]+s*0.35,h*1.3,a.col,(t-ANIM_REVEAL.battle+0.05)/0.3);
+    if(!a.lost) artFlag(g,B[0]+s*0.1,B[1]+s*0.35,h*1.3,a.col,(t-ANIM_REVEAL.battle+0.05)/0.3);
+    if(a.log && a.log.length){                         // the duels, one pip each as they are fought: a defender down, or one of the attackers
+      var nl=a.log.length, shown=Math.max(0,Math.min(nl,Math.ceil((t-0.9)/1.3*nl))), pr=Math.max(2,Math.min(s*0.09,(s*1.8)/Math.max(1,nl)/2.4)), py=B[1]-s*0.95;
+      for(var di=0;di<shown;di++){ var pxx=B[0]+(di-(nl-1)/2)*pr*2.4; g.save(); g.globalAlpha*=0.95; blob(g,pxx,py,pr,pr,a.log[di]?a.col:a.dcol); g.restore(); }
+    }
+    if(a.label) artLabel(g,B[0],B[1]-s*1.25-ease3((t-2.3)/0.6)*s*0.2,a.label,Math.max(10,s*0.34),a.lost?a.dcol:a.col,t>2.3?Math.min(1,(t-2.3)/0.2):0);
   }
   g.restore();
 }
@@ -3213,11 +3628,17 @@ function drawBuilding(c,cx,cy,r,col,detail){
     ctx.globalAlpha=1; ctx.fillStyle=col; ctx.fillText(nmx,cx,ny);
     ctx.restore();
   }
-  var need=SPEC[c.k].gar[c.l];
+  if(c.k===TOWER && c.h!=null && c.h<towerMax(c.l)){     // a damaged tower shows how much health it has left
+    var tf=Math.max(0,c.h)/towerMax(c.l), tbw=r*0.6, tbh=Math.max(2,r*0.08), tbx=cx-tbw/2, tby=cy-r*0.66;
+    ctx.save(); ctx.globalAlpha=.9; ctx.fillStyle=T['--sink']; ctx.fillRect(tbx,tby,tbw,tbh);
+    ctx.fillStyle=tf>0.34?T['--p0']:T['--p1']; ctx.fillRect(tbx,tby,tbw*tf,tbh);
+    ctx.globalAlpha=.7; ctx.strokeStyle=T['--ink']; ctx.lineWidth=1; ctx.strokeRect(tbx,tby,tbw,tbh); ctx.restore();
+  }
+  var need=c.k===TOWER?0:garNeed(c);
   for(var i=0;i<c.l;i++){
     var px=cx-(c.l-1)*r*0.13+i*r*0.26, py=cy+r*(detail?0.7:0.62);
     ctx.beginPath(); ctx.arc(px,py,Math.max(1.4,r*0.075),0,6.284);
-    if(i<c.g||c.g>=need){ ctx.fillStyle=T['--steel']; ctx.fill(); }
+    if(c.k===TOWER||i<c.g||c.g>=need){ ctx.fillStyle=T['--steel']; ctx.fill(); }
     else { ctx.strokeStyle=T['--p1']; ctx.lineWidth=1.2; ctx.stroke(); }
   }
 }
@@ -3324,7 +3745,7 @@ function draw(){
   var sup=me()?supplied(ME):{};
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
-  var guns=[], walls=[], builds=[], spans=[], bands=[], detail=S>=7, now=clock();
+  var guns=[], walls=[], builds=[], spans=[], bands=[], trebs=[], detail=S>=7, now=clock();
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
@@ -3363,7 +3784,8 @@ function draw(){
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
     if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!G.cells[key(q,r)].bx);
     if(c.w>0) walls.push([c,p]);
-    if(c.k){ builds.push([c,p,col]); if(c.g>0) guns.push([c,p,col]); }
+    if(c.k){ builds.push([c,p,col]); if(c.k===TOWER||(c.g>0&&!isRuin(c))) guns.push([c,p,col]); }
+    if(c.tb>0 && c.o && !vl) trebs.push([c,p,col]);
     if(c.b>0 && c.o) bands.push([c,p,col]);
     if(amb){
       if(wet){ if(!c.o) waters.push([p,q,r]); }
@@ -3400,6 +3822,10 @@ function draw(){
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
+  trebs.forEach(function(e){                         // trebuchets stand to the lower left of the square, out of the band badge's way
+    if(S>=12) artTrebuchet(ctx,e[1][0]-S*0.36,e[1][1]+S*0.5,S*0.5,e[2],now,e[0].tb);
+    else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.55,e[1][1]+S*0.45); ctx.lineTo(e[1][0]-S*0.3,e[1][1]+S*0.05); ctx.lineTo(e[1][0]-S*0.05,e[1][1]+S*0.45); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  });
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
   drawCaravans(now,amb);
   drawTreks(now,amb);
@@ -3452,9 +3878,9 @@ function fromFor(q,r,pid){
   for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===pid&&!building(n)) return [nq,nr]; }
   return [q-1,r];
 }
-function gunsAt(q,r,pid){                          // manned towers and keeps of pid that cover (q,r)
+function gunsAt(q,r,pid){                          // standing towers and manned keeps of pid that cover (q,r)
   var out=[];
-  for(var k in G.cells){ var c=G.cells[k]; if(!c.k||c.o!==pid||!c.g) continue;
+  for(var k in G.cells){ var c=G.cells[k]; if(!c.k||c.o!==pid||(c.k===CASTLE&&(!c.g||isRuin(c)))) continue;
     var p=k.split('_'), cq=parseInt(p[0],10), cr=parseInt(p[1],10);
     if(hexDist(q,r,cq,cr)<=SPEC[c.k].range[c.l]) out.push([cq,cr]); }
   return out.slice(0,3);
@@ -3472,20 +3898,20 @@ function animTick(){
 }
 /* event kinds: m march · b battle · br bridge · w wall · tw tower · cs castle · up upgrade · ms muster
    (claims are not logged twice: the claim log already has them, and replays read it) */
-var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze'};
+var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze',duel:'battle',fire:'shot',collapse:'raze',spoils:'loot',tbk:'build'};
 /* replays play only kinds this version knows; anything older (the October guillotine, for one) is skipped quietly */
-var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1};
+var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1,duel:1,fire:1,collapse:1,spoils:1,tbk:1};
 function replayable(e){ return !!(e && REPLAY_KINDS[e.k] && !e.ex && !e.bt && !e.gs); }
 function veilFor(ev){                                // how the cell looked just before this move
   switch(ev.k){
     case 'm': case 'br': return {o:null};
     case 'mv': return null;      // (a band's walk is drawn live on the road, see drawTreks)
     case 'brk': return {o:ev.prev||ev.pid};
-    case 'b': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
+    case 'b': case 'duel': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
     case 'w': return {o:ev.pid, w:(ev.lvl||1)-1, k:ev.bk||null, l:ev.bl||0};
     case 'dm': return ev.dm==='bridge'?{o:ev.pid}:{o:ev.pid, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0};
     case 'tw': case 'cs': return {o:ev.pid, w:ev.pw||0};
-    case 'up': var bk=ev.bk===CASTLE?CASTLE:TOWER, l=(ev.lvl||2)-1; return {o:ev.pid, k:bk, l:l, g:SPEC[bk].gar[l]};
+    case 'up': var bk=ev.bk===CASTLE?CASTLE:TOWER, l=(ev.lvl||2)-1; return {o:ev.pid, k:bk, l:l, g:bk===CASTLE?SPEC[CASTLE].gar[l]:0};
   }
   return null;
 }
@@ -3493,10 +3919,15 @@ function play(ev,delay){
   if(REDUCE||!G) return 0;
   var kind=ANIM_KIND[ev.k]; if(!kind) return 0;
   if(ev.k==='brk') kind=ev.prev?'battle':'move';
-  var veil=veilFor(ev);
-  anims.push({kind:kind, t0:clock()+(delay||0), from:ev.fq!=null?[ev.fq,ev.fr]:null, to:[ev.q,ev.r],
+  var veil=veilFor(ev), dl=null, lost=false, lab=ev.label;
+  if(ev.k==='duel' && ev.ln && ev.seed!=null){       // the same fight again, duel by duel, from the stored seed
+    var fo=fightOut(ev.n||0,arr(ev.ln).map(function(x){ return x/100; }),ev.seed); dl=fo.log; lost=!fo.won;
+    lab=fo.won?'Taken'+(ev.sp?' · +'+goodsText(ev.sp):''):'Beaten back';
+  }
+  if(ev.k==='spoils') lab='+'+goodsText(ev.sp||{});
+  anims.push({kind:kind, t0:clock()+(delay||0), from:ev.fq!=null?[ev.fq,ev.fr]:null, to:[ev.q,ev.r], log:dl, lost:lost,
     key:veil?key(ev.q,ev.r):null, veil:veil, col:colorFor(ev.pid), dcol:colorFor(ev.prev), loss:ev.loss||0,
-    lvl:ev.lvl, bk:ev.k==='tw'?TOWER:ev.k==='cs'?CASTLE:ev.bk, n:ev.n, label:ev.label,
+    lvl:ev.lvl, bk:ev.k==='tw'?TOWER:ev.k==='cs'?CASTLE:ev.bk, n:ev.n, label:lab,
     guns:kind==='battle'&&ev.prev?gunsAt(ev.q,ev.r,ev.prev):[]});
   kick();
   return ANIM_DUR[kind];
@@ -3540,7 +3971,16 @@ function describe(e){
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
   if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
   if(e.k==='m') return who+' marched into new ground.';
-  if(e.k==='dm') return who+' tore down '+({wall:'a wall course',tower:'a tower',castle:'a castle',bridge:'a bridge'}[e.dm]||'something')+' of their own'+(e.label&&e.label!=='nothing back'?' ('+esc(e.label)+')':'')+'.';
+  if(e.k==='tbk') return who+' built a trebuchet.';
+  if(e.k==='fire') return (e.prev===ME?who+' <span class="bad">hit your '+(e.tg||'works')+' with a trebuchet</span>':who+' hit a '+(e.tg||'target')+' of '+esc(nameOf(e.prev))+' with a trebuchet')+(e.out?' &mdash; '+esc(e.out):'')+'.';
+  if(e.k==='collapse') return e.prev===ME?'<span class="bad">One of your towers collapsed.</span>':'A tower of '+esc(nameOf(e.prev))+' collapsed.';
+  if(e.k==='spoils') return e.prev===ME?who+' <span class="bad">carried off '+goodsText(e.sp||{})+' of yours</span>.':who+' carried off '+goodsText(e.sp||{})+' from '+esc(nameOf(e.prev))+'.';
+  if(e.k==='duel'){
+    var dw=(e.pk===CASTLE?'fallen castle':e.pk===TOWER?'tower':'square'), dl2=e.loss?' (lost '+e.loss+')':'';
+    if(e.won) return (e.prev===ME?who+' <span class="bad">took your '+dw+'</span>':who+' took a '+dw+' from '+esc(nameOf(e.prev)))+dl2+(e.cb?' and '+e.cb+' marches':'')+(e.sp?', with '+goodsText(e.sp)+' in spoils':'')+'.';
+    return (e.prev===ME?who+' attacked your '+dw+' and <span class="good">was beaten back</span>':who+' attacked a '+dw+' of '+esc(nameOf(e.prev))+' and was beaten back')+(e.kl?', after bringing down '+e.kl+' defender'+(e.kl>1?'s':''):'')+'.';
+  }
+  if(e.k==='dm') return who+' tore down '+({wall:'a wall course',tower:'a tower',castle:'a castle',bridge:'a bridge',treb:'a trebuchet'}[e.dm]||'something')+' of their own'+(e.label&&e.label!=='nothing back'?' ('+esc(e.label)+')':'')+'.';
   if(!REPLAY_KINDS[e.k]) return '';
   var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
   var base;
@@ -3921,7 +4361,7 @@ function ambKeeps(g,builds,now){
   g.save();
   builds.forEach(function(e){
     var c=e[0], cx=e[1][0], cy=e[1][1]-s*0.06, h=artHash(wrapC(c.q),wrapC(c.r),41);
-    if(!(c.g>0)) return;                              // an empty keep is cold and dark
+    if(!(c.g>0) && c.k!==TOWER) return;               // an empty keep is cold and dark (a tower needs nobody inside now)
     var f=0.72+0.28*Math.sin(now*11+h*30)*Math.sin(now*6.7+h*13);
     if(c.k===CASTLE){
       ambGlow(g,cx-s*0.34,cy-s*0.03,s*0.16,0.8*f); ambGlow(g,cx+s*0.34,cy-s*0.03,s*0.16,0.8*(1.4-f));
@@ -4262,15 +4702,15 @@ canvas.addEventListener('wheel',function(ev){
 var MODES={menu:'m-menu',claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop',move:'m-move',break:'m-break'};
 var HINTS={
   menu:'Tap any square on the map. A small menu opens beside it with everything you can do there and what it costs; anything you can&rsquo;t do right now is greyed, with the reason. The buttons below the map are shortcuts that stay on one action &mdash; handy for claiming several squares in a row.',
-  claim:'Click any dashed cell touching your ground to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it, big enough to pay for their walls, guns and guarding band with one left over to hold it. Rivers can&rsquo;t be marched into &mdash; bridge them.',
+  claim:'Click any dashed cell touching your ground to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
   bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
-  tower:'Click ground you hold to raise a watchtower. While a soldier is inside, its guns cost attackers soldiers.',
+  tower:'Click ground you hold to raise a watchtower. It needs nobody inside: it has 10 health (20 and 30 when upgraded), makes every attack on your ground in its range harder, and a damaged tower mends 1 health a tick for 1 stone.',
   castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle must be built where your own ground links it to a grain square (a farm you hold), never on one: if no farm is connected to it, it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
-  upgrade:'Click one of your towers or castles to upgrade it — more reach, more men locked inside.',
+  upgrade:'Click one of your towers or castles to upgrade it — a tower gains health and reach; a castle gains reach and more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
-  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: taking one costs the attacker a soldier for each of yours. To change a walking band\'s course, click it on the map, then click a new destination.'
+  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: an attacker has to win a duel against each of its soldiers. To change a walking band\'s course, click it on the map, then click a new destination.'
 };
 var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
 function whyLocked(m){
@@ -4367,7 +4807,7 @@ document.getElementById('claims-more').addEventListener('click',function(){ show
    older code than the board refuses to play and asks for a reload. */
 var STEWARDS={p16vnclj:1};                            // Bohrer
 function isSteward(pid){ return !!STEWARDS[pid==null?ME:pid]; }
-var DATA_V=1;                                         // the newest board layout this code understands
+var DATA_V=2;                                         // the newest board layout this code understands
 function migMeta(b){ return (b&&b.meta&&b.meta.migration)||{}; }
 function boardVersion(b){ return migMeta(b).v||0; }
 function migrationPending(b){ var st=migMeta(b).steps||{}; return MIGRATIONS.filter(function(s){ return s.stage<=DATA_V && !st[s.id]; }); }
@@ -4390,6 +4830,15 @@ var MIGRATIONS=[
       if(c.k && !cs.k){ var d=defaultSpend(cc,'k',q,r,b.players); cs.k=Object.keys(d).length?d:{timber:0}; ch=true; }   // (the free starting keep: nothing paid)
       if(wet && !cs.br){ cs.br=defaultSpend(cc,'br',q,r,b.players); ch=true; }
       if(ch){ patch['cells/'+k+'/cs']=cs; n++; }
+    });
+    return {n:n, patch:patch};
+  }},
+  {id:'towers', stage:2, title:'Send each tower&rsquo;s garrison out as a band and give it full health', scan:function(b){
+    var patch={}, n=0, cells=b.cells||{};
+    Object.keys(cells).forEach(function(k){
+      var c=cells[k]; if(!c||c.k!==TOWER) return;
+      if((c.g||0)>0){ patch['cells/'+k+'/b']=(c.b||0)+c.g; patch['cells/'+k+'/g']=0; patch['cells/'+k+'/d']=0; n++; }
+      if(c.h!=null){ patch['cells/'+k+'/h']=null; if(!(c.g>0)) n++; }      // full health is no health stored
     });
     return {n:n, patch:patch};
   }}
@@ -4486,7 +4935,10 @@ function enterGame(isNew){
 var NOTES=[
   {id:'nov26-scrolls', eyebrow:'New this November', title:'Menus on scrolls, and tearing down',
    html:'<p>Every menu and picker is now written on a scroll, with the price in the margin and the reason beneath anything you can&rsquo;t do yet.</p>'
-     +'<p>You can <b>tear down</b> your own walls, towers, castles and bridges from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'}
+     +'<p>You can <b>tear down</b> your own walls, towers, castles and bridges from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
+  {id:'nov26-battles', eyebrow:'New this November', title:'Battles, towers and trebuchets',
+   html:'<p>A battle is now a chain of duels, and a scroll shows your odds before you attack. Take a square and you carry off a share of its owner&rsquo;s stores.</p>'
+     +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'}
 ];
 function noteSeen(id){
   var pl=me();
@@ -4719,6 +5171,7 @@ function join(){
     } else G.players[ME].name=name;
     G.players[ME].rn=realName;                       // real name, shown next to the user name everywhere
     G.players[ME].pin=tryHash;                    // first time a name is used it claims its PIN
+    meTag=null; meBase=snapRes(G.players[ME].res);    // the stores as the database has them, before this tab adds anything
     var moved=isNew?[]:migrateBands(ME);
     catchUp(ME);
     enterGame(isNew);
@@ -4977,7 +5430,7 @@ function coachPlan(){
   if(need) return {key:'vote', txt:'<b>'+esc(nameOf(G.claims[need].pid))+'</b>&rsquo;s step claim has been disputed and needs your vote.', el:'claims-panel', go:'Take me there'};
   if(R.gar[0]<R.gar[1] && !fieldOf(ME) && !transitOf(ME) && pl.res.iron>=25 && pl.res.grain>=40){
     var cs=myCastleCells(ME)[0];
-    if(cs) return {key:'muster', txt:'Worth knowing: one of your towers or castles is short of men and will crumble. Mustering a soldier at your castle would man it.', mode:'troop', target:cs, label:'Idea: muster here'};
+    if(cs) return {key:'muster', txt:'Worth knowing: one of your castles is short of men and will crumble. Mustering a soldier at your castle would man it.', mode:'troop', target:cs, label:'Idea: muster here'};
   }
   var extra=(R.own>R.sup?' Hatched cells are cut off from your castles and produce nothing &mdash; link them back up.':'')
     +(!done?' Don&rsquo;t forget to claim today&rsquo;s steps once you&rsquo;ve walked.':'');
@@ -4991,7 +5444,7 @@ function coachPlan(){
     }
   }
   if(!done && pl.squares<1) return {key:'claim', txt:'You&rsquo;re out of marches. After you walk, type <b>today&rsquo;s step count</b> from the Health app in the box above the map and press <b>Claim</b> to get more.', el:'stepsin'};
-  if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? A <b>watchtower</b> on your border is one way to use them &mdash; while a soldier mans it, attackers lose men taking ground near it.'+extra, mode:'tower', target:bt, label:'Idea: a tower here', go:'Suggest a spot'}; }
+  if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? A <b>watchtower</b> on your border is one way to use them &mdash; it makes every attack on your ground nearby harder.'+extra, mode:'tower', target:bt, label:'Idea: a tower here', go:'Suggest a spot'}; }
   if(pl.res.stone>=30){ var bw=borderCell(); if(bw) return {key:'wall', txt:'Spare stone? A <b>wall</b> on a border cell makes it cost attackers more to take.'+extra, mode:'wall', target:bw, label:'Idea: a wall here', go:'Suggest a spot'}; }
   return {key:'rest', txt:(done?'That&rsquo;s everything for today &mdash; tomorrow&rsquo;s steps bring new marches.':'Nothing to spend until you claim some steps.')+' Say hello in the chat at the bottom of the screen.', el:'chat-in', go:'Open the chat'};
 }
