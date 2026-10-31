@@ -5543,11 +5543,16 @@ function barredSponsor(pid,b){
    A probationer is cleared only by a sponsorship written after PROBATION_FROM by someone other than "founding". */
 var PROBATION_NAMES=['bam','patrick','getcooked','thetrueking','thegods','thegeneralduck'];
 var PROBATION_FROM=Date.UTC(2026,9,31,18,29), PROBATION_DUE=Date.UTC(2026,10,4,18,29), PROBATION_ID='sp1';
+/* one of the six: by name, whether or not they are on the board right now. None of them may ever vouch for another. */
+function probationNamed(pid,b){
+  b=b||G; var p=b&&b.players&&b.players[pid], s=b&&b.sponsorships&&b.sponsorships[pid];
+  return PROBATION_NAMES.indexOf(nameKey(p?p.name:(s&&s.name)))>=0;
+}
 function onProbation(pid,b){
   b=b||G; var p=b&&b.players&&b.players[pid];
   if(!p || PROBATION_NAMES.indexOf(nameKey(p.name))<0) return false;
   var s=sponsorRec(pid,b);
-  return !(s && s.by && s.by!=='founding' && !s.fake && !s.gone && (s.t||0)>=PROBATION_FROM && !barredSponsor(s.by,b));
+  return !(s && s.by && s.by!=='founding' && !s.fake && !s.gone && (s.t||0)>=PROBATION_FROM && !barredSponsor(s.by,b) && !probationNamed(s.by,b));
 }
 function probationLeft(){
   var ms=PROBATION_DUE-Date.now(); if(ms<=0) return 'no time';
@@ -5613,7 +5618,8 @@ var sponsorPick=null, joinBoard=null;
 function loadSponsors(b){
   joinBoard=b;
   if(!sponsorPick) sponsorPick=scrollPick(document.getElementById('sponsor-pick'),{label:'Who vouches for you?',title:'Who vouches for you?',placeholder:'Pick someone who knows you',empty:'Nobody can sponsor right now.'});
-  var ids=Object.keys(b.players||{}).filter(function(p){ return canSponsor(p,b); })
+  var applicant=pidFor((document.getElementById('handle').value||'').trim().slice(0,16));
+  var ids=Object.keys(b.players||{}).filter(function(p){ return canSponsor(p,b) && !(probationNamed(p,b) && probationNamed(applicant,b)); })
     .sort(function(x,y){ return (b.players[x].name||'').toLowerCase().localeCompare((b.players[y].name||'').toLowerCase()); });
   sponsorPick.setOptions(ids.map(function(p){ return {value:p, label:esc(full(b.players[p]))}; }));
   document.getElementById('sponsor-f').classList.remove('hide');
@@ -5655,7 +5661,7 @@ function waitSponsor(pid,rec){
 function requestsForMe(){
   var now=Date.now();
   return Object.keys(G.pending||{}).map(function(pid){ var p=G.pending[pid]; return p&&{pid:pid,p:p}; })
-    .filter(function(x){ return x && !x.p.ok && !x.p.no && ((x.p.sponsor===ME && !barredSponsor(ME,G)) || (isSteward() && (x.p.probe || now-x.p.t>SPONSOR_ESCALATE_MS))); })
+    .filter(function(x){ return x && !x.p.ok && !x.p.no && ((x.p.sponsor===ME && !barredSponsor(ME,G) && !(probationNamed(ME,G) && probationNamed(x.pid,G))) || (isSteward() && (x.p.probe || now-x.p.t>SPONSOR_ESCALATE_MS))); })
     .sort(function(a,b){ return a.p.t-b.p.t; });
 }
 function renderSponsorBtn(){
@@ -5673,6 +5679,7 @@ function openRequests(){
 }
 function answerRequest(pid,p){
   if(barredSponsor(ME,G)) return say('You may not sponsor anyone.');
+  if(probationNamed(ME,G) && probationNamed(pid,G)) return say('You may not sponsor this player.');
   scrollDialog({eyebrow:'Vouch for a new player', title:esc(p.name)+' <span class="sc-sub">real name: '+esc(p.rn)+'</span>',
     html:'<p>Only vouch for someone you know in real life. What you write is kept for good with their name.</p>'
       +'<div class="sc-field"><label for="sp-how">How do you know them, and for how long?</label><textarea id="sp-how" rows="3" maxlength="400" style="font-size:16px"></textarea></div>'
@@ -6397,6 +6404,7 @@ function join(){
       var B2=G, spPid2=sponsorPick&&sponsorPick.value, pl2=B2.players[tryPid]; G=null; loadSponsors(B2);
       hintEl.innerHTML='<span class="bad">You cannot play until a sponsor approves you.</span> '+probationShort();
       if(!spPid2) return;
+      if(probationNamed(spPid2,B2)){ hintEl.innerHTML='<span class="bad">The players who need a sponsor cannot sponsor each other.</span> Pick someone else under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
       if(!canSponsor(spPid2,B2)){ hintEl.innerHTML='<span class="bad">'+esc(full(B2.players[spPid2]||{name:'That player'}))+' can&rsquo;t sponsor anyone.</span> Pick someone else under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
       var req2={name:pl2.name,pin:tryHash,rn:realName,sponsor:spPid2,t:Date.now(),probe:1}, spn2=full(B2.players[spPid2]);
       hintEl.textContent='Sending your request…';
@@ -6412,6 +6420,7 @@ function join(){
         if(pend){ var pn=nameOf(pend.sponsor); G=null; waitSponsor(tryPid,{name:pend.name,rn:pend.rn,sponsorName:pn}); return; }
         var B=G, spPid=sponsorPick&&sponsorPick.value; G=null; loadSponsors(B);
         if(!spPid){ hintEl.innerHTML='<span class="bad">New players need someone already playing to vouch for them.</span> Pick who knows you under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
+        if(probationNamed(spPid,B) && probationNamed(tryPid,B)){ hintEl.innerHTML='<span class="bad">The players who need a sponsor cannot sponsor each other.</span> Pick someone else.'; return; }
         if(!canSponsor(spPid,B)){ hintEl.innerHTML='<span class="bad">'+esc(full(B.players[spPid]||{name:'That player'}))+' can&rsquo;t sponsor anyone right now.</span> Pick someone else.'; return; }
         var req={name:name,pin:tryHash,rn:realName,sponsor:spPid,t:Date.now()}, spn=full(B.players[spPid]);
         hintEl.textContent='Sending your request…';
