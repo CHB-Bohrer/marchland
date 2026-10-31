@@ -217,9 +217,11 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .scroll.unfurl::after{ animation:unfurlrod .34s cubic-bezier(.2,.7,.3,1) both; }
 @media (prefers-reduced-motion: reduce){ .scroll.unfurl,.scroll.unfurl::after,.sc-pop.sheet,.cellmenu.unfurl{ animation:none !important; } }
 .scroll h2,.scroll h3,.sc-title{ font-family:var(--display); color:var(--parch-ink); }
-.sc-title{ padding:12px 14px 7px; font-size:15px; line-height:1.25; border-bottom:1px solid var(--parch-rule); }
+.sc-x{ position:absolute; top:5px; right:6px; z-index:3; width:38px; height:38px; min-height:0; padding:0; display:flex; align-items:center; justify-content:center; font:400 26px/1 var(--fell); color:var(--parch-ink); background:rgba(255,250,236,.55); border:1px solid var(--parch-rule); border-radius:50%; cursor:pointer; }
+.sc-x:hover{ background:rgba(140,96,40,.2); } .sc-x:focus-visible{ outline:2px solid var(--parch-ink-2); outline-offset:1px; }
+.sc-title{ padding:12px 52px 7px 14px; font-size:15px; line-height:1.25; border-bottom:1px solid var(--parch-rule); }
 .sc-sub{ display:block; font-family:var(--fell); font-style:italic; font-size:13.5px; color:var(--parch-ink-2); font-weight:400; }
-.sc-items{ display:flex; flex-direction:column; max-height:60vh; overflow:auto; overscroll-behavior:contain; padding:2px 0 6px; }
+.sc-items{ display:flex; flex-direction:column; max-height:46vh; overflow:auto; overscroll-behavior:contain; padding:2px 0 6px; }
 .sc-opt{ display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:0 12px; width:100%; min-height:44px; text-align:left; padding:9px 14px;
   border:0; border-bottom:1px solid var(--parch-rule); border-radius:0; background:transparent; color:var(--parch-ink); font-family:var(--fell); font-size:17px; font-weight:400; line-height:1.2; cursor:pointer; }
 .sc-opt:last-child{ border-bottom:0; }
@@ -248,16 +250,18 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .spick .sp-c{ font-size:11px; color:var(--ink-2); }
 .sendmenu .spick{ min-height:40px; min-width:96px; font-size:17px; background:rgba(255,250,236,.55); color:var(--parch-ink); border-color:var(--parch-rule); }
 .sc-pop{ position:fixed; z-index:100020; min-width:180px; max-width:min(360px, calc(100vw - 24px)); }
-.sc-pop .sc-items{ max-height:min(52vh,420px); }
+.sc-pop .sc-items{ max-height:min(40vh,340px); }
 .sc-pop.sheet{ left:10px !important; right:10px; top:auto !important; bottom:calc(10px + var(--cbh, 0px) + env(safe-area-inset-bottom, 0px)); max-width:none; animation:slideup .26s ease-out both; }
 .sc-pop.sheet::after{ animation:none !important; }
 /* a confirmation or a notice on a scroll */
 .sc-dlg{ position:fixed; inset:0; z-index:100012; background:rgba(28,18,8,.5); display:flex; align-items:center; justify-content:center; padding:16px; overflow-y:auto; }
 @media (prefers-color-scheme: dark){ .sc-dlg{ background:rgba(0,0,0,.72); } }
 .sc-dlg .scroll{ width:100%; max-width:520px; }
-.sc-body{ padding:16px 20px 18px; max-height:calc(100vh - 80px); overflow-y:auto; font-size:17px; line-height:1.45; }
+.sc-body{ padding:16px 20px 18px; max-height:calc(100vh - 80px); max-height:calc(100dvh - 64px); overflow-y:auto; font-size:17px; line-height:1.45; }
 .sc-body p{ margin:0 0 10px; } .sc-body ul{ margin:0 0 10px; padding-left:20px; } .sc-body li{ font-size:16.5px; margin-bottom:6px; }
-.sc-body h2{ font-size:24px; line-height:1.15; margin:2px 0 10px; }
+.sc-body h2{ font-size:22px; line-height:1.15; margin:2px 0 10px; padding-right:40px; }
+.sc-dlg .sc-items{ max-height:38vh; }
+.sc-dlg .sc-body > .sc-btns{ position:sticky; bottom:-18px; margin:12px -20px -18px; padding:10px 20px 16px; background:linear-gradient(180deg,rgba(239,224,188,0),#EFE0BC 28%); }
 .sc-eyebrow{ font-family:var(--mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--parch-strike); margin:0 0 6px; }
 .sc-btns{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
 .sc-btn{ font-family:var(--fell); font-size:17px; min-height:44px; padding:9px 16px; background:transparent; color:var(--parch-ink); border:1px solid var(--parch-ink-2); border-radius:2px; justify-content:center; }
@@ -551,7 +555,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="canvas-pad">
         <canvas id="board"></canvas>
         <button id="skipreplay" class="replaybtn hide">Skip replay &#9656;&#9656;</button>
-        <div id="cellmenu" class="cellmenu scroll hide" role="menu" aria-label="What you can do here"><div class="sc-title"></div><div class="sc-items"></div></div>
+        <div id="cellmenu" class="cellmenu scroll hide" role="menu" aria-label="What you can do here"><button type="button" class="sc-x" id="cellmenu-x" aria-label="Close menu">&times;</button><div class="sc-title"></div><div class="sc-items"></div></div>
         <div id="sendmenu" class="sendmenu scroll hide"><span class="sm-l" id="sendsel-l">Send</span><button type="button" id="sendsel" class="spick" aria-labelledby="sendsel-l sendsel"></button><span class="sm-l hide" id="sendtb-l">trebuchets</span><button type="button" id="sendtb" class="spick hide" aria-labelledby="sendtb-l sendtb"></button><span class="sm-eta" id="sendeta"></span></div>
         <div class="mapctl">
           <button id="zin" aria-label="Zoom in">+</button>
@@ -2899,12 +2903,13 @@ function scrollPick(btn,o){
     var box=document.createElement('div'); P.box=box;
     box.className='scroll sc-pop'; box.setAttribute('role','listbox'); box.id=(btn.id||'pick')+'-list';
     if(o.label) box.setAttribute('aria-label',o.label);
-    box.innerHTML=(o.title?'<div class="sc-title">'+o.title+'</div>':'')+'<div class="sc-items"></div>';
+    box.innerHTML='<button type="button" class="sc-x" aria-label="Close">&times;</button><div class="sc-title">'+(o.title||o.label||'Choose')+'</div><div class="sc-items"></div>';
     document.body.appendChild(box); fill(); place(); unfurl(box);
     btn.setAttribute('aria-expanded','true'); btn.setAttribute('aria-controls',box.id);
     var cur=box.querySelector('[aria-selected="true"]')||box.querySelector('.sc-opt');
     if(cur) try{ cur.focus({preventScroll:true}); }catch(e){ cur.focus(); }
     box.addEventListener('click',function(e){
+      if(e.target.closest('.sc-x')){ P.close(true); return; }
       var b=e.target.closest('.sc-opt'); if(!b) return;
       var x=P.opts[parseInt(b.getAttribute('data-i'),10)]; if(!x) return;
       if(x.why){ shake(b); return; }                               // it says why underneath, and the scroll stays open
@@ -2935,7 +2940,7 @@ function scrollDialog(o){
     var prev=document.activeElement, wrap=document.createElement('div'), hid='scd'+Math.random().toString(36).slice(2,8);
     var btns=o.buttons||[{label:'Close',value:null,primary:true}];
     wrap.className='sc-dlg'; wrap.setAttribute('role','dialog'); wrap.setAttribute('aria-modal','true'); wrap.setAttribute('aria-labelledby',hid);
-    wrap.innerHTML='<div class="scroll"><div class="sc-body">'+(o.eyebrow?'<p class="sc-eyebrow">'+o.eyebrow+'</p>':'')
+    wrap.innerHTML='<div class="scroll"><button type="button" class="sc-x" data-x="1" aria-label="Close">&times;</button><div class="sc-body">'+(o.eyebrow?'<p class="sc-eyebrow">'+o.eyebrow+'</p>':'')
       +'<h2 id="'+hid+'">'+o.title+'</h2>'+(o.html||'')
       +(o.list?'<div class="sc-items" role="listbox" aria-label="'+(o.listLabel||'Choices')+'" style="margin:0 -20px">'+o.list.map(function(x,i){ return optHtml(x,i,'option',false).replace('data-i=','data-l='); }).join('')+'</div>':'')
       +'<div class="sc-btns">'+btns.map(function(b,i){ return '<button type="button" class="sc-btn'+(b.primary?' primary':'')+'" data-b="'+i+'">'+b.label+'</button>'; }).join('')+'</div></div></div>';
@@ -2957,6 +2962,7 @@ function scrollDialog(o){
     }
     if(o.list) scrollKeys(wrap.querySelector('.sc-items'),function(){ done(o.cancel===undefined?null:o.cancel); });
     wrap.addEventListener('click',function(e){
+      if(e.target.closest('[data-x]')){ done(o.cancel===undefined?null:o.cancel); return; }
       var li=e.target.closest('[data-l]');
       if(li){ var it=o.list[parseInt(li.getAttribute('data-l'),10)]; if(it && it.why){ shake(li); return; } if(it) done(it.value); return; }
       var b=e.target.closest('[data-b]');
@@ -3125,6 +3131,7 @@ function menuTap(x,y,q,r){
   openCellMenu({q:q,r:r});
 }
 document.getElementById('cellmenu').addEventListener('click',function(ev){
+  if(ev.target.closest('.sc-x')){ closeCellMenu(true); return; }
   var b=ev.target.closest('button[data-i]'); if(!b) return;
   var a=menuActions[parseInt(b.getAttribute('data-i'),10)], at=menuAt;
   closeCellMenu(); if(!a||!G||!me()) return;
