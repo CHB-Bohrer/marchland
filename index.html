@@ -1557,14 +1557,37 @@ function pushAll(){
    ETag). Someone else does change it now and then: a player who takes one of my squares carries off a share of my
    stores, and the steward writes a field or two. Then the write is refused (412): the change they made to my stores
    is added into mine, the fields only others write are taken over, and the write is tried again. So this tab can
-   never write my old stores back over a deduction. Two writes from this tab never race: a second waits for the first. */
-var meTag=null, meBase=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp'];
+   never write my old stores back over a deduction. Two writes from this tab never race: a second waits for the first.
+   The same player often has two screens (a phone and a computer). What the other screen did to my marches, steps
+   and debt is folded in the same way, as a difference; the time of my last claim and how far I have read take the
+   later of the two; notices seen are joined. Every write from this page stamps wv one higher. A record whose wv
+   is lower than the one this tab last saw, or whose last claim is older, was written back by a screen that slept
+   with an old copy (or still runs the old page): nothing of it is folded in, and this tab writes the true record
+   back over it at once. */
+var meTag=null, meBase=null, meBaseX=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp'];
 function snapRes(r){ var o={}; GOODS.forEach(function(k){ o[k]=(r&&r[k])||0; }); return o; }
-function absorbMine(v){
-  var pl=me(); if(!pl||!v) return;
-  if(v.res && meBase) GOODS.forEach(function(k){ var d=(v.res[k]||0)-(meBase[k]||0); if(d) pl.res[k]=(pl.res[k]||0)+d; });
+function snapX(v){ v=v||{}; return {sq:v.squares||0, col:v.collected||0, owed:v.owed||0, lc:v.lastCollect||0, wv:v.wv||0}; }
+function isRollback(v){ return !!(meBaseX && v && ((v.wv||0)<meBaseX.wv || (v.lastCollect||0)<meBaseX.lc)); }
+function xChanged(v){ return !!(meBaseX && v && ((v.squares||0)!==meBaseX.sq || (v.collected||0)!==meBaseX.col || (v.owed||0)!==meBaseX.owed || (v.lastCollect||0)!==meBaseX.lc || (v.wv||0)!==meBaseX.wv)); }
+function absorbMine(v){                                // → true when v was an old copy written back over mine
+  var pl=me(); if(!pl||!v) return false;
+  var back=isRollback(v);
+  if(!back){
+    if(v.res && meBase) GOODS.forEach(function(k){ var d=(v.res[k]||0)-(meBase[k]||0); if(d) pl.res[k]=(pl.res[k]||0)+d; });
+    if(meBaseX){
+      pl.squares=(pl.squares||0)+((v.squares||0)-meBaseX.sq);
+      pl.collected=(pl.collected||0)+((v.collected||0)-meBaseX.col);
+      pl.owed=Math.max(0,(pl.owed||0)+((v.owed||0)-meBaseX.owed));
+    }
+    if((v.lastCollect||0)>(pl.lastCollect||0)) pl.lastCollect=v.lastCollect;
+    ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
+    ['notes','cvGot'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
+    if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
+  }
   if(v.res) meBase=snapRes(v.res);
+  meBaseX=snapX(v);                                    // what the database holds now, whichever way it went
   OTHERS_WRITE.forEach(function(f){ if(v[f]!==undefined) pl[f]=v[f]; });
+  return back;
 }
 function pushMe(){
   if(!G||!me()) return Promise.resolve();
@@ -1579,8 +1602,9 @@ function pushMeNow(tries){
   var ready=meTag?Promise.resolve():dbGetTag(path).then(function(x){ meTag=x.tag||'null_etag'; if(x.v) absorbMine(x.v); });
   return ready.then(function(){
     if(!me()) return;
+    me().wv=(me().wv||0)+1;
     return dbPutIf(path,me(),meTag).then(function(x){
-      if(x.ok){ meTag=x.tag||null; meBase=snapRes(me().res); return bumpRev(); }
+      if(x.ok){ meTag=x.tag||null; meBase=snapRes(me().res); meBaseX=snapX(me()); return bumpRev(); }
       if(x.halted) return;
       meTag=x.tag||null;
       if(x.v) absorbMine(x.v);
@@ -1635,12 +1659,15 @@ function applyRemote(remote){
     if(pid!==ME) G.players[pid]=remote.players[pid];
   });
   if(!mine && remote.players[ME]) G.players[ME]=remote.players[ME];
-  var rv=remote.players[ME];                          // someone else changed my stores (spoils taken): fold it in now, not just at my next write
-  if(mine && rv && rv.res && meBase && !meBusy && GOODS.some(function(k){ return (rv.res[k]||0)!==(meBase[k]||0); })){ absorbMine(rv); meTag=null; }
+  var rv=remote.players[ME], mineMoved=false;         // someone else (or my other screen) changed my record: fold it in now, not just at my next write
+  if(mine && rv && rv.res && meBase && !meBusy && (GOODS.some(function(k){ return (rv.res[k]||0)!==(meBase[k]||0); }) || xChanged(rv))){
+    mineMoved=true; meTag=null;
+    if(absorbMine(rv)) setTimeout(function(){ pushMe(); },0);   // an old copy was written over mine: put the true one back
+  }
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}])!==before;
+  return mineMoved || JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -6210,7 +6237,7 @@ function join(){
     } else G.players[ME].name=name;
     G.players[ME].rn=realName;                       // real name, shown next to the user name everywhere
     G.players[ME].pin=tryHash;                    // first time a name is used it claims its PIN
-    meTag=null; meBase=snapRes(G.players[ME].res);    // the stores as the database has them, before this tab adds anything
+    meTag=null; meBase=snapRes(G.players[ME].res); meBaseX=snapX(G.players[ME]);   // my record as the database has it, before this tab adds anything
     var moved=isNew?[]:migrateBands(ME);
     catchUp(ME);
     enterGame(isNew);
