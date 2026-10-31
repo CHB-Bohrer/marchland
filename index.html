@@ -4232,7 +4232,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var SHOW_NAMES=true; try{ SHOW_NAMES=localStorage.getItem('marchland.names')!=='0'; }catch(e){}   // name labels on the map are on unless the player switches them off
+var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
 function clock(){ return performance.now()/1000; }
 function fromFor(q,r,pid){
@@ -4426,7 +4426,7 @@ document.getElementById('skipreplay').addEventListener('click',endReplay);
   b.addEventListener('click',function(){ REDUCE=!REDUCE; try{ localStorage.setItem('marchland.calm',REDUCE?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); });
   paint(); })();
 
-(function(){ var b=document.getElementById('namesbtn');
+(function(){ var b=document.getElementById('namesbtn'); b.style.display='none';   // nothing left for it to switch
   function paint(){ b.style.opacity=SHOW_NAMES?'.95':'.5'; b.setAttribute('aria-pressed',SHOW_NAMES?'true':'false'); b.title=SHOW_NAMES?'Name labels are on - tap to hide them':'Name labels are off - tap to show them'; }
   b.addEventListener('click',function(){ SHOW_NAMES=!SHOW_NAMES; try{ localStorage.setItem('marchland.names',SHOW_NAMES?'1':'0'); }catch(e){} paint(); if(G) draw(); });
   paint(); })();
@@ -4983,7 +4983,7 @@ function render(){
   }).sort(function(a,b){ return b.cells-a.cells; });
   document.getElementById('standings').innerHTML=rows.map(function(r,i){
     return '<tr><td class="n">'+(i+1)+'</td>'
-      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span><button type="button" class="linkish" data-pid="'+r.pid+'">'+esc(r.name)+'</button>'+(r.pid===ME?' — you':'')+'</td>'
+      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span><button type="button" class="linkish" data-pid="'+r.pid+'">'+esc(r.name)+'</button>'+(r.pid===ME?' — you':'')+' <button type="button" class="linkish" data-prof="'+r.pid+'" aria-label="Profile of '+esc(r.name)+'" title="Who vouched for them" style="opacity:.6">&#9432;</button></td>'
       +'<td class="n">'+r.cells+'</td><td class="n">'+r.steps.toLocaleString()+'</td>'
       +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
   }).join('');
@@ -5438,7 +5438,23 @@ document.getElementById('st-strikes').addEventListener('click',function(){ if(is
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
-document.getElementById('standings').addEventListener('click',function(e){ var b=e.target.closest('[data-pid]'); if(b&&G) openProfile(b.getAttribute('data-pid')); });
+function castleOf(pid){                                // the castle of theirs nearest the view (or their keep if none stands)
+  var best=null, bd=Infinity, p=G.players[pid];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||c.k!==CASTLE||isRuin(c)) continue;
+    var a=k.split('_'), nc=nearCopy(parseInt(a[0],10),parseInt(a[1],10),viewQ,viewR), d=Math.abs(nc[0]-viewQ)+Math.abs(nc[1]-viewR);
+    if(d<bd){ bd=d; best=nc; } }
+  if(!best && p) best=nearCopy(p.q,p.r,viewQ,viewR);
+  return best;
+}
+document.getElementById('standings').addEventListener('click',function(e){
+  if(!G||!me()) return;
+  var pf=e.target.closest('[data-prof]'); if(pf){ openProfile(pf.getAttribute('data-prof')); return; }
+  var b=e.target.closest('[data-pid]'); if(!b) return;
+  var pid=b.getAttribute('data-pid'), at=castleOf(pid); if(!at) return;
+  closeCellMenu(); centreOn(at[0],at[1]); draw();
+  try{ document.querySelector('.canvas-pad').scrollIntoView({behavior:'smooth',block:'center'}); }catch(x){}
+  say('Centred on <b>'+esc(full(G.players[pid]))+'</b>&rsquo;s castle.');
+});
 document.getElementById('crusade-strip').addEventListener('click',function(e){
   var b=e.target.closest('[data-cr]'); if(!b||!G||!me()) return;
   var a=b.getAttribute('data-cr'), id=b.getAttribute('data-id');
