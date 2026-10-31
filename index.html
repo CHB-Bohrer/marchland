@@ -5533,7 +5533,7 @@ function barredSponsor(pid,b){
   return /charlton/.test(nameKey(p&&p.name)+'|'+nameKey(p&&p.rn)+'|'+nameKey(s&&s.name)+'|'+nameKey(s&&s.rn));
 }
 /* ── players who must find a sponsor ──
-   Bam (Wick F), Patrick (Patrick D), Get Cooked (D S), The true king (P L), The Gods (S G) and The General Duck (Richard K) joined before sponsors
+   Bam (Wick F), Patrick (Patrick D), Get Cooked (D S), The true king (P L), The Gods (S G), The General Duck (Richard K) and Unc joined before sponsors
    existed. Each must be vouched for by someone who can sponsor (the steward, Bohrer, or any other sponsor in good
    standing; never Sir Charlton) before PROBATION_DUE, four days after the order of 31 Oct 2026. Until one of them
    approves, they cannot play: their screen shows a scroll instead of the board, and signing in takes them to the
@@ -5541,7 +5541,7 @@ function barredSponsor(pid,b){
    account (settleProbation): every square wiped, wagons gone, a line in the chat. Their old founding record is kept
    but marked gone, so the name can only come back through the ordinary sponsored newcomer request.
    A probationer is cleared only by a sponsorship written after PROBATION_FROM by someone other than "founding". */
-var PROBATION_NAMES=['bam','patrick','getcooked','thetrueking','thegods','thegeneralduck'];
+var PROBATION_NAMES=['bam','patrick','getcooked','thetrueking','thegods','thegeneralduck','unc'];
 var PROBATION_FROM=Date.UTC(2026,9,31,18,29), PROBATION_DUE=Date.UTC(2026,10,4,18,29), PROBATION_ID='sp1';
 /* one of the six: by name, whether or not they are on the board right now. None of them may ever vouch for another. */
 function probationNamed(pid,b){
