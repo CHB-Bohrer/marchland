@@ -213,7 +213,7 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .spick .sp-v{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:260px; }
 .spick .sp-c{ font-size:11px; color:var(--ink-2); }
 .sendmenu .spick{ min-height:40px; min-width:96px; font-size:17px; background:rgba(255,250,236,.55); color:var(--parch-ink); border-color:var(--parch-rule); }
-.sc-pop{ position:fixed; z-index:100005; min-width:180px; max-width:min(360px, calc(100vw - 24px)); }
+.sc-pop{ position:fixed; z-index:100020; min-width:180px; max-width:min(360px, calc(100vw - 24px)); }
 .sc-pop .sc-items{ max-height:min(52vh,420px); }
 .sc-pop.sheet{ left:10px !important; right:10px; top:auto !important; bottom:calc(10px + var(--cbh, 0px) + env(safe-area-inset-bottom, 0px)); max-width:none; animation:slideup .26s ease-out both; }
 .sc-pop.sheet::after{ animation:none !important; }
@@ -239,6 +239,16 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .sc-note{ font-style:italic; font-size:14.5px; color:var(--parch-strike); min-height:1em; }
 .sc-table{ width:100%; font-size:15px; border-collapse:collapse; margin:6px 0 10px; }
 .sc-table td,.sc-table th{ padding:5px 6px; border-bottom:1px solid var(--parch-rule); color:var(--parch-ink); font-family:var(--fell); }
+.crusade-strip{ border:1px solid #8E1B1B; background:var(--surface); margin-bottom:14px; }
+.cr-row{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:8px 12px; font-size:14px; border-bottom:1px solid var(--rule); }
+.cr-row:last-child{ border-bottom:0; }
+.cr-row button{ min-height:40px; }
+.cr-cross{ width:18px; height:18px; flex:0 0 auto; border:1px solid #8E1B1B; background:linear-gradient(#8E1B1B,#8E1B1B) center/4px 100% no-repeat,linear-gradient(#8E1B1B,#8E1B1B) 50% 38%/100% 4px no-repeat,#F7EBC0; }
+.seal{ float:right; width:48px; height:48px; border-radius:50%; margin:0 0 6px 12px; background:radial-gradient(circle at 35% 30%,#D9564A,#9E1F17 60%,#6E120D); color:#F6D7C8; font:700 22px/48px var(--fell); text-align:center; box-shadow:0 2px 5px rgba(0,0,0,.4); }
+.letter-text{ white-space:pre-wrap; overflow-wrap:anywhere; font-size:19px; line-height:1.5; clear:both; }
+.cv-letter textarea{ font-family:var(--body); font-size:16px; width:min(420px,80vw); color:var(--ink); background:var(--paper); border:1px solid var(--rule); border-radius:2px; padding:7px 9px; }
+#sp-btn .chat-badge,#lt-btn .chat-badge{ margin-left:4px; }
+.linkish{ border:0; background:none; padding:0; font:inherit; color:inherit; text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer; min-height:0; }
 .sc-table th{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--parch-ink-2); }
 .caravan.onmap{ position:absolute; z-index:6; left:8px; right:8px; bottom:8px; max-height:80%; overflow:auto; border:1px solid var(--ink); border-radius:3px; background:var(--surface); box-shadow:0 4px 16px rgba(0,0,0,.3); }
 .cv-x{ display:none; float:right; padding:2px 8px; }
@@ -443,6 +453,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <div class="field"><label for="handle" id="handle-label">Your name</label><input id="handle" maxlength="16" placeholder="Chris" style="width:170px" autocomplete="nickname"></div>
         <div class="field"><label for="realname">Real name</label><input id="realname" maxlength="24" placeholder="First &amp; last" style="width:150px" autocomplete="name"></div>
         <div class="field"><label for="pin">PIN (any number)</label><input id="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" placeholder="••••" style="width:90px" autocomplete="off"></div>
+        <div class="field hide" id="sponsor-f"><label for="sponsor-pick">Who vouches for you? <i style="text-transform:none;letter-spacing:0">(new players)</i></label><button type="button" id="sponsor-pick" class="spick"></button></div>
         <button id="join" class="go">Enter</button>
       </div>
       <p class="muted" style="margin-top:12px" id="join-hint">Please use your own first name, so nobody plays as the wrong person by mistake. Your real name is now required and is shown next to your user name, so everyone knows who is who. Your PIN is a number of any length that you choose the first time you enter that name; after that the name needs it. No sign-up, no email.</p>
@@ -458,6 +469,8 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <div><span class="muted">You are</span> <b id="myname">—</b> <span class="dot" id="mydot"></span></div>
           <span class="spacer"></span>
           <span class="muted mono" id="syncstate">·</span>
+          <button type="button" id="sp-btn" class="hide">Sponsor requests <span id="sp-badge" class="chat-badge hide">0</span></button>
+          <button type="button" id="lt-btn" class="hide">Letters <span id="lt-badge" class="chat-badge hide">0</span></button>
           <button id="leave" title="Sign out on this device, e.g. to let someone else play">Switch player</button>
         </div>
         <div class="copybox">
@@ -468,6 +481,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     </div>
 
     <div class="banner" id="daily" style="margin-bottom:14px;border-color:var(--rule);color:var(--ink)"></div>
+    <div class="crusade-strip hide" id="crusade-strip" aria-live="polite"></div>
 
     <div class="panel">
       <div class="ledger">
@@ -537,6 +551,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <div class="field"><label for="cv-timber">Timber <i id="cvh-timber"></i></label><input id="cv-timber" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
           <div class="field"><label for="cv-iron">Iron <i id="cvh-iron"></i></label><input id="cv-iron" type="number" min="0" step="5" inputmode="numeric" placeholder="0"></div>
           <div class="field"><label for="cv-grain">Grain <i id="cvh-grain"></i></label><input id="cv-grain" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
+          <div class="field cv-letter"><label for="cv-letter">A letter, if you like <i id="cv-count">0/280</i></label><textarea id="cv-letter" maxlength="280" rows="2" placeholder="Only they will read it"></textarea></div>
           <button id="cv-send" class="go">Send caravan</button>
         </div>
         <p class="muted cv-eta" id="cv-eta"></p>
@@ -569,7 +584,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="pad">
         <h2>Steward</h2>
         <p class="muted" id="steward-status"></p>
-        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button></div>
       </div>
     </div>
 
@@ -1567,13 +1582,14 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
-  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players)]);
+  var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}]);
   G.cells=remote.cells||{}; tidyBoard(G); cellsGen++;
   G.claims=remote.claims||{};
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
   G.purge=remote.purge||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(boardVersion(G)>DATA_V){ halt(); return true; }
   G.fallen=remote.fallen||{};
   if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
@@ -1588,7 +1604,7 @@ function applyRemote(remote){
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
-  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players)])!==before;
+  return JSON.stringify([G.cells,G.claims,G.events,G.caravans,G.treks,othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}])!==before;
 }
 var refetch=false;                                  // set when a pull was thrown away as stale
 function pull(){
@@ -3110,7 +3126,7 @@ function drawTreks(now,amb){
       if(tk.tb>0) artTrebuchet(ctx,P[0]-face*S*0.7,P[1]+S*0.36,S*0.78,col,now,tk.tb);   // a trebuchet hauled along behind
       for(var i=0;i<cnt;i++){
         var off=(i-(cnt-1)/2)*h*0.5;
-        artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,col,{face:face, ph:amb?now*11+i*1.3:0});
+        artPerson(ctx,P[0]-face*Math.abs(off)*0.3,P[1]+S*0.3+off*0.3,h,col,{face:face, ph:amb?now*11+i*1.3:0, cross:crossOf(tk.o)});
       }
       var lab=(tk.n||'')+(tk.tb?(tk.n?' + ':'')+tk.tb+' treb':'')+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
       artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),col,1);
@@ -3568,6 +3584,7 @@ function artPerson(g,x,y,h,col,o){
   g.strokeStyle=NAT.line; g.lineWidth=lw;
   g.beginPath(); g.moveTo(0,hip); g.lineTo(sw,0); g.moveTo(0,hip); g.lineTo(-sw,0); g.stroke();
   poly(g,[[-h*0.12,sh],[h*0.12,sh],[h*0.17,hip+h*0.06],[-h*0.17,hip+h*0.06]],col,NAT.line,lw*0.55);
+  if(o.cross){ g.fillStyle=CRUSADE_COL; g.fillRect(-h*0.035,sh+h*0.03,h*0.07,h*0.22); g.fillRect(-h*0.1,sh+h*0.08,h*0.2,h*0.06); }   // a crusader's cross on the tunic (an overlay; nothing else about him changes)
   var a = o.swing!=null ? (-2.2+2.6*o.swing) : (-0.6+Math.sin(ph+Math.PI)*0.35);
   var hx=Math.cos(a)*h*0.3, hy=sh+h*0.04+Math.sin(a)*h*0.3;
   g.strokeStyle=NAT.line; g.lineWidth=lw*0.9;
@@ -3939,7 +3956,8 @@ function drawBand(c,cx,cy,col,detail){
   if(isSel){ ctx.strokeStyle=T['--ink']; ctx.lineWidth=2; hexPath(cx,cy,S*0.86); ctx.stroke(); }
   if(detail && S>=16 && !c.k){
     var m=Math.min(3,c.b), h=S*0.5;
-    for(var i=0;i<m;i++) artPerson(ctx,cx+(i-(m-1)/2)*h*0.55,cy+S*0.42-(i%2)*h*0.12,h,col,{face:1,ph:0});
+    var crs=crossOf(c.o);
+    for(var i=0;i<m;i++) artPerson(ctx,cx+(i-(m-1)/2)*h*0.55,cy+S*0.42-(i%2)*h*0.12,h,col,{face:1,ph:0,cross:crs});
     y=cy-S*0.42;
   }
   ctx.beginPath(); ctx.arc(x,y,s*0.62,0,6.284);
@@ -4083,6 +4101,7 @@ function draw(){
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
   });
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
+  drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawTreks(now,amb);
   if(amb) ambClouds(ctx,now);
@@ -4154,16 +4173,16 @@ function animTick(){
 }
 /* event kinds: m march · b battle · br bridge · w wall · tw tower · cs castle · up upgrade · ms muster
    (claims are not logged twice: the claim log already has them, and replays read it) */
-var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze',duel:'battle',fire:'shot',collapse:'raze',spoils:'loot',tbk:'build',road:'build',roadbreak:'battle'};
+var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze',duel:'battle',fire:'shot',collapse:'raze',spoils:'loot',tbk:'build',road:'build',roadbreak:'battle',crusade:'loot',crusadejoin:'loot',crusadepay:'loot',crusadestrike:'battle',crusadeend:'loot'};
 /* replays play only kinds this version knows; anything older (the October guillotine, for one) is skipped quietly */
-var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1,duel:1,fire:1,collapse:1,spoils:1,tbk:1,road:1,roadbreak:1};
+var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1,duel:1,fire:1,collapse:1,spoils:1,tbk:1,road:1,roadbreak:1,crusade:1,crusadejoin:1,crusadepay:1,crusadestrike:1,crusadeend:1};
 function replayable(e){ return !!(e && REPLAY_KINDS[e.k] && !e.ex && !e.bt && !e.gs); }
 function veilFor(ev){                                // how the cell looked just before this move
   switch(ev.k){
     case 'm': case 'br': return {o:null};
     case 'mv': return null;      // (a band's walk is drawn live as it goes, see drawTreks)
     case 'brk': return {o:ev.prev||ev.pid};
-    case 'b': case 'duel': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
+    case 'b': case 'duel': case 'crusadestrike': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
     case 'w': return {o:ev.pid, w:(ev.lvl||1)-1, k:ev.bk||null, l:ev.bl||0};
     case 'dm': return ev.dm==='bridge'?{o:ev.pid}:{o:ev.pid, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0};
     case 'tw': case 'cs': return {o:ev.pid, w:ev.pw||0};
@@ -4176,11 +4195,12 @@ function play(ev,delay){
   var kind=ANIM_KIND[ev.k]; if(!kind) return 0;
   if(ev.k==='brk') kind=ev.prev?'battle':'move';
   var veil=veilFor(ev), dl=null, lost=false, lab=ev.label;
-  if((ev.k==='duel'||ev.k==='roadbreak') && ev.ln && ev.seed!=null){       // the same fight again, duel by duel, from the stored seed
+  if((ev.k==='duel'||ev.k==='roadbreak'||ev.k==='crusadestrike') && ev.ln && ev.seed!=null){       // the same fight again, duel by duel, from the stored seed
     var fo=fightOut(ev.n||0,arr(ev.ln).map(function(x){ return x/100; }),ev.seed); dl=fo.log; lost=!fo.won;
     lab=fo.won?(ev.k==='roadbreak'?'Road broken':'Taken'+(ev.sp?' · +'+goodsText(ev.sp):'')):'Beaten back';
   }
   if(ev.k==='spoils') lab='+'+goodsText(ev.sp||{});
+  if(ev.k==='crusade') lab='A crusade!'; if(ev.k==='crusadejoin') lab='Takes the cross'; if(ev.k==='crusadepay') lab='+'+(ev.n||0)+' to the treasury'; if(ev.k==='crusadeend') lab='The crusade ends';
   anims.push({kind:kind, t0:clock()+(delay||0), from:ev.fq!=null?[ev.fq,ev.fr]:null, to:[ev.q,ev.r], log:dl, lost:lost,
     key:veil?key(ev.q,ev.r):null, veil:veil, col:colorFor(ev.pid), dcol:colorFor(ev.prev), loss:ev.loss||0,
     lvl:ev.lvl, bk:ev.k==='tw'?TOWER:ev.k==='cs'?CASTLE:ev.bk, n:ev.n, label:lab,
@@ -4225,10 +4245,15 @@ function describe(e){
   if(e.k==='br') return who+' started a bridge.';
   if(e.k==='mv') return who+' sent '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' marching.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
-  if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
+  if(e.k==='cv'){ var gl=hasGoods(e.g)?goodsLine(e.g):''; return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+(gl||'')+(gl&&e.lt?' and ':'')+(e.lt?'a sealed letter':'')+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan'+(e.lt?' with a sealed letter':'')+'.'; }
   if(e.k==='m') return who+' marched into new ground.';
   if(e.k==='tbk') return who+' built a trebuchet.';
   if(e.k==='road') return who+' started a road.';
+  if(e.k==='crusade') return who+' proclaimed a crusade against '+(e.prev===ME?'<span class="bad">you</span>':esc(nameOf(e.prev)))+'.';
+  if(e.k==='crusadejoin') return who+' took the cross against '+(e.prev===ME?'<span class="bad">you</span>':esc(nameOf(e.prev)))+'.';
+  if(e.k==='crusadepay') return who+' paid '+(e.n||0)+' march'+(e.n>1?'es':'')+' into a crusade&rsquo;s treasury.';
+  if(e.k==='crusadeend') return 'The crusade against '+(e.prev===ME?'you':esc(nameOf(e.prev)))+' has ended.';
+  if(e.k==='crusadestrike') return 'A crusade strike led by '+who+(e.won?(e.prev===ME?' <span class="bad">took your square</span>':' took a square from '+esc(nameOf(e.prev))):' was beaten back')+(e.loss?' (lost '+e.loss+')':'')+'.';
   if(e.k==='roadbreak') return e.won?(e.prev===ME?who+' <span class="bad">broke one of your roads</span>':who+' broke a road of '+esc(nameOf(e.prev)))+(e.loss?' (lost '+e.loss+')':'')+'.':who+' tried to break a road of '+(e.prev===ME?'yours':esc(nameOf(e.prev)))+' and was beaten back.';
   if(e.k==='fire') return (e.prev===ME?who+' <span class="bad">hit your '+(e.tg||'works')+' with a trebuchet</span>':who+' hit a '+(e.tg||'target')+' of '+esc(nameOf(e.prev))+' with a trebuchet')+(e.out?' &mdash; '+esc(e.out):'')+'.';
   if(e.k==='collapse') return e.prev===ME?'<span class="bad">One of your towers collapsed.</span>':'A tower of '+esc(nameOf(e.prev))+' collapsed.';
@@ -4703,6 +4728,8 @@ function render(){
     settleMine();
     settleCaravans();
     settleTreks();
+    settleCrusades();
+    settleCrusadeDues();
     settleCastles();
     settlePurge();
     settleRemovals();
@@ -4746,7 +4773,7 @@ function render(){
   }).sort(function(a,b){ return b.cells-a.cells; });
   document.getElementById('standings').innerHTML=rows.map(function(r,i){
     return '<tr><td class="n">'+(i+1)+'</td>'
-      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span>'+esc(r.name)+(r.pid===ME?' — you':'')+'</td>'
+      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span><button type="button" class="linkish" data-pid="'+r.pid+'">'+esc(r.name)+'</button>'+(r.pid===ME?' — you':'')+'</td>'
       +'<td class="n">'+r.cells+'</td><td class="n">'+r.steps.toLocaleString()+'</td>'
       +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
   }).join('');
@@ -4764,6 +4791,9 @@ function render(){
   renderClaims();
   renderCoach();
   renderSteward();
+  renderSponsorBtn();
+  renderLetterBtn();
+  renderCrusades();
   if(!document.getElementById('caravan').classList.contains('hide')) cvPanel();
   draw();
 }
@@ -5072,7 +5102,7 @@ document.getElementById('claims-more').addEventListener('click',function(){ show
    older code than the board refuses to play and asks for a reload. */
 var STEWARDS={p16vnclj:1};                            // Bohrer
 function isSteward(pid){ return !!STEWARDS[pid==null?ME:pid]; }
-var DATA_V=3;                                         // the newest board layout this code understands
+var DATA_V=4;                                         // the newest board layout this code understands
 function migMeta(b){ return (b&&b.meta&&b.meta.migration)||{}; }
 function boardVersion(b){ return migMeta(b).v||0; }
 function migrationPending(b){ var st=migMeta(b).steps||{}; return MIGRATIONS.filter(function(s){ return s.stage<=DATA_V && !st[s.id]; }); }
@@ -5115,6 +5145,16 @@ var MIGRATIONS=[
       var p=k.split('_'); if(groundAt(parseInt(p[0],10),parseInt(p[1],10))===RIVER) return;   // a finished bridge already counts as road
       if(c.f && c.f>Date.now()) return;
       patch['cells/'+k+'/rd']=1; n++;
+    });
+    return {n:n, patch:patch};
+  }},
+  {id:'founding', stage:4, title:'Record everyone now playing as a founding player', scan:function(b){
+    var patch={}, n=0, t=Date.now();
+    Object.keys(b.players||{}).forEach(function(pid){
+      var p=b.players[pid]; if(!p||p.sp) return;
+      patch['players/'+pid+'/sp']={by:'founding',how:'founding player',t:t};
+      if(!(b.sponsorships||{})[pid]) patch['sponsorships/'+pid]={by:'founding',how:'founding player',t:t,name:p.name||'',rn:p.rn||''};
+      n++;
     });
     return {n:n, patch:patch};
   }}
@@ -5183,6 +5223,531 @@ function halt(){                                       // the board moved on to 
   if(HALT) return; HALT=true; showWait('stale');
 }
 document.getElementById('mig-run').addEventListener('click',runMigration);
+document.getElementById('st-sp').addEventListener('click',function(){ if(isSteward()) openSponsorships(); });
+document.getElementById('st-strikes').addEventListener('click',function(){ if(isSteward()) openStrikes(); });
+document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
+document.getElementById('sp-btn').addEventListener('click',openRequests);
+document.getElementById('lt-btn').addEventListener('click',openShelf);
+document.getElementById('standings').addEventListener('click',function(e){ var b=e.target.closest('[data-pid]'); if(b&&G) openProfile(b.getAttribute('data-pid')); });
+document.getElementById('crusade-strip').addEventListener('click',function(e){
+  var b=e.target.closest('[data-cr]'); if(!b||!G||!me()) return;
+  var a=b.getAttribute('data-cr'), id=b.getAttribute('data-id');
+  if(a==='proclaim') proclaim(); else if(a==='join') joinCrusade(id); else if(a==='pay') payIn(id); else if(a==='strike') strikeMenu(id);
+});
+document.getElementById('cv-letter').addEventListener('input',letterCount);
+setInterval(function(){ if(G&&me()&&!document.hidden) loadLetters(); },5*60000);
+
+/* ═══ joining by sponsorship ═════════════════════════════════════════════
+   A new player can only join when someone already playing vouches for them in writing, because
+   fake players were being made. The newcomer files a request (pending/<pid>: name, PIN hash, real
+   name, sponsor, time); the sponsor answers it with a written statement of how they know this
+   person (at least 20 characters) and a tick confirming they know them in real life and that the
+   real name is right. The statement is kept for good in sponsorships/<pid> {by, how, t, name, rn}
+   and copied to sp on the player, so a fake player can always be traced to whoever vouched for
+   them: clearing the request, removing the player or striking the sponsor never deletes it.
+   A request nobody answers for 72 hours goes to the steward, who can approve it the same way.
+   Strikes are counted when asked for, never stored as a number: one for each strike the steward
+   records against the sponsor, each claim of theirs the steward rejected, and either of those
+   for anyone they sponsored. Three strikes and a player can no longer sponsor (they still play).
+   Steward-rejected claims only count while the claim is still kept on the board (30 days). */
+var SPONSOR_MIN=20, SPONSOR_ESCALATE_MS=72*36e5, STRIKES_MAX=3;
+function sponsorRec(pid,b){ b=b||G; var s=b.sponsorships&&b.sponsorships[pid]; if(s) return s; var p=b.players&&b.players[pid]; return (p&&p.sp)||null; }
+function sponseesOf(pid,b){
+  b=b||G; var out={};
+  Object.keys(b.sponsorships||{}).forEach(function(k){ var s=b.sponsorships[k]; if(s&&s.by===pid) out[k]=1; });
+  Object.keys(b.players||{}).forEach(function(k){ var p=b.players[k]; if(p&&p.sp&&p.sp.by===pid) out[k]=1; });
+  return Object.keys(out);
+}
+function breachesOf(pid,b){
+  var out=[];
+  Object.keys(b.strikes||{}).forEach(function(id){ var s=b.strikes[id]; if(s&&s.pid===pid&&!s.cleared) out.push({id:id,reason:s.reason||'a strike from the steward',t:s.t}); });
+  Object.keys(b.claims||{}).forEach(function(id){ var c=b.claims[id]; if(c&&c.pid===pid&&c.ver&&c.ver.v==='no') out.push({id:'v:'+id,reason:'a step claim the steward rejected',t:c.ver.t}); });
+  return out;
+}
+function spName(pid,b){ var s=(b.sponsorships||{})[pid], p=(b.players||{})[pid]; return p?full(p):(s?s.name+(s.rn?' ('+s.rn+')':''):'someone who left'); }
+function sponsorStrikes(pid,b){
+  b=b||G; var list=breachesOf(pid,b);
+  sponseesOf(pid,b).forEach(function(s){ breachesOf(s,b).forEach(function(x){ list.push({id:x.id+'@'+s,reason:x.reason+' &mdash; '+esc(spName(s,b))+', whom you sponsored',t:x.t}); }); });
+  return list;
+}
+function canSponsor(pid,b){ b=b||G; return !!(b.players&&b.players[pid]) && sponsorStrikes(pid,b).length<STRIKES_MAX; }
+function notifyStewardMsg(title,msg){
+  try{ fetch('https://ntfy.sh/',{method:'POST',mode:'no-cors',body:JSON.stringify({topic:NTFY_TOPIC,title:title,message:msg,click:'https://chb-bohrer.github.io/marchland/',tags:['scroll']})}).catch(function(){}); }catch(e){}
+}
+/* the join screen's sponsor picker lists only players who can sponsor right now */
+var sponsorPick=null, joinBoard=null;
+function loadSponsors(b){
+  joinBoard=b;
+  if(!sponsorPick) sponsorPick=scrollPick(document.getElementById('sponsor-pick'),{label:'Who vouches for you?',title:'Who vouches for you?',placeholder:'Pick someone who knows you',empty:'Nobody can sponsor right now.'});
+  var ids=Object.keys(b.players||{}).filter(function(p){ return canSponsor(p,b); })
+    .sort(function(x,y){ return (b.players[x].name||'').toLowerCase().localeCompare((b.players[y].name||'').toLowerCase()); });
+  sponsorPick.setOptions(ids.map(function(p){ return {value:p, label:esc(full(b.players[p]))}; }));
+  document.getElementById('sponsor-f').classList.remove('hide');
+}
+/* the newcomer waits on a scroll that names the sponsor, and can withdraw */
+var spWaitT=0;
+function waitSponsor(pid,rec){
+  var n=document.getElementById('waitnote'), body=document.getElementById('waitnote-body'), who=esc(rec.sponsorName||'your sponsor');
+  function paint(extra){
+    body.innerHTML='<p class="sc-eyebrow">Asking to join</p><h2 id="waitnote-h">Waiting for '+who+'</h2>'
+      +'<p>Your request to join as <b>'+esc(rec.name)+'</b> ('+esc(rec.rn)+') has gone to '+who+'. When they vouch for you, this page opens the board by itself.</p>'
+      +(extra||'')+'<div class="sc-btns"><button type="button" class="sc-btn" id="sp-withdraw">Withdraw my request</button></div>';
+    document.getElementById('sp-withdraw').onclick=function(){
+      clearTimeout(spWaitT); dbPut('/marchland/'+gameCode+'/pending/'+pid,null).then(bumpRev).catch(function(){});
+      n.classList.add('hide'); document.getElementById('join-hint').textContent='Your request was withdrawn.';
+    };
+  }
+  paint();
+  if(n.classList.contains('hide')){ n.classList.remove('hide'); unfurl(n.querySelector('.scroll')); }
+  clearTimeout(spWaitT);
+  (function poll(){
+    spWaitT=setTimeout(function(){
+      dbGet('/marchland/'+gameCode+'/pending/'+pid).then(function(p){
+        if(!p){ paint('<p class="sc-note">The request is no longer there.</p>'); return; }
+        if(p.no){ paint('<p class="sc-note">'+who+' did not vouch for you. You can withdraw and ask someone else.</p>'); return; }
+        if(p.ok){ n.classList.add('hide'); join(); return; }
+        if(Date.now()-p.t>SPONSOR_ESCALATE_MS && !p.esc){                     // three days unanswered: the steward is told
+          notifyStewardMsg('Marchland: a join request is waiting',p.name+' ('+p.rn+') asked '+(rec.sponsorName||'a player')+' to vouch for them 3 days ago.');
+          dbPut('/marchland/'+gameCode+'/pending/'+pid+'/esc',Date.now()).catch(function(){});
+        }
+        poll();
+      }).catch(function(){ poll(); });
+    },15000);
+  })();
+}
+/* ── the sponsor's side: requests addressed to me (and to the steward, once three days old) ── */
+function requestsForMe(){
+  var now=Date.now();
+  return Object.keys(G.pending||{}).map(function(pid){ var p=G.pending[pid]; return p&&{pid:pid,p:p}; })
+    .filter(function(x){ return x && !x.p.ok && !x.p.no && (x.p.sponsor===ME || (isSteward() && now-x.p.t>SPONSOR_ESCALATE_MS)); })
+    .sort(function(a,b){ return a.p.t-b.p.t; });
+}
+function renderSponsorBtn(){
+  var b=document.getElementById('sp-btn'); if(!b) return;
+  var n=requestsForMe().length;
+  b.classList.toggle('hide',!n && !isSteward());
+  document.getElementById('sp-badge').textContent=String(n); document.getElementById('sp-badge').classList.toggle('hide',!n);
+}
+function openRequests(){
+  var list=requestsForMe();
+  if(!list.length) return say('Nobody is waiting for you to vouch for them.');
+  scrollDialog({eyebrow:'Sponsorship requests', title:'Who asks to join?', html:'<p>Choose a request to answer it.</p>', cancel:null,
+    list:list.map(function(x){ return {label:esc(x.p.name)+' <i>('+esc(x.p.rn)+')</i>', cost:since(x.p.t)+(x.p.sponsor!==ME?' &middot; asked '+esc(nameOf(x.p.sponsor)):''), value:x}; }),
+    buttons:[{label:'Close',value:null}]}).then(function(res){ if(res.value) answerRequest(res.value.pid,res.value.p); });
+}
+function answerRequest(pid,p){
+  scrollDialog({eyebrow:'Vouch for a new player', title:esc(p.name)+' <span class="sc-sub">real name: '+esc(p.rn)+'</span>',
+    html:'<p>Only vouch for someone you know in real life. What you write is kept for good with their name.</p>'
+      +'<div class="sc-field"><label for="sp-how">How do you know them, and for how long?</label><textarea id="sp-how" rows="3" maxlength="400" style="font-size:16px"></textarea></div>'
+      +'<label class="sc-check"><input type="checkbox" id="sp-real"> I know this person in real life, and &ldquo;'+esc(p.rn)+'&rdquo; is their real name.</label>'
+      +'<p class="sc-note"></p>',
+    cancel:null, buttons:[{label:'Not now',value:null},{label:'Decline',value:'no'},{label:'Vouch for them',value:'ok',primary:true}],
+    check:function(v,box){
+      if(v!=='ok') return '';
+      var how=(box.querySelector('#sp-how').value||'').trim();
+      if(how.length<SPONSOR_MIN) return 'Write at least '+SPONSOR_MIN+' characters about how you know them ('+how.length+' so far).';
+      if(!box.querySelector('#sp-real').checked) return 'Tick the box to confirm you know them in real life and the real name is right.';
+      return '';
+    }}).then(function(res){
+    if(!res.value) return;
+    var base='/marchland/'+gameCode, t=Date.now();
+    if(res.value==='no'){
+      dbPut(base+'/pending/'+pid+'/no',{by:ME,t:t}).then(bumpRev).then(function(){ G.pending[pid].no={by:ME,t:t}; renderSponsorBtn(); say('You declined '+esc(p.name)+'&rsquo;s request.'); },fail);
+      return;
+    }
+    var how=(res.box.querySelector('#sp-how').value||'').trim().slice(0,400), rec={by:ME,how:how,t:t};
+    var patch={}; patch['pending/'+pid+'/ok']=rec; patch['sponsorships/'+pid]={by:ME,how:how,t:t,name:p.name,rn:p.rn};   // the statement is kept for good, now
+    dbPatch(base,patch).then(bumpRev).then(function(){
+      G.pending[pid].ok=rec; G.sponsorships=G.sponsorships||{}; G.sponsorships[pid]=patch['sponsorships/'+pid];
+      renderSponsorBtn(); say('<span class="good">You vouched for '+esc(p.name)+'.</span> They enter the board the next time their page checks, within a minute.');
+    },fail);
+  });
+}
+/* a player's profile on a scroll: who vouched for them, and (for yourself) your strikes */
+function openProfile(pid){
+  var p=G.players[pid]; if(!p) return;
+  var s=sponsorRec(pid), mine=pid===ME, strikes=mine?sponsorStrikes(ME):[];
+  scrollDialog({eyebrow:'Player', title:esc(p.name)+(p.rn?' <span class="sc-sub">'+esc(p.rn)+'</span>':''),
+    html:'<p>'+cellsOf(pid)+' squares &middot; '+castlesOf(pid)+' castle'+(castlesOf(pid)===1?'':'s')+'</p>'
+      +'<p>'+(s?(s.by==='founding'?'A founding player.':'Sponsored by <b>'+esc(nameOf(s.by))+'</b>, '+new Date(s.t).toLocaleDateString()+'.'):'No sponsor on record.')+'</p>'
+      +(mine?'<p>Your strikes as a sponsor: <b>'+strikes.length+'</b> of '+STRIKES_MAX+(strikes.length>=STRIKES_MAX?' &mdash; you can no longer sponsor anyone.':'.')+'</p>'
+        +(strikes.length?'<ul>'+strikes.map(function(x){ return '<li>'+x.reason+' <i>('+new Date(x.t).toLocaleDateString()+')</i></li>'; }).join('')+'</ul>':''):''),
+    buttons:[{label:'Close',value:null,primary:true}]});
+}
+/* ── the steward's tools ── */
+function openSponsorships(){
+  var rows=Object.keys(G.sponsorships||{}).map(function(pid){ var s=G.sponsorships[pid]; return {pid:pid,s:s}; }).sort(function(a,b){ return b.s.t-a.s.t; });
+  scrollDialog({eyebrow:'Steward', title:'Every sponsorship',
+    html:rows.length?'<table class="sc-table"><tr><th>Who</th><th>Vouched by</th><th>What they wrote</th><th>When</th></tr>'+rows.map(function(x){
+      return '<tr><td>'+esc(x.s.name||nameOf(x.pid))+(x.s.rn?' ('+esc(x.s.rn)+')':'')+(G.players[x.pid]?'':' <i>gone</i>')+'</td><td>'+(x.s.by==='founding'?'<i>founding</i>':esc(nameOf(x.s.by)))+'</td><td>'+esc(x.s.how||'')+'</td><td>'+new Date(x.s.t).toLocaleDateString()+'</td></tr>'; }).join('')+'</table>':'<p>None yet.</p>',
+    buttons:[{label:'Close',value:null,primary:true}]});
+}
+function playerList(){ return Object.keys(G.players).sort(function(a,b){ return (G.players[a].name||'').toLowerCase().localeCompare((G.players[b].name||'').toLowerCase()); }); }
+function openStrikes(){
+  var act=Object.keys(G.strikes||{}).filter(function(id){ return !G.strikes[id].cleared; });
+  scrollDialog({eyebrow:'Steward', title:'Strikes',
+    html:(act.length?'<p>Recorded strikes (click one to clear it):</p>':'<p>No strikes are recorded.</p>'),
+    list:act.map(function(id){ var s=G.strikes[id]; return {label:esc(nameOf(s.pid))+': '+esc(s.reason), cost:new Date(s.t).toLocaleDateString()+' &middot; clear', value:{clear:id}}; })
+      .concat(playerList().map(function(pid){ return {label:'Record a strike against '+esc(full(G.players[pid])), cost:sponsorStrikes(pid).length+' now', value:{add:pid}}; })),
+    cancel:null, buttons:[{label:'Close',value:null}]}).then(function(res){
+    var v=res.value; if(!v) return;
+    if(v.clear){ putPath('/strikes/'+v.clear+'/cleared',Date.now()); G.strikes[v.clear].cleared=Date.now(); say('Strike cleared.'); return; }
+    scrollDialog({eyebrow:'Steward', title:'A strike against '+esc(nameOf(v.add)),
+      html:'<div class="sc-field"><label for="st-why">Why?</label><textarea id="st-why" rows="2" maxlength="200" style="font-size:16px"></textarea></div><p class="sc-note"></p>',
+      cancel:null, buttons:[{label:'Cancel',value:null},{label:'Record it',value:'ok',primary:true}],
+      check:function(x,box){ return x==='ok' && !(box.querySelector('#st-why').value||'').trim() ? 'Write the reason.' : ''; }}).then(function(r2){
+      if(r2.value!=='ok') return;
+      recordStrike(v.add,(r2.box.querySelector('#st-why').value||'').trim().slice(0,200));
+      say('Strike recorded against '+esc(nameOf(v.add))+'.');
+    });
+  });
+}
+function recordStrike(pid,reason){
+  var id=q36(Date.now())+'-'+pid; G.strikes=G.strikes||{};
+  G.strikes[id]={pid:pid,reason:reason,t:Date.now(),by:ME};
+  return putPath('/strikes/'+id,G.strikes[id]);
+}
+/* Mark as fake: the player is removed the way the game removes anyone (their squares wiped, their wagons gone,
+   a note in fallen), and their sponsor gets a strike. The sponsorship record stays. */
+function openMarkFake(){
+  scrollDialog({eyebrow:'Steward', title:'Mark a player as fake', html:'<p>They are removed from the board and every square they hold is wiped. Whoever sponsored them gets a strike. Their sponsorship record stays.</p>',
+    list:playerList().filter(function(p){ return p!==ME; }).map(function(pid){ var s=sponsorRec(pid); return {label:esc(full(G.players[pid])), cost:s?(s.by==='founding'?'founding':'by '+esc(nameOf(s.by))):'no sponsor', value:pid}; }),
+    cancel:null, buttons:[{label:'Cancel',value:null}]}).then(function(res){
+    var pid=res.value; if(!pid) return;
+    scrollDialog({eyebrow:'Steward', title:'Remove '+esc(full(G.players[pid]))+'?', html:'<p>This cannot be undone.</p>', cancel:false,
+      buttons:[{label:'Keep them',value:false},{label:'Remove as fake',value:true,primary:true}]}).then(function(r2){ if(r2.value) markFake(pid); });
+  });
+}
+function markFake(pid){
+  var now=Date.now(), patch={}, s=sponsorRec(pid), nm=full(G.players[pid]||{name:'?'});
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid) continue;
+    if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; } else { delete G.cells[k]; patch['cells/'+k]=null; } }
+  Object.keys(G.caravans||{}).forEach(function(id){ var cv=G.caravans[id]; if(cv&&(cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; } });
+  Object.keys(G.treks||{}).forEach(function(id){ var t=G.treks[id]; if(t&&t.o===pid){ delete G.treks[id]; patch['treks/'+id]=null; } });
+  patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen=G.fallen||{}; G.fallen[pid]=now; delete G.players[pid];
+  if((G.sponsorships||{})[pid]){ patch['sponsorships/'+pid+'/fake']=now; G.sponsorships[pid].fake=now; }   // the record stays, marked, so the name can't simply come back
+  if(s && s.by && s.by!=='founding'){ var id=q36(now)+'-'+s.by; G.strikes=G.strikes||{}; G.strikes[id]={pid:s.by,reason:'sponsored '+nm+', found to be fake',t:now,by:ME}; patch['strikes/'+id]=G.strikes[id]; }
+  patch['rev']=now; myRev=now; cellsGen++;
+  dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+  render(); say(esc(nm)+' has been removed as a fake player'+(s&&s.by&&s.by!=='founding'?', and '+esc(nameOf(s.by))+' has a strike for vouching for them':'')+'.');
+}
+
+/* ═══ letters by caravan ═════════════════════════════════════════════════
+   A caravan can carry one private letter of up to 280 characters. The text lives outside the board,
+   at marchland_letters/<board code>/<recipient>/<caravan id>, so a board download never carries it,
+   and only the sender (who writes it) and the recipient (who reads it) ever fetch it; the caravan
+   itself only carries lt:1, and the replay log never sees the text, just a sealed scroll on the wagon.
+   (Filed under the recipient, so their shelf is one small read without an index.) The privacy
+   promised here is privacy inside the game: anyone who can read the raw database could read it. */
+var LETTERS_ROOT='marchland_letters', LETTER_MAX=280;
+function letterPath(to,id){ return '/'+LETTERS_ROOT+'/'+gameCode+'/'+to+(id?'/'+id:''); }
+var letters={list:{}, blocked:false};
+function loadLetters(){
+  if(!online||!me()) return;
+  dbGet(letterPath(ME)).then(function(d){ letters.list=d||{}; letters.blocked=false; renderLetterBtn(); },function(){ letters.blocked=true; });
+}
+function lettersHere(){
+  var now=Date.now();
+  return Object.keys(letters.list).map(function(id){ return {id:id,l:letters.list[id]}; })
+    .filter(function(x){ return x.l && (x.l.eta||0)<=now; }).sort(function(a,b){ return b.l.eta-a.l.eta; });
+}
+function renderLetterBtn(){
+  var b=document.getElementById('lt-btn'); if(!b) return;
+  var here=lettersHere(), un=here.filter(function(x){ return !x.l.read; }).length;
+  b.classList.toggle('hide',!here.length);
+  var bd=document.getElementById('lt-badge'); bd.textContent=String(un); bd.classList.toggle('hide',!un);
+}
+function openShelf(){
+  var here=lettersHere();
+  if(!here.length) return say('No letters have reached you.');
+  scrollDialog({eyebrow:'Your letters', title:'Letters by caravan', cancel:null,
+    list:here.map(function(x){ return {label:(x.l.read?'':'&#9679; ')+'From '+esc(nameOf(x.l.from)), cost:new Date(x.l.eta).toLocaleDateString(), value:x.id}; }),
+    buttons:[{label:'Close',value:null}]}).then(function(res){ if(res.value) readLetter(res.value); });
+}
+function readLetter(id){
+  var l=letters.list[id]; if(!l) return;
+  if(!l.read){ l.read=Date.now(); dbPut(letterPath(ME,id)+'/read',l.read).catch(function(){}); renderLetterBtn(); }
+  scrollDialog({eyebrow:'A letter', title:'From '+esc(nameOf(l.from)),
+    html:'<div class="seal" aria-hidden="true">M</div><p class="sc-sub">Sent '+new Date(l.t).toLocaleString()+', arrived '+new Date(l.eta).toLocaleString()+'</p>'
+      +'<p class="letter-text">'+esc(l.text||'')+'</p>',
+    cancel:null, buttons:[{label:'Close',value:null},{label:'Delete',value:'del'},{label:'Reply',value:'reply',primary:true}]}).then(function(res){
+    if(res.value==='reply'){ if(G.players[l.from]) openCaravanOnMap(l.from); else nope('They are no longer on the board.'); }
+    if(res.value==='del'){ delete letters.list[id]; dbPut(letterPath(ME,id),null).catch(function(){}); renderLetterBtn(); say('The letter is burned.'); }
+  });
+}
+function letterCount(){ var t=document.getElementById('cv-letter'), n=(t.value||'').length; document.getElementById('cv-count').textContent=n+'/'+LETTER_MAX; }
+
+/* ═══ November crusades ══════════════════════════════════════════════════
+   During November a player with a castle may proclaim a crusade against one named player. For 72
+   hours anyone else (not the target) may take the cross; a player belongs to one crusade at a time,
+   a target faces one at a time, and a player has one proclaimed crusade going at once. Members pay
+   marches into the treasury, and any member may launch a pooled strike on a square of the target's:
+   every soldier of every member whose band stands on a live road square touching it fights as one
+   pool in the duel chain (trebuchets are not in the pool; they fire on their own). The strike's
+   marches come from the treasury first, then from the striker. Losses are shared in proportion to
+   the soldiers each member committed (largest remainder); if the pool wins but the striker would
+   have nobody left, one loss moves from the striker to the member with the most survivors. The
+   striker takes the square; a seized ruin's bounty and the spoils are split by soldiers committed.
+   Nobody's tab ever writes another member's marches or stores: each share (and, when the crusade
+   ends, each refund of the treasury in proportion to what was paid in) is written into the crusade
+   as an entitlement, and that member's own tab collects it exactly once (a claimed flag, written
+   only if it was not there). The striker's tab does change members' band squares for their losses,
+   but reads each one again first and stops if it changed. Every crusade dissolves on December 1. */
+var CRUSADE_OK=(new Date().getMonth()===10);
+try{ if(/[?&]crusade=1/.test(location.search)) CRUSADE_OK=true; }catch(e){}
+var CRUSADE_MS=72*36e5, CRUSADE_COL='#F7EBC0', CRUSADE_EDGE='#8E1B1B';
+function crusadeEnd(t){ var y=new Date(t).getFullYear(), dec=new Date(y,11,1).getTime(); if(dec<=t) dec=new Date(y+1,11,1).getTime(); return Math.min(t+CRUSADE_MS,dec); }
+function crusadesLive(){
+  var now=Date.now(), out=[];
+  if(!G||!G.crusades) return out;
+  Object.keys(G.crusades).forEach(function(id){ var c=G.crusades[id]; if(c && !c.done && now<c.end && CRUSADE_OK) out.push({id:id,c:c}); });
+  return out;
+}
+function crusadeOf(pid){ return crusadesLive().filter(function(x){ return x.c.members && x.c.members[pid]; })[0]||null; }
+function crusadeAgainst(pid){ return crusadesLive().filter(function(x){ return x.c.target===pid; })[0]||null; }
+function treasury(c){ var n=0, k; for(k in (c.pay||{})) n+=(c.pay[k].n||0); for(k in (c.spent||{})) n-=(c.spent[k]||0); return Math.max(0,n); }
+function crossOf(pid){ return !!(pid && crusadeOf(pid)); }
+/* split n among parts by weight, largest remainder; ties go the same way every time */
+function shareOut(n,weights){
+  var keys=Object.keys(weights).sort(), tot=keys.reduce(function(a,k){ return a+weights[k]; },0), out={}, rem=[], used=0;
+  if(!tot){ keys.forEach(function(k){ out[k]=0; }); return out; }
+  keys.forEach(function(k){ var x=n*weights[k]/tot; out[k]=Math.floor(x); used+=out[k]; rem.push({k:k,f:x-out[k],w:weights[k]}); });
+  rem.sort(function(a,b){ return (b.f-a.f)||(b.w-a.w)||(a.k<b.k?-1:1); });
+  for(var i=0;used<n;i++,used++) out[rem[i%rem.length].k]++;
+  return out;
+}
+/* the pool for a square of the target's: every member band on a live road square beside it */
+function crusadePool(c,q,r){
+  var pool=[];
+  Object.keys(c.members||{}).sort().forEach(function(pid){
+    var L=liveRoads(pid);
+    for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr, n=G.cells[nk]; if(n&&n.o===pid&&n.b>0&&!building(n)&&L[nk]) pool.push({pid:pid,q:nq,r:nr,n:n.b}); }
+  });
+  return pool;
+}
+function poolBy(pool){ var w={}; pool.forEach(function(b){ w[b.pid]=(w[b.pid]||0)+b.n; }); return w; }
+function proclaim(){
+  if(!CRUSADE_OK) return nope('Crusades are only proclaimed in November.');
+  if(!castlesOf(ME)) return nope('Only a player with a castle standing can proclaim a crusade.');
+  if(crusadeOf(ME)) return nope('You have already taken the cross in a crusade &mdash; a player belongs to one at a time.');
+  var ids=playerList().filter(function(p){ return p!==ME && !crusadeAgainst(p); });
+  scrollDialog({eyebrow:'A crusade', title:'Proclaim a crusade against&hellip;', html:'<p>For 72 hours anyone but the target may take the cross and pool their soldiers against them. A player can face one crusade at a time.</p>',
+    cancel:null, list:ids.map(function(p){ return {label:esc(full(G.players[p])), cost:cellsOf(p)+' squares', value:p}; }), buttons:[{label:'Not now',value:null}]}).then(function(res){
+    var tgt=res.value; if(!tgt) return;
+    var now=Date.now(), id=ME+'-'+now.toString(36), rec={by:ME, target:tgt, t:now, end:crusadeEnd(now), members:{}};
+    rec.members[ME]=now; G.crusades=G.crusades||{}; G.crusades[id]=rec;
+    putPath('/crusades/'+id,rec); var tp=G.players[tgt];
+    logMove('crusade',tp.q,tp.r,null,tgt,0,{v:2,cid:id});
+    render(); say('<b>The crusade is proclaimed</b> against '+esc(nameOf(tgt))+'. For 72 hours others may take the cross and join your strikes.');
+  });
+}
+function joinCrusade(id){
+  var c=G.crusades&&G.crusades[id], now=Date.now();
+  if(!c||c.done||now>=c.end) return nope('That crusade is over.');
+  if(c.target===ME) return nope('You are its target.');
+  if(crusadeOf(ME)) return nope('You already belong to a crusade.');
+  c.members=c.members||{}; c.members[ME]=now;
+  putPath('/crusades/'+id+'/members/'+ME,now);
+  var tp=G.players[c.target]; logMove('crusadejoin',tp?tp.q:me().q,tp?tp.r:me().r,null,c.target,0,{v:2,cid:id});
+  render(); say('You have taken the cross against '+esc(nameOf(c.target))+'.');
+}
+function payIn(id){
+  var c=G.crusades&&G.crusades[id], pl=me();
+  if(!c||!(c.members||{})[ME]) return nope('Only a member pays into the treasury.');
+  if(pl.squares<1) return nope('You have no marches to give.');
+  scrollDialog({eyebrow:'The treasury', title:'Pay marches in', html:'<p>The treasury pays for strikes first. Whatever is left when the crusade ends goes back to those who paid, in proportion.</p>',
+    cancel:null, list:[1,2,5,10,20].filter(function(n){ return n<=pl.squares; }).map(function(n){ return {label:n+' march'+(n>1?'es':''), value:n}; }), buttons:[{label:'Not now',value:null}]}).then(function(res){
+    var n=res.value; if(!n) return;
+    if(pl.squares<n) return nope('Not enough marches.');
+    var now=Date.now(), pid=ME+'-'+now.toString(36);
+    pl.squares-=n; c.pay=c.pay||{}; c.pay[pid]={pid:ME,n:n,t:now};
+    putPath('/crusades/'+id+'/pay/'+pid,c.pay[pid]); pushMe();
+    var tp=G.players[c.target]; logMove('crusadepay',tp?tp.q:pl.q,tp?tp.r:pl.r,null,c.target,0,{v:2,cid:id,n:n});
+    render(); say('You paid <b>'+n+'</b> into the treasury, which now holds '+treasury(c)+'.');
+  });
+}
+function strikeMenu(id){
+  var c=G.crusades&&G.crusades[id];
+  if(!c||!(c.members||{})[ME]) return nope('Only a member can launch a strike.');
+  var opts=[];
+  for(var k in G.cells){
+    var tc=G.cells[k]; if(tc.o!==c.target) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    if(tc.k===CASTLE && !isRuin(tc)) continue;
+    var pool=crusadePool(c,q,r), w=poolBy(pool); if(!w[ME]) continue;
+    var tot=pool.reduce(function(a,b){ return a+b.n; },0), L=defenderLine(q,r);
+    opts.push({label:(tc.k===TOWER?'Their tower':isRuin(tc)?'Their fallen castle':'Their square')+' at '+q+','+r, cost:tot+' soldiers &middot; '+pct(battleOdds(tot,L.p).win), value:[q,r]});
+  }
+  if(!opts.length) return nope('No square of '+esc(nameOf(c.target))+'&rsquo;s has one of your bands on a live road beside it. A strike needs your own band in the pool.');
+  scrollDialog({eyebrow:'Crusade strike', title:'Strike where?', cancel:null, list:opts, buttons:[{label:'Not now',value:null}]}).then(function(res){ if(res.value) strikePrompt(id,res.value[0],res.value[1]); });
+}
+function strikePrompt(id,q,r){
+  var c=G.crusades[id], pool=crusadePool(c,q,r), w=poolBy(pool), tot=pool.reduce(function(a,b){ return a+b.n; },0), L=defenderLine(q,r), o=battleOdds(tot,L.p);
+  var tr=treasury(c);
+  scrollDialog({eyebrow:'Crusade strike', title:'Strike '+esc(nameOf(c.target))+'&rsquo;s square?',
+    html:'<p>The pool of <b>'+tot+'</b> faces <b>'+lineText(L.units)+'</b>.</p>'
+      +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p><p>Expected losses: <b>'+(Math.round(o.expLoss*10)/10)+'</b>, shared in proportion.</p>'
+      +'<table class="sc-table"><tr><th>Member</th><th>Soldiers</th></tr>'+Object.keys(w).sort().map(function(p){ return '<tr><td>'+esc(nameOf(p))+'</td><td>'+w[p]+'</td></tr>'; }).join('')+'</table>'
+      +'<p><i>'+ATTACK_COST+' marches: '+Math.min(tr,ATTACK_COST)+' from the treasury'+(tr<ATTACK_COST?', '+(ATTACK_COST-tr)+' from you':'')+'.</i></p>',
+    cancel:false, buttons:[{label:'Hold back',value:false},{label:'Strike &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){ if(res.value) strikeNow(id,q,r,pool,L.p); });
+}
+function strikeNow(id,q,r,pool0,shown){
+  var pl=me(), c=G.crusades[id], k=key(q,r), tr=treasury(c), fromT=Math.min(tr,ATTACK_COST), fromMe=ATTACK_COST-fromT;
+  if(fighting) return;
+  if(pl.squares<fromMe) return nope('The treasury is short and you have too few marches for the rest.');
+  fighting=true; say('The crusaders close&hellip;');
+  var keys=[k].concat(pool0.map(function(b){ return key(b.q,b.r); })), fresh={};
+  Promise.all(keys.map(function(kk){ var p=kk.split('_'); return cellFresh(parseInt(p[0],10),parseInt(p[1],10)).then(function(f){ fresh[kk]=f; }); })).then(function(){
+    // every band square must be just as this screen saw it; otherwise stop and say so
+    for(var i=0;i<pool0.length;i++){ var b=pool0[i], f=fresh[key(b.q,b.r)]; if(!f.c||f.c.o!==b.pid||(f.c.b||0)!==b.n) throw {msg:'A crusader&rsquo;s band moved or changed just now. Nothing happened &mdash; look again.'}; }
+    var tf=fresh[k]; if(tf.c) G.cells[k]=tf.c; else delete G.cells[k];
+    var tc=cellOf(q,r), prev=tc.o;
+    if(prev!==c.target) throw {msg:'That square is no longer '+esc(nameOf(c.target))+'&rsquo;s.'};
+    if(tc.k===CASTLE&&!isRuin(tc)) throw {msg:'That castle stands again.'};
+    var L=defenderLine(q,r); if(JSON.stringify(L.p)!==JSON.stringify(shown)){ fighting=false; return strikePrompt(id,q,r); }
+    var w=poolBy(pool0), tot=pool0.reduce(function(a,b){ return a+b.n; },0), seed=newSeed(), res=fightOut(tot,L.p,seed), kn=lineCounts(L.units,0,res.killed);
+    var loss=shareOut(res.lost,w);
+    if(res.won && (w[ME]||0)-(loss[ME]||0)<=0){                       // the striker keeps one survivor to hold the square
+      var best=null; Object.keys(w).sort().forEach(function(p){ if(p===ME) return; var sv=w[p]-(loss[p]||0); if(sv>0&&(!best||sv>w[best]-(loss[best]||0))) best=p; });
+      if(best && loss[ME]>0){ loss[ME]--; loss[best]++; }
+    }
+    var ruin=isRuin(tc), loserN=Math.max(1,cellsOf(prev)), pw=tc.w||0, pk=tc.k, plv=tc.l, pg=tc.g||0;
+    // the defenders who fell
+    if(kn.wall){ tc.w=Math.max(0,pw-kn.wall); delete tc.wd; }
+    var gl=kn.guard||0, touched=[];
+    L.guard.cells.forEach(function(g){ if(gl<=0) return; var gc=G.cells[key(g[0],g[1])]; if(!gc||!(gc.b>0)) return; var d=Math.min(gc.b,gl); gc.b-=d; gl-=d; addGraves(gc,d); if(!gc.b) delete gc.b; if(key(g[0],g[1])!==k) touched.push(g); });
+    if(kn.tower){ var h=towerH(tc)-kn.tower*TOWER_UNIT_H; if(h<=0){ tc.k=null; tc.l=0; tc.g=0; tc.d=0; delete tc.h; } else tc.h=h; }
+    if(kn.treb){ tc.tb=Math.max(0,(tc.tb||0)-kn.treb); tc.tr=arr(tc.tr).slice(0,tc.tb); if(!tc.tb){ delete tc.tb; delete tc.tr; } }
+    addGraves(tc,res.lost);
+    // each member's losses come off their bands, biggest first; the striker's survivors march in on a win
+    var bandOut={}, left=JSON.parse(JSON.stringify(loss)), myLeft=0;
+    pool0.slice().sort(function(a,b){ return b.n-a.n; }).forEach(function(b){ var bk=key(b.q,b.r), fc=fresh[bk].c, d=Math.min(fc.b,left[b.pid]||0); left[b.pid]=(left[b.pid]||0)-d; fc.b-=d; bandOut[bk]=fc; });
+    if(res.won){ Object.keys(bandOut).forEach(function(bk){ var fc=bandOut[bk]; if(fc.o===ME){ myLeft+=fc.b; fc.b=0; } }); }
+    var bounty=0;
+    if(res.won){
+      tc.o=ME; tc.w=0; delete tc.wd; delete tc.tb; delete tc.tr; tc.b=myLeft;
+      if(ruin){ tc.k=null; tc.l=0; tc.g=0; tc.d=0; delete tc.h; delete tc.ht; bounty=CASTLE_BOUNTY; }
+      if(tc.cs || tc.rd || tc.t===RIVER) tc.cs={n:1};
+    }
+    writeCell(q,r,tc);
+    return cellPutIf(q,r,G.cells[k]||null,tf.tag).then(function(okw){
+      if(!okw) throw {msg:'That square changed at the last moment. Nothing happened.'};
+      return Promise.all(Object.keys(bandOut).map(function(bk){
+        var fc=bandOut[bk], p=bk.split('_'); if(!(fc.b>0)) delete fc.b;
+        fc.q=parseInt(p[0],10); fc.r=parseInt(p[1],10); writeCell(fc.q,fc.r,fc);
+        return cellPutIf(fc.q,fc.r,G.cells[bk]||null,fresh[bk].tag);
+      })).then(function(oks){
+        if(oks.some(function(x){ return !x; })) say('<span class="bad">One crusader&rsquo;s band changed during the strike; their losses could not be written.</span>');
+        touched.forEach(function(g){ pushCell(g[0],g[1]); });
+        return res.won?takeSpoils(prev,loserN):{};
+      }).then(function(sp){
+        var now=Date.now(), sid=ME+'-'+now.toString(36), patch={}, mineM=0, mineR={};
+        pl.squares-=fromMe; if(fromT) patch['spent/'+sid]=fromT;
+        var bShare=shareOut(bounty,w), spShare={};
+        GOODS.forEach(function(g){ var sh=shareOut((sp&&sp[g])||0,w); Object.keys(sh).forEach(function(p){ spShare[p]=spShare[p]||{}; spShare[p][g]=sh[p]; }); });
+        Object.keys(w).forEach(function(p){
+          var m=bShare[p]||0, rs=spShare[p]||{};
+          if(p===ME){ mineM=m; mineR=rs; return; }
+          if(m||hasGoods(rs)) patch['ent/'+p+'/'+sid]={m:m,res:rs,why:'a share of the strike at '+q+','+r,t:now};
+        });
+        pl.squares+=mineM; GOODS.forEach(function(g){ pl.res[g]=(pl.res[g]||0)+(mineR[g]||0); });
+        patch['strikes/'+sid]={by:ME,q:q,r:r,t:now,seed:seed,won:res.won?1:0,pool:w,loss:loss};
+        dbPatch('/marchland/'+gameCode+'/crusades/'+id,patch).then(bumpRev);
+        for(var pk2 in patch){ var parts=pk2.split('/'), o=c; for(var j=0;j<parts.length-1;j++){ o[parts[j]]=o[parts[j]]||{}; o=o[parts[j]]; } o[parts[parts.length-1]]=patch[pk2]; }
+        logMove('crusadestrike',q,r,[pool0[0].q,pool0[0].r],prev,res.lost,{v:2,cid:id,seed:seed,n:tot,ln:L.p.map(function(x){ return Math.round(x*100); }),won:res.won?1:0,kl:res.killed,pool:w,lsh:loss,pw:pw||null,pk:pk||null,pl:pk?plv:null,pg:pk?pg:null,sp:hasGoods(sp)?sp:null});
+        render(); pushMe();
+        say(res.won?'<span class="good"><b>The crusade takes the square.</b></span> Losses: '+Object.keys(loss).map(function(p){ return esc(nameOf(p))+' '+loss[p]; }).join(', ')+'.'+(bounty?' The bounty of '+bounty+' is shared.':'')+(hasGoods(sp)?' Spoils shared: '+goodsText(sp)+'.':'')
+          :'<span class="bad"><b>The strike is beaten back.</b></span> The pool of '+tot+' fell, after bringing down '+res.killed+' defender'+(res.killed===1?'':'s')+'.');
+      });
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; no strike was made.'); })
+    .then(function(){ fighting=false; });
+}
+/* my own tab collects what a crusade owes me, once: the claimed flag is written only if it was not there yet */
+var collecting={};
+function settleCrusadeDues(){
+  if(!G||!me()||!online) return;
+  Object.keys(G.crusades||{}).forEach(function(id){
+    var ent=((G.crusades[id].ent||{})[ME])||{};
+    Object.keys(ent).forEach(function(eid){
+      var e=ent[eid], ck=id+'/'+eid; if(!e||e.claimed||collecting[ck]) return;
+      collecting[ck]=1;
+      dbPutIf('/marchland/'+gameCode+'/crusades/'+id+'/ent/'+ME+'/'+eid+'/claimed',Date.now(),'null_etag').then(function(x){
+        if(!x.ok) return;
+        var pl=me(); e.claimed=Date.now();
+        pl.squares+=(e.m||0); GOODS.forEach(function(g){ pl.res[g]=(pl.res[g]||0)+((e.res&&e.res[g])||0); });
+        pushMe(); render();
+        say('<span class="good">From the crusade:</span> '+[e.m?e.m+' march'+(e.m>1?'es':''):'',goodsText(e.res||{})].filter(Boolean).join(', ')+' ('+esc(e.why||'')+').');
+      }).catch(function(){}).then(function(){ delete collecting[ck]; });
+    });
+  });
+}
+/* at 72 hours, or on December 1, the crusade closes: what is left in the treasury goes back to those who paid,
+   in proportion, as entitlements. Safe to run twice: the refund entries have fixed names and the done flag is checked. */
+function settleCrusades(){
+  if(!G||!G.crusades||!boardFresh()||!online) return;
+  var now=Date.now();
+  Object.keys(G.crusades).forEach(function(id){
+    var c=G.crusades[id]; if(!c||c.done) return;
+    if(now<c.end && CRUSADE_OK) return;
+    var paid={}; Object.keys(c.pay||{}).forEach(function(k){ var p=c.pay[k]; paid[p.pid]=(paid[p.pid]||0)+(p.n||0); });
+    var back=shareOut(treasury(c),paid), patch={done:now};
+    Object.keys(back).forEach(function(p){ if(back[p]>0) patch['ent/'+p+'/refund']={m:back[p],res:{},why:'the treasury handed back when the crusade ended',t:now}; });
+    c.done=now;
+    dbPatch('/marchland/'+gameCode+'/crusades/'+id,patch).then(bumpRev);
+    var tp=G.players[c.target]; if(c.by===ME) logMove('crusadeend',tp?tp.q:me().q,tp?tp.r:me().r,null,c.target,0,{v:2,cid:id});
+  });
+}
+/* ── the banner strip above the map ── */
+function renderCrusades(){
+  var el=document.getElementById('crusade-strip'); if(!el) return;
+  if(!CRUSADE_OK||!me()){ el.classList.add('hide'); return; }
+  var live=crusadesLive(), mine=crusadeOf(ME), rows=live.map(function(x){
+    var c=x.c, n=Object.keys(c.members||{}).length, isM=!!(c.members||{})[ME], btn='';
+    if(c.target!==ME && !mine) btn+='<button type="button" data-cr="join" data-id="'+x.id+'">Take the cross</button>';
+    if(isM) btn+='<button type="button" data-cr="pay" data-id="'+x.id+'">Pay in</button><button type="button" class="go" data-cr="strike" data-id="'+x.id+'">Strike</button>';
+    return '<div class="cr-row"><span class="cr-cross" aria-hidden="true"></span><span><b>Crusade against '+esc(nameOf(c.target))+(c.target===ME?' (you)':'')+'</b> &middot; '+hoursLeft(c.end)+' left &middot; treasury '+treasury(c)+' &middot; '+n+' crusader'+(n>1?'s':'')+'</span><span class="spacer"></span>'+btn+'</div>';
+  }).join('');
+  var can=!mine && castlesOf(ME)>0 && !live.some(function(x){ return x.c.by===ME; });
+  el.innerHTML=rows+(can?'<div class="cr-row"><span class="muted">'+(live.length?'':'November is the month of crusades. ')+'Any player with a castle may proclaim one against another player.</span><span class="spacer"></span><button type="button" data-cr="proclaim">Proclaim a crusade</button></div>':'');
+  el.classList.toggle('hide',!el.innerHTML);
+}
+/* ── on the map: the cross on crusaders' banners, a banner over the target's castles, and lines between bands
+   that could strike the same square together. Overlays only; nobody's colours change. ── */
+function crossGlyph(g,x,y,s){
+  g.save(); g.fillStyle=CRUSADE_COL; g.strokeStyle=CRUSADE_EDGE; g.lineWidth=Math.max(1,s*0.12);
+  g.beginPath(); g.rect(x-s*0.14,y-s*0.5,s*0.28,s); g.rect(x-s*0.4,y-s*0.22,s*0.8,s*0.28); g.stroke(); g.fill();
+  g.fillStyle=CRUSADE_EDGE; g.fillRect(x-s*0.07,y-s*0.43,s*0.14,s*0.86); g.fillRect(x-s*0.33,y-s*0.15,s*0.66,s*0.14);
+  g.restore();
+}
+function crossBanner(g,x,y,h){
+  g.save(); g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,h*0.06); g.lineCap='round';
+  g.beginPath(); g.moveTo(x,y); g.lineTo(x,y-h); g.stroke();
+  poly(g,[[x,y-h],[x+h*0.62,y-h],[x+h*0.62,y-h*0.5],[x+h*0.31,y-h*0.6],[x,y-h*0.5]],CRUSADE_COL,CRUSADE_EDGE,Math.max(0.8,h*0.04));
+  crossGlyph(g,x+h*0.31,y-h*0.77,h*0.3);
+  g.restore();
+}
+var crLinks={sig:'',lines:[]};
+function drawCrusades(bands,builds,trebs){
+  var live=crusadesLive(); if(!live.length) return;
+  var targets={}, members={};
+  live.forEach(function(x){ targets[x.c.target]=x; Object.keys(x.c.members||{}).forEach(function(p){ members[p]=x; }); });
+  var sig=cellsGen+':'+live.map(function(x){ return x.id+Object.keys(x.c.members||{}).join(','); }).join('|');
+  if(sig!==crLinks.sig){                                // which member bands could strike the same square together
+    crLinks.sig=sig; crLinks.lines=[];
+    live.forEach(function(x){
+      for(var k in G.cells){ var tc=G.cells[k]; if(tc.o!==x.c.target) continue; var p=k.split('_'), pool=crusadePool(x.c,parseInt(p[0],10),parseInt(p[1],10));
+        var owners={}; pool.forEach(function(b){ owners[b.pid]=1; }); if(Object.keys(owners).length<2) continue;
+        for(var i=0;i<pool.length;i++) for(var j=i+1;j<pool.length;j++) if(pool[i].pid!==pool[j].pid) crLinks.lines.push([pool[i].q,pool[i].r,pool[j].q,pool[j].r]); }
+    });
+  }
+  ctx.save(); ctx.strokeStyle=CRUSADE_EDGE; ctx.globalAlpha=0.75; ctx.lineWidth=Math.max(1.5,S*0.06); ctx.setLineDash([Math.max(3,S*0.15),Math.max(3,S*0.12)]);
+  crLinks.lines.forEach(function(l){ var A=toNear(l[0],l[1]), B=toNear(l[2],l[3]); ctx.beginPath(); ctx.moveTo(A[0],A[1]); ctx.lineTo(B[0],B[1]); ctx.stroke(); });
+  ctx.restore();
+  builds.forEach(function(e){ var c=e[0]; if(c.k===CASTLE && targets[c.o] && S>=9) crossBanner(ctx,e[1][0]+S*0.42,e[1][1]-S*0.2,Math.max(10,S*0.7)); });
+  bands.forEach(function(e){ var c=e[0]; if(members[c.o] && S>=9) crossBanner(ctx,e[1][0]-S*0.42,e[1][1]+S*0.1,Math.max(9,S*0.55)); });
+  trebs.forEach(function(e){ var c=e[0]; if(members[c.o] && S>=12) crossBanner(ctx,e[1][0]-S*0.62,e[1][1]+S*0.2,Math.max(8,S*0.4)); });
+}
 
 /* ═══ join ═════════════════════════════════════════════════════════════
    One board for everybody, for now. Earlier builds let anyone start a fresh
@@ -5202,6 +5767,7 @@ function enterGame(isNew){
   if(isNew){ markNoticeSeen(); markCvNoteSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
   else { setTimeout(showNext,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
   chatStart();
+  loadLetters();
 }
 /* ── one-time announcements ──
    Each notice is shown once per player. "Seen" is kept on the player's own record (so it
@@ -5217,8 +5783,20 @@ var NOTES=[
      +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'},
   {id:'nov26-roads', eyebrow:'New this November', title:'Roads',
    html:'<p>Land is now claimed, and attacks are made, only from <b>live roads</b>: your castles, finished bridges, and roads joined to a castle. Your old ground has no roads yet.</p>'
-     +'<p>Tap a square beside a castle and choose <b>Build a road</b> (1 march, 20 timber, 10 stone, a day). Armies move 1 hour a square on roads, 3 off them.</p>'}
+     +'<p>Tap a square beside a castle and choose <b>Build a road</b> (1 march, 20 timber, 10 stone, a day). Armies move 1 hour a square on roads, 3 off them.</p>'},
+  {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
+   html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
+     +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return CRUSADE_OK; },
+   html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
+/* plus a notice, once, to anyone a crusade is proclaimed against */
+function notesNow(){
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null;
+  if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
+    html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
+  return out;
+}
 function noteSeen(id){
   var pl=me();
   if(pl && pl.notes && pl.notes[id]) return true;
@@ -5243,7 +5821,7 @@ function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); 
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
   if(['sagenote','cvnote','godsnote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
-  var due=NOTES.filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
+  var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
     +'<div class="sc-btns"><button type="button" class="sc-btn primary" id="rulesnote-go">'+(due.go||'Got it')+'</button></div>';
@@ -5433,6 +6011,23 @@ function join(){
     if(boardVersion(G)>DATA_V){ G=null; showWait('stale'); return; }
     if(online && migrationPending(G).length && !isSteward(tryPid)){ G=null; showWait('update',join); return; }
     hideWait();
+    var spRec=(G.sponsorships||{})[tryPid], pend=(G.pending||{})[tryPid], approved=null, hintEl=document.getElementById('join-hint');
+    if(!G.players[tryPid] && online && !isSteward(tryPid) && Object.keys(G.players).length){
+      if(spRec && spRec.fake){ G=null; hintEl.innerHTML='<span class="bad">This name was removed as a fake player.</span> Ask the steward if this is a mistake.'; return; }
+      if(pend && pend.pin!==tryHash){ G=null; hintEl.innerHTML='<span class="bad">A request to join under this name is already waiting, with a different PIN.</span>'; return; }
+      if(pend && pend.ok) approved=pend.ok;
+      else if(!spRec){                                // nobody has vouched for this name yet: ask, or keep waiting
+        if(pend){ var pn=nameOf(pend.sponsor); G=null; waitSponsor(tryPid,{name:pend.name,rn:pend.rn,sponsorName:pn}); return; }
+        var B=G, spPid=sponsorPick&&sponsorPick.value; G=null; loadSponsors(B);
+        if(!spPid){ hintEl.innerHTML='<span class="bad">New players need someone already playing to vouch for them.</span> Pick who knows you under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
+        if(!canSponsor(spPid,B)){ hintEl.innerHTML='<span class="bad">'+esc(full(B.players[spPid]||{name:'That player'}))+' can&rsquo;t sponsor anyone right now.</span> Pick someone else.'; return; }
+        var req={name:name,pin:tryHash,rn:realName,sponsor:spPid,t:Date.now()}, spn=full(B.players[spPid]);
+        hintEl.textContent='Sending your request…';
+        dbPut('/marchland/'+gameCode+'/pending/'+tryPid,req).then(function(){ return dbPut('/marchland/'+gameCode+'/rev',Date.now()); })
+          .then(function(){ waitSponsor(tryPid,{name:name,rn:realName,sponsorName:spn}); },function(){ hintEl.textContent='Could not send the request — check your connection.'; });
+        return;
+      }
+    }
     ME=tryPid; myName=name; myPin=pinIn;
     try{ localStorage.setItem('marchland.name',name); localStorage.setItem('marchland.pin',pinIn); }catch(e){}
     var isNew=!G.players[ME];
@@ -5447,6 +6042,7 @@ function join(){
         document.getElementById('join-hint').innerHTML='<span class="bad">There is no clear ground left to start on right now.</span> Ask Chris to make room, then try again.';
         return;
       }
+      if(approved){ G.players[ME].sp={by:approved.by,how:approved.how,t:approved.t}; G.sponsorships=G.sponsorships||{}; G.sponsorships[ME]={by:approved.by,how:approved.how,t:approved.t,name:name,rn:realName}; }
     } else G.players[ME].name=name;
     G.players[ME].rn=realName;                       // real name, shown next to the user name everywhere
     G.players[ME].pin=tryHash;                    // first time a name is used it claims its PIN
@@ -5457,7 +6053,16 @@ function join(){
     if(!isNew) startReplay(since); else markAllSeen();
     // a newcomer writes the ground they were seeded with; anyone else writes
     // only their own record, so rejoining can never overwrite a vote or claim
-    if(isNew){ catchTouched={}; pushAll(); }
+    if(isNew){                                        // a newcomer writes their own record and the ground they were seeded with, nothing else
+      catchTouched={};
+      if(!online || !(remote&&remote.players)) pushAll();
+      else {
+        var np={}; np['players/'+ME]=G.players[ME];
+        for(var nk in G.cells) if(G.cells[nk].o===ME) np['cells/'+nk]=G.cells[nk];
+        if(approved){ np['sponsorships/'+ME]=G.sponsorships[ME]; np['pending/'+ME]=null; if(G.pending) delete G.pending[ME]; }
+        np.rev=Date.now(); myRev=np.rev; dbPatch('/marchland/'+gameCode,np).then(ok,fail);
+      }
+    }
     else { pushMe(); moved.forEach(function(x){ pushCell(x[0],x[1]); }); flushTouched(); }
     if(location.hash) history.replaceState(null,'',location.pathname+location.search);
   }).catch(function(e){
@@ -5466,11 +6071,18 @@ function join(){
 }
 /* Names already on the board, so a returning player picks theirs instead of
    having to remember exactly how they typed it the first time. */
-var knownRn={};
+var knownRn={}, knownPlayers=null, knownExtra=null;
 function loadKnownNames(){
   if(!online) return;
-  dbGet('/marchland/'+GAME_CODE+'/players').then(function(ps){
+  var base='/marchland/'+GAME_CODE;
+  Promise.all([dbGet(base+'/strikes'),dbGet(base+'/sponsorships'),dbGet(base+'/claims')].map(function(pr){ return pr.catch(function(){ return null; }); })).then(function(x){
+    knownExtra={strikes:x[0]||{},sponsorships:x[1]||{},claims:x[2]||{}};
+    if(knownPlayers) loadSponsors({players:knownPlayers,strikes:knownExtra.strikes,sponsorships:knownExtra.sponsorships,claims:knownExtra.claims});
+  });
+  dbGet(base+'/players').then(function(ps){
     if(!ps) return;
+    knownPlayers=ps;
+    if(knownExtra) loadSponsors({players:ps,strikes:knownExtra.strikes,sponsorships:knownExtra.sponsorships,claims:knownExtra.claims});
     var names=[];
     for(var pid in ps){ if(ps[pid]&&ps[pid].name){ names.push(ps[pid].name); knownRn[ps[pid].name]=ps[pid].rn||''; } }
     if(!names.length) return;
@@ -5555,17 +6167,27 @@ function sendCaravan(){
     if(v>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')');
     g[k]=v; if(v>0) any=true;
   });
-  if(!any) return nope('Put something in the wagon first &mdash; type how much stone, timber, iron or grain to send.',btn);
+  var txt=(document.getElementById('cv-letter').value||'').replace(/\r/g,'').trim().slice(0,LETTER_MAX);
+  if(!any && !txt) return nope('Put something in the wagon first &mdash; goods, or a letter.',btn);
   if(short.length) return nope('<span class="bad">Not enough to send.</span> You&rsquo;re short of '+short.join(' and ')+'.',btn);
   var now=Date.now(), id=ME+'-'+now.toString(36), them=G.players[to];
+  if(txt && online && !sendCaravan.letterOk){          // the letter goes first, outside the board; only if it lands does the wagon leave
+    say('Sealing the letter&hellip;');
+    return dbPut(letterPath(to,id),{from:ME,to:to,text:txt,t:now,eta:now+cvTravel(ME,to),read:0}).then(function(){
+      sendCaravan.letterOk={id:id,t:now}; sendCaravan();
+    },function(){ nope('<span class="bad">Letters can&rsquo;t be sent yet</span> &mdash; the database does not allow them. The wagon has not left.',btn); });
+  }
+  if(sendCaravan.letterOk){ id=sendCaravan.letterOk.id; now=sendCaravan.letterOk.t; sendCaravan.letterOk=null; }
   GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
   var c={from:ME, to:to, g:g, t:now, eta:now+cvTravel(ME,to), fq:pl.q, fr:pl.r, tq:them.q, tr:them.r};
+  if(txt) c.lt=1;
+  document.getElementById('cv-letter').value=''; letterCount();
   G.caravans=G.caravans||{}; G.caravans[id]=c;
   GOODS.forEach(function(k){ document.getElementById('cv-'+k).value=''; });
   pushMe().then(function(){ return putPath('/caravans/'+id,c); });
-  logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g});
+  logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g, lt:txt?1:null});
   render();
-  say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+goodsLine(g)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
+  say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+(any?goodsLine(g):'')+(any&&txt?' and ':'')+(txt?'a sealed letter':'')+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
@@ -5580,6 +6202,7 @@ function settleCaravans(){
       pl.cvGot[id]=now; c.got=now; mine=true;
       writes.push(['/caravans/'+id+'/got',now]);
       var line=goodsLine(c.g||{}), from=esc(nameOf(c.from));
+      if(c.lt){ line=(hasGoods(c.g)?line+' and ':'')+'a sealed letter'; setTimeout(loadLetters,400); }
       play({pid:ME,k:'claim',q:pl.q,r:pl.r,n:3,label:'Caravan: +'+line});
       setTimeout(function(){ say('A caravan from <b>'+from+'</b> has arrived at your keep: <span class="good">'+line+'</span>.'); },50);
     }
@@ -5612,6 +6235,11 @@ function drawCaravans(now,amb){
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
     var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1;
     artCaravan(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face);
+    if(c.lt && S>=10){                               // a sealed scroll rides on the wagon (the letter itself is never on the board)
+      var lx=P[0]+S*0.05, ly=P[1]-S*0.32, lw=Math.max(8,S*0.3);
+      ctx.save(); ctx.fillStyle='#F2E6C8'; ctx.strokeStyle='#6E5434'; ctx.lineWidth=1; ctx.fillRect(lx-lw/2,ly-lw*0.22,lw,lw*0.44); ctx.strokeRect(lx-lw/2,ly-lw*0.22,lw,lw*0.44);
+      ctx.fillStyle='#A3241C'; ctx.beginPath(); ctx.arc(lx,ly,lw*0.16,0,6.284); ctx.fill(); ctx.restore();
+    }
     if((c.from===ME||c.to===ME) && S>=12){
       var lab=(SHOW_NAMES?(c.from===ME?'to '+nameOf(c.to):'from '+nameOf(c.from))+' · ':'')+fmtDur(c.eta-t);
       artLabel(ctx,P[0],P[1]+S*0.2+Math.max(10,S)*0.42,lab,Math.max(10,S*0.3),pColor(c.from),1);
