@@ -678,9 +678,10 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 <div id="locknote" class="rulesnote hide" role="alertdialog" aria-modal="true" aria-labelledby="locknote-h">
   <div class="rulesnote-card">
     <p class="rulesnote-eyebrow">A sponsor is needed</p>
-    <h2 id="locknote-h">&#128220; You must find a sponsor to keep playing</h2>
+    <h2 id="locknote-h" style="font-size:22px">You need a sponsor to play</h2>
     <p id="locknote-text"></p>
-    <button type="button" class="rulesnote-go" id="locknote-go">Ask a sponsor</button>
+    <button type="button" class="rulesnote-go" id="locknote-go" style="margin-top:12px">Pick a sponsor</button>
+    <button type="button" class="rulesnote-go rulesnote-alt" id="locknote-out" style="margin-top:8px">Close and leave the game</button>
   </div>
 </div>
 
@@ -5511,10 +5512,14 @@ function probationText(){
   return 'You joined before sponsors, and every player now needs someone to vouch for them. <b>You cannot play until a sponsor approves you.</b> Ask Bohrer, or any other sponsor, to vouch for you: sign in again and pick who. '
     +'If nobody has by <b>'+esc(new Date(PROBATION_DUE).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}))+'</b> ('+probationLeft()+' from now), your account will be deleted.';
 }
+function probationShort(){
+  return 'You cannot play until a sponsor (Bohrer or another) vouches for you. Tap <b>Pick a sponsor</b> to ask. No sponsor by <b>'+esc(new Date(PROBATION_DUE).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))+'</b> and your account is deleted.';
+}
 function lockProbation(){
   if(PLOCK) return; PLOCK=true;
   var n=document.getElementById('locknote'); if(!n) return;
-  document.getElementById('locknote-text').innerHTML=probationText();
+  document.getElementById('locknote-text').innerHTML=probationShort();
+  document.getElementById('locknote-out').onclick=function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); };
   n.classList.remove('hide'); n.scrollTop=0;
   var b=document.getElementById('locknote-go');
   b.onclick=function(){ location.reload(); };            // the name and PIN stay saved, so signing in again goes straight to the sponsor request
@@ -5574,8 +5579,9 @@ function waitSponsor(pid,rec){
   function paint(extra){
     body.innerHTML='<p class="sc-eyebrow">Asking to join</p><h2 id="waitnote-h">Waiting for '+who+'</h2>'
       +'<p>Your request to '+(rec.probation?'keep playing':'join')+' as <b>'+esc(rec.name)+'</b> ('+esc(rec.rn)+') has gone to '+who+'. When they vouch for you, this page opens the board by itself.</p>'
-      +(rec.probation?'<p class="sc-note">You cannot play until then. If nobody has vouched for you by '+esc(new Date(PROBATION_DUE).toLocaleString([], {weekday:'long',month:'long',day:'numeric',hour:'numeric',minute:'2-digit'}))+', your account is deleted.</p>':'')
-      +(extra||'')+'<div class="sc-btns"><button type="button" class="sc-btn" id="sp-withdraw">Withdraw my request</button></div>';
+      +(rec.probation?'<p class="sc-note">No sponsor by '+esc(new Date(PROBATION_DUE).toLocaleString([], {month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}))+' and your account is deleted.</p>':'')
+      +(extra||'')+'<div class="sc-btns"><button type="button" class="sc-btn primary" id="sp-back">Close (keep waiting)</button><button type="button" class="sc-btn" id="sp-withdraw">Withdraw my request</button></div>';
+    document.getElementById('sp-back').onclick=function(){ clearTimeout(spWaitT); n.classList.add('hide'); document.getElementById('join-hint').textContent='Your request is waiting. Press Enter to check it again.'; };
     document.getElementById('sp-withdraw').onclick=function(){
       clearTimeout(spWaitT); dbPut('/marchland/'+gameCode+'/pending/'+pid,null).then(bumpRev).catch(function(){});
       n.classList.add('hide'); document.getElementById('join-hint').textContent='Your request was withdrawn.';
@@ -6311,7 +6317,7 @@ function join(){
       if(pend && pend.pin!==tryHash){ G=null; hintEl.innerHTML='<span class="bad">A request under this name is already waiting, with a different PIN.</span>'; return; }
       if(pend && !pend.no){ var pn2=nameOf(pend.sponsor); G=null; waitSponsor(tryPid,{name:pend.name,rn:pend.rn,sponsorName:pn2,probation:true}); return; }
       var B2=G, spPid2=sponsorPick&&sponsorPick.value, pl2=B2.players[tryPid]; G=null; loadSponsors(B2);
-      hintEl.innerHTML='<span class="bad">You cannot play until a sponsor approves you.</span> '+probationText();
+      hintEl.innerHTML='<span class="bad">You cannot play until a sponsor approves you.</span> '+probationShort();
       if(!spPid2) return;
       if(!canSponsor(spPid2,B2)){ hintEl.innerHTML='<span class="bad">'+esc(full(B2.players[spPid2]||{name:'That player'}))+' can&rsquo;t sponsor anyone.</span> Pick someone else under &ldquo;Who vouches for you?&rdquo;, then press Enter.'; return; }
       var req2={name:pl2.name,pin:tryHash,rn:realName,sponsor:spPid2,t:Date.now(),probe:1}, spn2=full(B2.players[spPid2]);
