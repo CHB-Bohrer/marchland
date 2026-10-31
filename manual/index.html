@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="An animated, narrated walkthrough of the rules of Marchland — a game where walking is the only currency.">
 <meta property="og:title" content="Marchland Field Manual">
-<meta property="og:description" content="Fifteen chapters on how Marchland works, with narration.">
+<meta property="og:description" content="Twenty-two chapters on how Marchland works, with narration.">
 <meta property="og:type" content="website">
 <style>
   html,body{margin:0;padding:0}
@@ -141,7 +141,7 @@ footer a:hover{ color:var(--ink); }
 <div class="stage">
   <div class="stagewrap">
     <canvas id="stage" width="760" height="470" role="img" aria-label="Animated diagram of the current rule"></canvas>
-    <button id="start" class="start">&#9654;&ensp;Start the tour <span>narrated &middot; about 5 minutes</span></button>
+    <button id="start" class="start">&#9654;&ensp;Start the tour <span>narrated &middot; about 7 minutes</span></button>
   </div>
   <div class="bar"><i id="bar"></i></div>
   <div class="hud" id="hud"></div>
@@ -167,17 +167,23 @@ footer a:hover{ color:var(--ink); }
     <dt>Claiming</dt><dd>Once a day, for that day&rsquo;s steps from the Health app, up to 30,000; unclaimed days are lost; every claim is posted to the claim log</dd>
     <dt>Disputes</dt><dd>Anyone else can dispute a claim for 24 hours; the other players then vote for up to 24 hours more; nothing is frozen meanwhile</dd>
     <dt>Voiding</dt><dd>Needs a majority of the other players who have logged in within the last 24 hours; anyone who hasn&rsquo;t doesn&rsquo;t count. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
-    <dt>Empty cell</dt><dd>1 march</dd>
-    <dt>Occupied cell</dt><dd>2 marches and a band of yours beside it. The band loses a soldier per wall course, per gun covering the cell and per enemy soldier guarding it, and needs one left over to walk in</dd>
-    <dt>Moving a band</dt><dd>Free, but 3 hours per cell, over your own ground only. Men on the road guard nothing until they arrive</dd>
+    <dt>Empty cell</dt><dd>1 march, if it touches a live road square of yours (a castle, a finished bridge, or a finished road joined to a castle)</dd>
+    <dt>Occupied cell</dt><dd>2 marches, win or lose, and a band of yours on a live road square beside it. The band fights the defenders one duel at a time: each wall course (attacker wins 65%), guarding soldier (50%), covering castle gun (60%), tower unit (one per 5 health, 60%) and trebuchet (90%). Each defending tower in reach takes 5, 10 or 15 points off every duel, never below 10%. A scroll shows the exact odds first. Win, and you carry off 1/N of the loser&rsquo;s stores, N being their squares</dd>
+    <dt>Moving a band</dt><dd>Free, over your own ground only: 1 hour a step between live road squares, 3 hours any other step, by the fastest way. Men on the march guard nothing until they arrive</dd>
     <dt>Guarding</dt><dd>A band guards its own cell and the six around it; it dies defending if the cell falls</dd>
     <dt>River</dt><dd>Can&rsquo;t be marched into. A bridge costs 1 march + 40 timber + 20 stone and is ready 24 hours later; then borders and supply cross it. Someone else&rsquo;s bridge costs 2 marches. A band beside a bridge can break it for 2 marches; the river is then bare until a new bridge is built</dd>
     <dt>The map</dt><dd>120 × 120 cells, wrapping at every edge</dd>
-    <dt>Wall</dt><dd>30 stone a course, three courses</dd>
-    <dt>Tower</dt><dd>40 stone + 30 timber; garrison 1, 2, then 4 by level; guns kill 2, 4, then 6 and reach 1, 2, then 3 cells</dd>
+    <dt>Wall</dt><dd>30 stone a course, three courses, on any of your dry squares, castles and towers included</dd>
+    <dt>Tower</dt><dd>40 stone + 30 timber (an upgrade costs that times the new level). Health 10, 20, then 30; no garrison. Weakens attacks within 1, 2, then 3 cells. Mends 1 health a tick for 1 stone</dd>
+    <dt>Trebuchet</dt><dd>60 timber + 40 iron + 30 stone, at a castle; 2 grain a tick. Fired by hand at an enemy wall, tower or castle up to 3 cells away: 5 stone, exactly 2 damage, once every 4 hours. Two hits bring down a wall course. Moves with your bands</dd>
+    <dt>Road</dt><dd>1 march + 20 timber + 10 stone, a day to build, on your ground beside a live road square. Live only while joined to a standing castle. Break an enemy road for 1 march by beating the soldiers guarding it</dd>
+    <dt>Tearing down</dt><dd>Your own works, at once, for no marches: half the cost back (15 stone a wall course; a fallen castle gives nothing)</dd>
+    <dt>Joining</dt><dd>A new player needs a sponsor already playing, who writes how they know them (kept for good). Three strikes and a sponsor can sponsor no more</dd>
+    <dt>Letters</dt><dd>One sealed letter of up to 280 characters per caravan, with or without goods; only the receiver can read it</dd>
+    <dt>Crusades</dt><dd>November only: proclaim against one player for 72 hours; crusaders pool their bands beside one square into one strike, share losses and spoils, and pay marches into a treasury; all end on 1 December</dd>
     <dt>Soldier</dt><dd>25 iron + 40 grain to muster at a castle, where he joins the band; he eats every tick thereafter</dd>
-    <dt>Castle upkeep</dt><dd>A castle can&rsquo;t be built on a grain square and must be linked to one by an unbroken road of your own ground. With no farm connected it loses health every tick and falls after 5 days; reconnecting a farm heals it at the same rate. A fallen castle gives no supply and can be seized by a band beside it, destroying it and paying 50 marches</dd>
-    <dt>Elimination</dt><dd>A player with no castle standing and no soldiers (in a band, in a tower garrison or on the road) is out: their name comes off the player list and every square they still hold is destroyed. A fallen castle doesn&rsquo;t count as standing. A player who is out may start again with a fresh keep</dd>
+    <dt>Castle upkeep</dt><dd>A castle can&rsquo;t be built on a grain square and must be linked to one by unbroken ground of your own. With no farm connected it loses health every tick and falls after 5 days; reconnecting a farm heals it at the same rate. Trebuchets can batter its health down too. A fallen castle gives no supply and can be seized by a band beside it, destroying it and paying 50 marches</dd>
+    <dt>Elimination</dt><dd>A player with no castle standing and no soldiers (in a band, in a castle&rsquo;s garrison or on the march) is out: their name comes off the player list and every square they still hold is destroyed. A fallen castle doesn&rsquo;t count as standing. A player who is out may start again with a fresh keep</dd>
     <dt>Caravan</dt><dd>A gift of any stone, timber, iron or grain to another player. Costs no marches; the goods leave at once and arrive after the journey, 40 minutes a cell between the two keeps (6 hours at least, 2 days at most). Goods wait at the gate if the receiver is away. Each caravan you have on the road costs you 1 grain every tick until it arrives</dd>
     <dt>Harvest</dt><dd>Every 4 hours — 6 ticks a day, banking up to 3 days while you're away</dd>
     <dt>Yields per tick</dt><dd>Forest 2 timber · Quarry 2 stone · Vein 1 iron · Field 3 grain</dd>
@@ -1057,7 +1063,7 @@ function drawClaimDay(now){
 /* 3 ── spending a march */
 scene({
   tag:'Claiming', title:'One march, one cell',
-  body:'A march buys any single cell touching ground you already hold. Borders creep outward — you cannot leap across the map to somewhere better. Choosing which way to grow is most of the game.',
+  body:'A march buys any single cell beside a live road square of yours: your castle, a finished bridge, or a road joined to a castle (the Roads chapter shows how). Borders creep outward — you cannot leap across the map to somewhere better. Choosing which way to grow is most of the game.',
   dur:12,
   init:function(){
     M=blank();
@@ -1173,7 +1179,7 @@ scene({
 /* 4 ── someone else's ground */
 scene({
   tag:'Contact', title:'Someone else\'s ground costs two',
-  body:'When your border meets another player\'s, their cells are still takeable — they cost double, and one of your bands of soldiers has to be standing beside the cell. Taking ground is how the game is won, and it is also how you lose it: every border you push is a border they can push back.',
+  body:'When your border meets another player\'s, their cells are still takeable — they cost double, and one of your bands has to be standing beside the cell on a live road. Taking ground is how the game is won, and it is also how you lose it: every border you push is a border they can push back.',
   dur:12,
   init:function(){
     M=blank();
@@ -1192,7 +1198,7 @@ scene({
       M.take.forEach(function(e){ grab('battle',[e[0],e[1]],nearOwn(e[0],e[1],'you'),e[2]); });
     }],
     [8.0,function(){ M.note='Two cells taken, four marches gone. Doubling the price is what stops a border from collapsing in one evening.'; }],
-    [9.6,function(){ M.note='A healthy castle can never be taken outright — cut it off from every farm and after five days it falls, and then it can be seized. A tower can be torn down by a big enough band.'; }]
+    [9.6,function(){ M.note='A healthy castle is never stormed — starve it, or batter it with trebuchets, until it falls; then it can be seized. A tower is fought like any defender.'; }]
   ],
   draw:function(now){
     if(M.take){
@@ -1225,7 +1231,7 @@ function drawWalk(now){
 }
 scene({
   tag:'Soldiers', title:'Soldiers stand on the map',
-  body:'Soldiers are mustered at a castle and stand on your ground in bands. Walking a band over your own land costs a march for every three cells. To take someone else\'s cell a band must stand beside it, and it pays a soldier for every wall course, every gun covering the cell, and every enemy soldier guarding it — with at least one left over to walk in. A band standing still guards the cells around it the same way.',
+  body:'Soldiers are mustered at a castle and stand on your ground in bands. Walking costs no marches: an hour a cell along a live road, three hours off it. To take someone else\'s cell a band must stand beside it on a live road and win a chain of duels against its defenders — walls, guards, guns, tower and trebuchets — with the odds shown before you commit.',
   dur:30,
   init:function(){
     M=blank();
@@ -1240,17 +1246,17 @@ scene({
     [0.8,function(){ M.note='Marches alone can\'t take anyone\'s land. A band of your soldiers has to be standing beside it.'; }],
     [6.45,function(n){ M.pulse=[0,0,n]; grab('muster',[0,0],null,n+0.05,{n:1}); M.note='Soldiers are mustered at a castle — 25 iron and 40 grain each — and wait there as a band.'; }],
     [10.97,function(n){
-      M.note='Moving a band over your own ground: 1 march for every 3 cells. This walk is 3 cells, so 1 march.';
+      M.note='Moving a band costs no marches: 3 hours a cell, or 1 hour along a live road.';
       delete M.cells['0_0'].b;
       M.walk={path:[[0,0],[1,0],[2,0],[3,0]],n:3,col:T.p0,t0:n+0.4,dur:2.4};
     }],
     [13.87,function(n){ put(3,0,{o:'you',b:3},n); M.walk=null; M.hud=[['Marches','5'],['Your band','3, at the border']]; }],
-    [16.19,function(){ M.guard=true; M.note='Red\'s band of 1 guards every cell around it. Taking one costs you a soldier for each of theirs.'; M.hud=[['Cost to take','2 marches + 1 soldier'],['Your band','3']]; grab('battle',[4,0],[3,0],23.3,{loss:1}); }],
+    [16.19,function(){ M.guard=true; M.note='Red\'s band of 1 guards every cell around it. To take one, your soldiers must win a duel against it.'; M.hud=[['Chance to win','88%'],['Your band','3']]; grab('battle',[4,0],[3,0],23.3,{loss:1}); }],
     [23.3,function(n){
       M.guard=false; delete M.cells['3_0'].b; delete M.cells['5_0'].b;
       put(4,0,{o:'you',b:2},n);
       M.hud=[['Marches','3'],['Your band','2, holding the cell']];
-      M.note='Three against one: both sides lose one, their band is gone, and your two walk in.';
+      M.note='Three against one: one of yours falls before the dice turn, their band is gone, and your two walk in.';
     }],
     [27.8,function(){ M.note='A band standing still guards your own border the same way.'; }]
   ],
@@ -1273,7 +1279,7 @@ scene({
 /* 5 ── walls and guns */
 scene({
   tag:'Defence', title:'Walls cost them soldiers',
-  body:'Stone builds walls, three courses deep. Towers shoot at anything claimed within range — two soldiers a volley at level I, four at II, six at III — and castles shoot too, more lightly. Neither stops an attack outright; both make it cost soldiers, and soldiers are expensive to raise and eat grain forever after.',
+  body:'Stone builds walls, three courses deep, around any of your squares, castles and towers included. A tower needs nobody inside: it has health, stands in the line of defenders, and makes every attack on your ground within its reach harder. Castles add their guns. None of them stops an attack outright; they make it a worse bet, and soldiers are expensive to raise and eat grain forever after.',
   dur:18,
   init:function(){
     M=blank();
@@ -1287,11 +1293,11 @@ scene({
   beats:[
     [1.2,function(n){ grab('wall',[5,0],[6,0],n+1.55,{col:T.p1,lvl:2}); M.note='Red raises two courses of wall on the cell you want. 30 stone a course.'; }],
     [2.75,function(n){ put(5,0,{o:'rival',w:2},n); }],
-    [4.0,function(n){ grab('raise',[5,-1],[6,-1],n+2.35,{col:T.p1,bk:'tower'}); M.note='And a tower beside it, which covers every cell next to it.'; }],
+    [4.0,function(n){ grab('raise',[5,-1],[6,-1],n+2.35,{col:T.p1,bk:'tower'}); M.note='And a tower beside it, which makes every attack nearby harder.'; }],
     [6.35,function(n){ put(5,-1,{o:'rival',k:'tower'},n); }],
-    [6.6,function(){ grab('battle',[5,0],[4,0],10.9,{loss:4,guns:[[5,-1]]}); M.note='Taking that walled cell now costs 2 marches — plus 2 soldiers for the wall and 2 for the tower\'s guns.'; M.hud=[['Cost to take','2 marches + 4 soldiers'],['Your band','6']]; }],
-    [10.9,function(n){ delete M.cells['4_0'].b; put(5,0,{o:'you',w:0,b:2},n); M.hud=[['Your band','2'],['Stone','120']]; M.note='Taken — and four of your six soldiers are gone with it.'; }],
-    [12.2,function(){ M.note='A tower must be manned at every level, and an undermanned one decays until it collapses.'; }]
+    [6.6,function(){ grab('battle',[5,0],[4,0],10.9,{loss:4,guns:[[5,-1]]}); M.note='Your six must now win duels against two wall courses, with the tower making each one harder.'; M.hud=[['Chance to win','98%'],['Your band','6']]; }],
+    [10.9,function(n){ delete M.cells['4_0'].b; put(5,0,{o:'you',w:0,b:2},n); M.hud=[['Your band','2'],['Stone','120']]; M.note='Taken — but the dice took four of your six.'; }],
+    [12.2,function(){ M.note='A damaged tower mends for stone. Trebuchets are what bring one down from afar.'; }]
   ],
   draw:function(now){
     drawBoard(now);
@@ -1335,7 +1341,7 @@ scene({
       M.hud=[['Supplied',(mine-dark)+' of '+mine],['Cut off',dark+' cells']];
       M.note='Four cells still belong to you. They are simply no longer connected, and they now yield nothing.';
     }],
-    [17.5,function(){ M.note='You did not lose the ground. You lost the road to it — which in practice is the same thing.'; }],
+    [17.5,function(){ M.note='You did not lose the ground. You lost the link home — which in practice is the same thing.'; }],
     [20.6,function(){ M.note='Cutting a supply line is almost always cheaper than taking the land it feeds.'; }]
   ],
   draw:function(now){
@@ -1366,7 +1372,7 @@ scene({
 /* 7 ── castles */
 scene({
   tag:'Castles', title:'Castles are meant to be rare',
-  body:'A second castle is a campaign, not a purchase. Each one costs more than the last, and no two of yours may stand within seven cells of each other — so a new keep means pushing the border a long way out first. A castle can never stand on a grain square, and it must be linked to one by an unbroken road of your own ground — otherwise it starves. Supply runs back to castles and soldiers are mustered at them, so where you put one shapes everything after.',
+  body:'A second castle is a campaign, not a purchase. Each one costs more than the last, and no two of yours may stand within seven cells of each other — so a new keep means pushing the border a long way out first. A castle can never stand on a grain square, and it must be linked to one by unbroken ground of your own — otherwise it starves. Supply runs back to castles, roads start from them and soldiers are mustered at them, so where you put one shapes everything after.',
   dur:22,
   init:function(){
     M=blank();
@@ -1417,7 +1423,7 @@ scene({
    lines to record are in NARRATION_TODO below. */
 scene({
   tag:'Upkeep', title:'A castle must be fed',
-  body:'A castle can never stand on a grain square, and it must be linked to one by an unbroken road of your own ground. Cut that road, or take the farm, and the castle starts to starve: a little health every few hours, and after five days it falls. Reconnect a farm and it heals just as fast. A fallen castle gives no supply and holds no garrison — a band standing beside it can seize it, destroying it and earning fifty marches. This is what stops anyone from dropping a castle inside another player\'s land.',
+  body:'A castle can never stand on a grain square, and it must be linked to one by unbroken ground of your own. Cut that link, or take the farm, and the castle starts to starve: a little health every few hours, and after five days it falls. Reconnect a farm and it heals just as fast. A fallen castle gives no supply and holds no garrison — a band standing beside it can seize it, destroying it and earning fifty marches. This is what stops anyone from dropping a castle inside another player\'s land.',
   dur:28,
   init:function(){
     M=blank();
@@ -1430,8 +1436,8 @@ scene({
     M.hud=[['Castle','fed'],['Farm','connected']];
   },
   beats:[
-    [1.4,function(){ M.note='Your castle is fed: a road of your own ground leads from it to a field.'; }],
-    [5.0,function(n){ grab('battle',[0,1],[0,2],n+2.35,{col:T.p1,dcol:T.p0}); M.note='Red takes the one cell that joined them — the road is cut.'; }],
+    [1.4,function(){ M.note='Your castle is fed: unbroken ground of yours leads from it to a field.'; }],
+    [5.0,function(n){ grab('battle',[0,1],[0,2],n+2.35,{col:T.p1,dcol:T.p0}); M.note='Red takes the one cell that joined them — the link is cut.'; }],
     [7.35,function(n){ put(0,1,{o:'rival',b:3},n); put(0,2,{b:0},n); markSupply('you'); }],
     [9.0,function(){ M.hud=[['Castle','starving'],['Time left','5 days']]; M.note='No farm is connected now. The castle begins to starve — a little health every few hours.'; }],
     [12.0,function(){ M.hud=[['Castle','starving'],['Time left','2 days']]; M.note='You can still save it: retake the cell, or link another farm to it.'; }],
@@ -1470,7 +1476,7 @@ scene({
    Caption-only, like the chapter above; lines to record are below. */
 scene({
   tag:'Last stand', title:'No castle, no soldiers: you are out',
-  body:'A player who has no castle standing and no soldiers left anywhere is eliminated. Their name comes off the player list, and every square they still hold is destroyed. A fallen castle does not count as standing, and soldiers in a tower\'s garrison or on the road still count as soldiers. So as long as one keep stands, or one soldier lives, you are still in the game.',
+  body:'A player who has no castle standing and no soldiers left anywhere is eliminated. Their name comes off the player list, and every square they still hold is destroyed. A fallen castle does not count as standing, and soldiers in a castle\'s garrison or on the march still count as soldiers. So as long as one keep stands, or one soldier lives, you are still in the game.',
   dur:27,
   init:function(){
     M=blank();
@@ -1834,7 +1840,7 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
       [0.8,function(){ M.note='Four keeps light up at the corners of the world.'; }],
       [6.0,function(){ M.note='The bands march out.'; M.hud=[['Bands','marching'],['Map','120 × 120, no edges']]; }],
       [7.6,function(){ M.note='A bridge falls — the river now splits the board.'; }],
-      [8.6,function(){ M.note='Towers open fire on anything that comes within range.'; }],
+      [8.6,function(){ M.note='Towers stand in the way, and make every attack near them harder.'; }],
       [11.5,function(){ M.note='Borders meet.'; M.hud=[['Bands','engaged'],['Map','120 × 120, no edges']]; }],
       [16.9,function(){ M.note='Walk far. Claim well. Hold the line.'; M.hud=[['Your move','claim today’s steps']]; }]
     ],
@@ -2256,26 +2262,240 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
    whatever synthesiser their device happens to have. Each entry is
    [cue seconds, audio file, length, the words] — the words are kept so the
    script can be read and re-recorded; they are never spoken by the device.
+   A fifth field, 1, marks a line whose words changed with the November rules:
+   its old recording is not played (the screen shows the text instead), and a
+   new recording dropped in under the same file name plays again by itself —
+   it is told apart from the old one by its length.
    ══════════════════════════════════════════════════════════════════════ */
 var NARRATION=[
  [[0.9, "w_1", 3.31, "Hear me! Every step you walk becomes land you hold."], [4.9, "w_2", 4.2, "Raise a keep. Muster your warriors. Shove your border across the world!"], [10.4, "w_3", 2.81, "Rivals will rise. Bridges will fall."], [14.6, "w_4", 1.68, "This... is Marchland!"]],
  [[0.8, "n1_1", 3.26, "You start with one keep, and a scrap of dirt around it."], [4.6, "n1_2", 2.98, "One map for all of us. Not the real world."], [7.83, "n1_3", 4.56, "Every warrior starts far apart. You must march to find your enemies."]],
  [[0.6, "n2_1", 1.97, "Your steps become marches!"], [2.73, "n2_5", 2.83, "Once a day, claim your steps from the Health app."], [6.88, "n2_10", 3.7, "Ten thousand steps in a day? That earns fourteen marches."], [11.0, "n2_2", 4.68, "Say one warrior walks four thousand steps, and another walks twenty thousand."], [15.53, "n2_3", 2.28, "Nine marches, against nineteen."], [18.26, "n2_4", 5.9, "Five times the walking, but only twice the reward. So even the slow ones stay in the fight!"]],
- [[1.0, "n3_1", 3.41, "Each march buys one cell, touching ground you hold."], [4.95, "n3_2", 3.43, "Your border creeps outward. No leaping across the map!"], [8.66, "n3_3", 3.94, "Six marches later, a quarry and an iron vein are yours!"]],
+ [[1.0, "n3_1", 3.41, "Each march buys one cell, beside a live road of yours.", 1], [4.95, "n3_2", 3.43, "Your border creeps outward. No leaping across the map!"], [8.66, "n3_3", 3.94, "Six marches later, a quarry and an iron vein are yours!"]],
  [[0.6, "riv_1", 3.74, "Rivers cut across the land. You cannot march into one."], [4.6, "riv_2", 4.2, "To cross, build a bridge. One march, forty timber, twenty stone."], [9.75, "riv_3", 4.06, "It takes a full day to build. Until then, nothing crosses!"], [14.4, "riv_4", 5.38, "Once built, it is plain ground. Your border and your supply run right across."], [19.9, "riv_5", 4.7, "An enemy's bridge can be taken, like the rest of their land. Two marches."], [26.4, "riv_6", 7.2, "Or stand a band beside it and smash it, for two marches. Then the river runs bare, until someone builds again."], [34.6, "riv_7", 5.02, "And the world has no edge. March far enough east, and you come back from the west!"]],
- [[1.2, "n4_1", 4.01, "Reach a rival's land? You can still take it. But it costs double!"], [5.9, "n4_2", 2.74, "Two cells taken. Four marches gone."], [8.7, "n4_3", 3.22, "Double price, so no border falls in one night."], [13.01, "n4_4", 4.03, "And a keep is never taken by force. It must be starved out!"]],
- [[0.8, "s_1", 5.4, "Hear me! Marches alone take no one's land. You need soldiers, standing right beside it."], [6.45, "s_2", 4.25, "Soldiers are mustered at a castle. They stand together, as a band."], [10.97, "s_3", 4.92, "Marching a band across your own ground costs one march for every three cells."], [16.19, "s_4", 6.26, "Red's band of one guards the cells around it. Take one, and you pay a soldier for each of theirs."], [23.3, "s_5", 3.0, "Three crush one! Two walk in, and hold the cell."], [27.8, "s_6", 3.24, "A band standing still guards your border the same way."]],
- [[1.2, "n5_1", 2.81, "Stone builds walls, three courses deep."], [4.39, "n5_2", 2.42, "A tower covers every cell around it."], [7.0, "n5_3", 3.19, "Neither stops an attack. They make it cost soldiers."], [10.93, "n5_4", 2.88, "The cell falls. Four of your six fall with it."], [14.45, "n5_5", 4.1, "Towers need men inside. And soldiers eat grain, forever!"]],
- [[1.4, "n6_1", 2.23, "Land gives nothing on its own."], [4.03, "n6_2", 4.34, "A cell pays only if an unbroken road leads home to your castle."], [8.97, "n6_3", 3.6, "Now Red seizes one cell. The neck of your eastern arm!"], [12.78, "n6_4", 4.03, "Those four cells are still yours. But cut off, they yield nothing."], [17.55, "n6_5", 2.35, "You kept the land. You lost the road."], [20.66, "n6_6", 5.93, "Remember this, warrior. Cutting a supply line is often cheaper than taking the land it feeds."]],
+ [[1.2, "n4_1", 4.01, "Reach a rival's land? You can still take it. But it costs double!"], [5.9, "n4_2", 2.74, "Two cells taken. Four marches gone."], [8.7, "n4_3", 3.22, "Double price, so no border falls in one night."], [13.01, "n4_4", 4.03, "A keep is never stormed while it stands. Starve it, or batter it with trebuchets!", 1]],
+ [[0.8, "s_1", 5.4, "Hear me! Marches alone take no one's land. You need soldiers, standing right beside it."], [6.45, "s_2", 4.25, "Soldiers are mustered at a castle. They stand together, as a band."], [10.97, "s_3", 4.92, "A band walks an hour a cell on a live road, and three hours off it.", 1], [16.19, "s_4", 6.26, "Red's band of one guards the cells around it. To take one, you must win a duel against it.", 1], [23.3, "s_5", 3.0, "Three against one! The dice fall your way, and two walk in to hold the cell.", 1], [27.8, "s_6", 3.24, "A band standing still guards your border the same way."]],
+ [[1.2, "n5_1", 2.81, "Stone builds walls, three courses deep."], [4.39, "n5_2", 2.42, "A tower makes every attack near it harder.", 1], [7.0, "n5_3", 3.19, "Neither stops an attack. They make it cost soldiers."], [10.93, "n5_4", 2.88, "The cell falls. The dice took four of your six.", 1], [14.45, "n5_5", 4.1, "A tower needs no men inside. But soldiers eat grain, forever!", 1]],
+ [[1.4, "n6_1", 2.23, "Land gives nothing on its own."], [4.03, "n6_2", 4.34, "A cell pays only if unbroken ground leads home to your castle.", 1], [8.97, "n6_3", 3.6, "Now Red seizes one cell. The neck of your eastern arm!"], [12.78, "n6_4", 4.03, "Those four cells are still yours. But cut off, they yield nothing."], [17.55, "n6_5", 2.35, "You kept the land. You lost the link home.", 1], [20.66, "n6_6", 5.93, "Remember this, warrior. Cutting a supply line is often cheaper than taking the land it feeds."]],
  [[1.4, "n7_1", 3.38, "A second castle is won by campaign, not bought."], [4.78, "n7_2", 3.22, "No two of your keeps may stand within seven cells."], [8.54, "n7_3", 2.42, "So first, push your border far out."], [11.7, "n7_4", 3.36, "Now the eastern arm draws supply from the new keep."], [15.44, "n7_5", 2.45, "Every castle costs more than the last."], [18.43, "n7_6", 3.36, "And soldiers mustered there stand already at the front!"]],
  [],
  [],
  [[0.8, "cv_1", 2.78, "A caravan carries gifts to another warrior."], [3.8, "cv_2", 2.71, "It costs no marches. Only the goods."], [6.4, "cv_3", 5.11, "The wagon takes time on the road. The farther apart your keeps, the longer the journey."], [11.9, "cv_4", 3.55, "If Kit is away when it comes, the goods wait at his gate."], [15.6, "cv_5", 2.52, "It arrives! The goods are his to spend."], [18.6, "cv_6", 4.66, "Trade works the same way. Kit sends iron back, by return caravan!"]],
  [[0.8, "n8_1", 2.86, "Each day's steps are claimed once, on that day."], [4.4, "n8_2", 3.7, "Read the count off the Health app, and claim it before midnight."], [8.6, "n8_3", 3.79, "Miss a day, and those steps are lost. Nothing carries over."], [12.4, "n8_4", 3.22, "And no day counts for more than thirty thousand steps."]],
  [[0.6, "n9_1", 4.13, "Every claim goes on a public log, and its marches spend at once."], [5.44, "n9_7", 4.22, "For a full day, any warrior may dispute it. Then the others vote."], [9.95, "n9_3", 4.61, "A majority must vote to void a claim. Here, both vote to void it."], [14.98, "n9_4", 4.34, "Kit keeps what he has. But fifteen marches come off his next claim."], [19.46, "n9_5", 4.87, "Next day he earns twenty. Fifteen pay the debt. Five are his to spend."], [24.76, "n9_6", 4.3, "A screenshot from the Health app ends most quarrels before they start."]],
- [[0.8, "b_1", 4.73, "Four keeps. One world. And every step you take is a warrior on the march!"], [6.09, "b_2", 4.08, "Borders will meet. Bridges will fall. Towers will hold the line!"], [10.8, "b_3", 4.34, "So walk far, warrior. Choose your ground. And never leave a tower empty!"], [17.2, "b_4", 1.51, "Prepare for battle!"]]
+ [[0.8, "b_1", 4.73, "Four keeps. One world. And every step you take is a warrior on the march!"], [6.09, "b_2", 4.08, "Borders will meet. Bridges will fall. Towers will hold the line!"], [10.8, "b_3", 4.34, "So walk far, warrior. Choose your ground. And keep your roads alive!", 1], [17.2, "b_4", 1.51, "Prepare for battle!"]]
 ];
 NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
+
+/* ══════════════════════════════════════════════════════════════════════
+   THE NOVEMBER CHAPTERS — battles, towers and trebuchets, tearing down,
+   roads, joining, letters and crusades. Added after the narration is
+   matched to the older chapters, and slotted in before the finale. They
+   have no recorded voice yet: each keeps its script in `script` so it can
+   be recorded, and runs on captions until then.
+   ══════════════════════════════════════════════════════════════════════ */
+(function(){
+  function odds(a,line){                               /* the game's battleOdds, for the numbers on screen */
+    var n=line.length, P=[], s, i, win=0;
+    for(s=0;s<=a;s++) P.push(new Array(n+1).fill(0));
+    P[a][0]=1;
+    for(i=0;i<n;i++) for(s=a;s>=1;s--){ var m=P[s][i]; if(!m) continue; P[s][i+1]+=m*line[i]; P[s-1][i]+=m*(1-line[i]); }
+    for(s=1;s<=a;s++) win+=P[s][n];
+    return win;
+  }
+  function pctS(x){ return Math.round(x*100)+'%'; }
+  function cross(x,y,s){ ctx.save(); ctx.fillStyle='#F7EBC0'; ctx.strokeStyle='#8E1B1B'; ctx.lineWidth=1.5;
+    ctx.fillRect(x-s*0.12,y-s*0.5,s*0.24,s); ctx.strokeRect(x-s*0.12,y-s*0.5,s*0.24,s); ctx.fillRect(x-s*0.4,y-s*0.22,s*0.8,s*0.24); ctx.strokeRect(x-s*0.4,y-s*0.22,s*0.8,s*0.24); ctx.restore(); }
+  function banner(x,y,h){ ctx.save(); ctx.strokeStyle=NAT.line; ctx.lineWidth=1.6; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x,y-h); ctx.stroke();
+    ctx.fillStyle='#F7EBC0'; ctx.strokeStyle='#8E1B1B'; ctx.beginPath(); ctx.moveTo(x,y-h); ctx.lineTo(x+h*0.6,y-h); ctx.lineTo(x+h*0.6,y-h*0.5); ctx.lineTo(x,y-h*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    cross(x+h*0.3,y-h*0.75,h*0.32); ctx.restore(); }
+  function trebuchet(x,y,s,col,arm){
+    ctx.save(); ctx.lineCap='round'; ctx.strokeStyle=NAT.wood2; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(x-s*0.55,y); ctx.lineTo(x+s*0.55,y); ctx.stroke();
+    ctx.strokeStyle=NAT.wood; ctx.lineWidth=2.4; ctx.beginPath(); ctx.moveTo(x-s*0.32,y); ctx.lineTo(x,y-s*0.62); ctx.lineTo(x+s*0.32,y); ctx.stroke();
+    var a=arm==null?-0.55:arm, px=x, py=y-s*0.62, lx=px+Math.cos(Math.PI+a)*s*0.78, ly=py+Math.sin(Math.PI+a)*s*0.78, cx=px+Math.cos(a)*s*0.26, cy=py+Math.sin(a)*s*0.26;
+    ctx.strokeStyle=NAT.wood2; ctx.lineWidth=2.4; ctx.beginPath(); ctx.moveTo(lx,ly); ctx.lineTo(cx,cy); ctx.stroke();
+    ctx.fillStyle=NAT.stone2; ctx.fillRect(cx-s*0.1,cy,s*0.2,s*0.18);
+    ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(px+s*0.2,py-s*0.08); ctx.lineTo(px,py-s*0.16); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+  function card(x,y,w,h,lines,k){                      /* a parchment card for the joining and letter chapters */
+    if(k<=0) return;
+    ctx.save(); ctx.globalAlpha*=Math.min(1,k);
+    ctx.fillStyle='#F2E6C8'; ctx.strokeStyle='#8E6A40'; ctx.lineWidth=2; ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h);
+    ctx.fillStyle='#8E6A40'; ctx.fillRect(x-6,y-5,w+12,7); ctx.fillRect(x-6,y+h-2,w+12,7);
+    ctx.fillStyle='#3A2716'; ctx.textAlign='left'; ctx.textBaseline='top';
+    lines.forEach(function(l,i){ ctx.font=(l.b?'700 ':'italic 400 ')+(l.s||17)+'px "IM Fell English","Iowan Old Style",Georgia,serif'; ctx.fillText(l.t,x+16,y+16+i*28); });
+    ctx.restore();
+  }
+  function roadsOf(now){                               /* pale tracks between neighbouring road squares (castles count) */
+    ctx.save(); ctx.lineCap='round';
+    for(var k in M.cells){
+      var c=M.cells[k]; if(!c.rd && c.k!=='castle') continue; if(c.at>now) continue;
+      var p=k.split('_'), q=+p[0], r=+p[1];
+      for(var i=0;i<3;i++){
+        var nq=q+AX[i][0], nr=r+AX[i][1], n=M.cells[key(nq,nr)]; if(!n||(!n.rd&&n.k!=='castle')||n.at>now||(!c.rd&&!n.rd)) continue;
+        var up=(c.upTo&&now<c.upTo)||(n.upTo&&now<n.upTo), dead=M.deadAt!=null&&now>=M.deadAt;
+        ctx.globalAlpha=dead?0.35:(up?0.6:0.95); if(up) ctx.setLineDash([8,6]);
+        ctx.strokeStyle='#A8946C'; ctx.lineWidth=S*0.24; ctx.beginPath(); ctx.moveTo(hx(q,r),hy(q,r)); ctx.lineTo(hx(nq,nr),hy(nq,nr)); ctx.stroke();
+        ctx.strokeStyle='#DCCDA6'; ctx.lineWidth=S*0.18; ctx.beginPath(); ctx.moveTo(hx(q,r),hy(q,r)); ctx.lineTo(hx(nq,nr),hy(nq,nr)); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    ctx.restore();
+  }
+  var LINE=[0.65,0.5,0.5], NEW=[];
+
+  /* battles: a chain of duels */
+  NEW.push({
+    tag:'Battle odds', title:'A battle is a chain of duels',
+    body:'Taking someone\'s square is settled one duel at a time. Their defenders stand in a line: wall courses first, then the soldiers guarding it, then castle guns, a tower and any trebuchets. One of your soldiers at a time faces the front of the line; the dice decide each duel. Before you commit, a scroll shows your exact chance of winning and how many you can expect to lose. Win, and you also carry off a share of the loser\'s stores.',
+    dur:18,
+    script:['A battle is a chain of duels.','Your soldiers face their line one at a time: wall, then guards.','Before you attack, you see your chance of winning.','Win, and you carry off a share of what they have stored.','One soldier can even beat five. Rarely.'],
+    init:function(){ M=blank();
+      [[-2,0],[-1,0],[-1,1],[0,0],[0,1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); }); put(-2,0,{o:'you',k:'castle'}); put(0,0,{o:'you',b:3});
+      [[1,0],[2,0],[2,-1],[1,-1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); }); put(1,0,{o:'rival',w:1}); put(1,-1,{o:'rival',b:2});
+      M.hud=[['Your band','3'],['Their line','1 wall · 2 guards']]; M.duels=null; },
+    beats:[
+      [0.5,function(){ M.note='Their line, front to back: one wall course, then the two soldiers guarding the square.'; }],
+      [3.2,function(){ M.note='The scroll shows the odds before you commit: 3 soldiers against this line win '+pctS(odds(3,LINE))+' of the time.'; M.hud=[['Chance to win',pctS(odds(3,LINE))],['Costs','2 marches, win or lose']]; }],
+      [6.0,function(n){ grab('battle',[1,0],[0,0],9.2,{loss:1}); M.duels={t:n,log:[1,0,1,1]}; M.note='One duel at a time: the wall falls, one of yours falls, then both guards.'; }],
+      [9.2,function(n){ put(1,0,{o:'you',w:0,b:2},n); put(1,-1,{o:'rival',b:0},n); put(0,0,{o:'you',b:0},n); M.hud=[['Lost','1 of 3'],['Spoils','+25 stone · +20 timber']]; M.note='Taken. And with it a quarter of their stores: one of their four squares means a quarter.'; }],
+      [13.2,function(){ M.hud=[['1 against 5','3%'],['2 against 1','75%']]; M.note='Odds, not headcounts: one soldier can beat five, about three times in a hundred.'; }]
+    ],
+    draw:function(now){ drawBoard(now);
+      if(M.duels){ var k=Math.min(M.duels.log.length,Math.floor((now-M.duels.t-0.6)/0.6)+1);
+        for(var i=0;i<k;i++){ ctx.beginPath(); ctx.arc(hx(1,0)-30+i*20,hy(1,0)-S*1.05,6,0,6.284); ctx.fillStyle=M.duels.log[i]?T.p0:T.p1; ctx.fill(); } } }
+  });
+
+  /* towers have health; trebuchets batter them */
+  NEW.push({
+    tag:'Towers', title:'Towers have health; trebuchets break them',
+    body:'A tower needs nobody inside. It has health — 10, 20 or 30 by level — and fights as one unit for every 5 health left; while it stands it makes every attack on its owner\'s ground within its reach harder. A damaged tower mends 1 health every 4 hours for 1 stone. A trebuchet, built at a castle for 60 timber, 40 iron and 30 stone, is fired by hand at a wall, tower or castle up to 3 squares away: 5 stone a shot, exactly 2 damage, once every 4 hours. It never aims at soldiers, and it is easy to kill.',
+    dur:19,
+    script:['A tower needs no garrison. It has health.','A trebuchet throws a stone three squares. Two damage, every time.','Five shots bring a fresh tower down.','A damaged tower mends one health a tick, for one stone.'],
+    init:function(){ M=blank();
+      [[-2,0],[-1,0],[-1,1],[-2,1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); }); put(-1,0,{o:'you',k:'castle'});
+      [[1,0],[2,0],[2,-1],[1,1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); }); put(2,0,{o:'rival',k:'tower'});
+      M.h=10; M.shots=[]; M.hud=[['Their tower','health 10 of 10']]; },
+    beats:[
+      [0.6,function(){ M.note='A level I tower: 10 health, two units in a fight, and nobody inside.'; }],
+      [3.0,function(n){ M.shots.push(n); M.note='A trebuchet at your castle throws a stone three squares away: 5 stone a shot, exactly 2 damage.'; }],
+      [4.4,function(){ M.h=8; M.hud=[['Their tower','health 8 of 10']]; }],
+      [6.0,function(n){ M.shots.push(n); }], [7.4,function(){ M.h=6; M.hud=[['Their tower','health 6 of 10']]; M.note='Each trebuchet throws once every 4 hours. Shots you skip don\'t stack.'; }],
+      [9.0,function(n){ M.shots.push(n); }], [10.4,function(){ M.h=4; M.hud=[['Their tower','health 4 of 10']]; }],
+      [12.0,function(){ M.note='Left alone, a damaged tower mends 1 health every 4 hours, for 1 stone from its owner.'; M.hud=[['Their tower','mending'],['Cost','1 stone a tick']]; }],
+      [15.0,function(){ M.note='Five hits bring a fresh tower down. But a trebuchet loses nine duels in ten, so guard it.'; }]
+    ],
+    draw:function(now){ drawBoard(now);
+      var ax=hx(-1,0)-S*0.35, ay=hy(-1,0)+S*0.55, bx=hx(2,0), by=hy(2,0);
+      trebuchet(ax,ay,S*0.75,T.p0,M.shots.length&&now-M.shots[M.shots.length-1]<0.4?-1.3:-0.55);
+      M.shots.forEach(function(t0){ var u=(now-t0)/1.4; if(u<0||u>1.3) return;
+        if(u<=1){ var x=ax+(bx-ax)*u, y=ay-S*0.5+(by-ay+S*0.5)*u-S*2.4*4*u*(1-u); ctx.beginPath(); ctx.arc(x,y,5,0,6.284); ctx.fillStyle=NAT.rock2; ctx.fill(); }
+        else artDust(ctx,bx,by,S*0.6,(u-1)/0.3); });
+      var f=M.h/10; ctx.fillStyle=T.sink; ctx.fillRect(bx-S*0.35,by-S*0.75,S*0.7,7); ctx.fillStyle=f>0.34?T.p0:T.p1; ctx.fillRect(bx-S*0.35,by-S*0.75,S*0.7*f,7); }
+  });
+
+  /* tearing down */
+  NEW.push({
+    tag:'Tearing down', title:'Tear down your own for half',
+    body:'Anything of yours can be torn down from the square menu, at once and for no marches, and half of what it cost comes back: 15 stone for a wall course, half the price of a tower or castle with its upgrades, 20 timber and 10 stone for a bridge, 10 timber and 5 stone for a road. A fallen castle gives nothing back. Soldiers inside a castle walk out as a band. And walls can now stand around castles and towers too.',
+    dur:12,
+    script:['Tear down your own works, and half the cost comes back.','A wall course gives back fifteen stone.','A fallen castle gives back nothing.'],
+    init:function(){ M=blank(); [[0,0],[1,0],[-1,0],[0,1],[1,-1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); }); put(0,0,{o:'you',k:'castle'}); put(1,0,{o:'you',k:'tower',w:1}); M.hud=[['Tower','level II'],['Wall','I']]; M.dust=null; },
+    beats:[
+      [0.6,function(){ M.note='A level II tower cost 120 stone and 90 timber. A wall stands around it.'; }],
+      [3.5,function(n){ M.dust=n; }],
+      [4.0,function(n){ put(1,0,{o:'you',k:null,w:1},n); M.hud=[['Back','+60 stone · +45 timber']]; M.note='Torn down at once, for no marches: half comes back.'; }],
+      [7.5,function(n){ M.dust=n; }],
+      [8.0,function(n){ put(1,0,{o:'you',w:0},n); M.hud=[['Back','+15 stone']]; M.note='A wall comes down one course at a time, 15 stone each.'; }]
+    ],
+    draw:function(now){ drawBoard(now); if(M.dust!=null){ var k=(now-M.dust)/1.2; for(var i=0;i<4;i++) artDust(ctx,hx(1,0)+(i-1.5)*12,hy(1,0)+10-k*20,S*0.6,k-i*0.08); } }
+  });
+
+  /* roads */
+  NEW.push({
+    tag:'Roads', title:'Roads carry your border and your armies',
+    body:'A road is built on a square you hold, beside a castle, a finished bridge or a finished road: 1 march, 20 timber and 10 stone, and a day to build. A road is live only while it joins a standing castle. New land is claimed only beside a live road square, and a band attacks only from one. On a live road a band moves 1 hour a square; off it, 3. Cut a road from its castle and it goes dead — still there, faded, but no use until it is joined up again.',
+    dur:19,
+    script:['Roads carry your border, and your armies.','Build one beside your castle. It takes a day.','New land is claimed only beside a live road.','On the road, an hour a square. Off it, three.','Lose the castle, and its roads go dead.'],
+    init:function(){ M=blank(); [[-1,0],[0,0],[1,0],[2,0],[0,1],[1,-1],[-1,1]].forEach(function(p){ put(p[0],p[1],{o:'you'}); }); put(-1,0,{o:'you',k:'castle'}); M.deadAt=null; M.cand=null; M.hud=[['Roads','none yet']]; },
+    beats:[
+      [0.6,function(){ M.note='Your castle counts as road. Build the first stretch beside it.'; }],
+      [2.0,function(n){ put(0,0,{o:'you',rd:1,upTo:n+2.5},n); M.hud=[['Road','being built · a day']]; }],
+      [4.5,function(n){ put(1,0,{o:'you',rd:1,upTo:n+2.0},n); M.hud=[['Road','2 squares']]; M.note='The next stretch can only start from a finished one.'; }],
+      [7.0,function(){ M.cand=[[3,0],[2,-1],[2,1],[1,1]]; M.note='New land is claimed only beside a live road square.'; }],
+      [10.0,function(n){ M.cand=null; put(2,0,{o:'you',b:3},n); M.hud=[['On the road','1 h a square'],['Off it','3 h a square']]; M.note='A band walks a live road in an hour a square; off it, three.'; }],
+      [14.0,function(n){ M.deadAt=n; put(-1,0,{o:'you',k:'castle',dark:true},n); M.hud=[['Castle','fallen'],['Roads','dead']]; M.note='Lose the castle and its roads go dead: no speed, no claims, until joined up again.'; }]
+    ],
+    draw:function(now){ drawBoard(now); roadsOf(now); if(M.cand) drawCandidates(M.cand,now,T.p0); }
+  });
+
+  /* joining by sponsorship */
+  NEW.push({
+    tag:'Joining', title:'A new player needs a sponsor',
+    body:'Someone new can join only when a player already on the board vouches for them. The newcomer picks a sponsor; the sponsor writes how they know this person and for how long, and ticks a box confirming they know them in real life and that the real name is right. That statement is kept for good. A sponsor whose people cheat collects strikes, and three strikes end their right to sponsor.',
+    dur:14,
+    script:['A new player needs a sponsor.','The sponsor writes how they know them, and for how long.','Their word is kept for good.'],
+    init:function(){ M=blank(); M.hud=[['Joining','by sponsor']]; },
+    beats:[
+      [0.5,function(){ M.note='Robin asks Chris to vouch for her.'; }],
+      [4.0,function(){ M.note='Chris writes how he knows her, and confirms her real name.'; }],
+      [8.5,function(){ M.note='Robin enters the board. The statement stays on record.'; M.hud=[['Robin','sponsored by Chris']]; }]
+    ],
+    draw:function(now){
+      card(W*0.12,H*0.14,W*0.76,96,[{t:'Robin (Robin Hale) asks to join',b:1},{t:'Who vouches for you?  Chris'}],(now-0.4)/0.5);
+      card(W*0.12,H*0.14+130,W*0.76,124,[{t:'Chris vouches for Robin',b:1},{t:'"My niece. I have known her all her life."'},{t:'[x] I know her in real life; the name is right.'}],(now-3.8)/0.5);
+      if(now>8.4){ ctx.save(); ctx.globalAlpha=Math.min(1,(now-8.4)/0.5); bigText('Robin joins the board',W/2,H*0.84,26,T.p0); ctx.restore(); }
+    }
+  });
+
+  /* letters */
+  NEW.push({
+    tag:'Letters', title:'A letter rides with a caravan',
+    body:'A caravan can carry one sealed letter of up to 280 characters, with goods or on its own. It travels at the wagon\'s pace, and when the wagon arrives the letter waits on the receiver\'s Letters shelf. Only they can open it. The wagon still eats 1 grain a tick on the road.',
+    dur:12,
+    script:['A caravan can carry a sealed letter.','Only the one it is sent to can read it.'],
+    init:function(){ M=blank(); put(-4,0,{o:'you',k:'castle'}); put(5,0,{o:'rival',k:'castle'}); M.hud=[['Letter','up to 280 characters']]; },
+    beats:[
+      [0.6,function(){ M.note='You seal a letter and send it with a wagon — goods are optional.'; }],
+      [6.8,function(){ M.note='It arrives. A badge marks it on Kit\'s Letters shelf, and only Kit can open it.'; M.hud=[['Kit','1 unread letter']]; }]
+    ],
+    draw:function(now){ drawBoard(now);
+      var k=Math.max(0,Math.min(1,(now-1.2)/5.4)), x=hx(-4,0)+(hx(5,0)-hx(-4,0))*k, y=hy(0,0)+S*0.3;
+      if(now<6.8){ ctx.fillStyle='#FBF6E8'; ctx.strokeStyle=NAT.wood2; ctx.lineWidth=2; ctx.fillRect(x-22,y-18,44,20); ctx.strokeRect(x-22,y-18,44,20);
+        ctx.fillStyle='#F2E6C8'; ctx.fillRect(x-12,y-36,24,12); ctx.fillStyle='#A3241C'; ctx.beginPath(); ctx.arc(x,y-30,5,0,6.284); ctx.fill(); }
+      if(now>7.2) card(W*0.2,H*0.1,W*0.6,96,[{t:'From your neighbour',b:1},{t:'"Meet me at the river at dawn."'}],(now-7.2)/0.5);
+    }
+  });
+
+  /* crusades */
+  NEW.push({
+    tag:'Crusades', title:'In November: crusades',
+    body:'During November a player with a castle may proclaim a crusade against one other player. For 72 hours anyone else may take the cross and pay marches into its treasury. Any crusader may then strike a square of the target\'s with every crusader\'s band standing on a live road beside it, fighting as one pool. Losses are shared in proportion; the striker takes the square, and any bounty and spoils are shared by soldiers sent. Every crusade ends on 1 December.',
+    dur:17,
+    script:['In November, a crusade.','Others take the cross, and pay into its treasury.','Their bands beside one square fight as one.','Losses are shared. Every crusade ends on the first of December.'],
+    init:function(){ M=blank();
+      [[1,0],[2,0],[2,-1],[1,1],[3,-1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); }); put(3,-1,{o:'rival',k:'castle'});
+      put(0,0,{o:'you',b:4}); put(1,-1,{o:'you',b:3}); put(0,1,{o:'you',b:2}); M.links=false; M.hud=[['Crusade','against Red'],['Time','72 hours']]; },
+    beats:[
+      [0.6,function(){ M.note='A crusade is proclaimed against Red. Others take the cross.'; }],
+      [4.0,function(){ M.links=true; M.note='Every crusader\'s band beside the same square joins one pool: 4 + 3 + 2.'; M.hud=[['Pool','9 soldiers'],['Treasury','pays the marches']]; }],
+      [8.0,function(n){ grab('battle',[1,0],[0,0],11.0,{loss:3}); }],
+      [11.0,function(n){ put(1,0,{o:'you',b:3},n); put(0,0,{o:'you',b:1},n); M.links=false; M.hud=[['Losses','shared 2 · 1 · 0'],['Spoils','shared by soldiers sent']]; M.note='The striker takes the square; losses, bounty and spoils are shared in proportion.'; }],
+      [14.2,function(){ M.note='Every crusade ends on 1 December, and the treasury goes back to those who paid.'; }]
+    ],
+    draw:function(now){ drawBoard(now);
+      if(M.links){ ctx.save(); ctx.setLineDash([6,5]); ctx.strokeStyle='#8E1B1B'; ctx.lineWidth=2;
+        [[0,0,1,-1],[1,-1,0,1],[0,1,0,0]].forEach(function(l){ ctx.beginPath(); ctx.moveTo(hx(l[0],l[1]),hy(l[0],l[1])); ctx.lineTo(hx(l[2],l[3]),hy(l[2],l[3])); ctx.stroke(); }); ctx.restore(); }
+      [[0,0],[1,-1],[0,1],[1,0]].forEach(function(p){ var c=M.cells[key(p[0],p[1])]; if(c&&c.o==='you'&&c.b) banner(hx(p[0],p[1])-S*0.5,hy(p[0],p[1])+S*0.2,S*0.6); });
+      banner(hx(3,-1)+S*0.45,hy(3,-1)-S*0.1,S*0.7); }
+  });
+
+  var at=SCENES.length-1;                                /* just before the finale */
+  NEW.forEach(function(sc,i){ SCENES.splice(at+i,0,sc); });
+})();
+
 
 /* ── the voice ──────────────────────────────────────────────────────────
    Recorded clips only. There is deliberately no fallback to the device's
@@ -2334,6 +2554,7 @@ function playLine(entry){
   var key='marchland-deploy/audio/'+entry[1]+'.mp3';
   var a=clipFor(entry[1]);
   if(a.__bad) return;   /* one missing clip skips that line only */
+  if(entry[4] && !(a.duration>0 && Math.abs(a.duration-entry[2])>0.25)) return;   /* changed words: the old recording stays silent until a new one replaces it */
   nowPlaying=voiceEl;
   voiceEl.muted=false;
   voiceEl.setAttribute('data-clip',key);
