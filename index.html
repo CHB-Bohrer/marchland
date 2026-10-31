@@ -627,7 +627,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="pad">
         <h2>Steward</h2>
         <p class="muted" id="steward-status"></p>
-        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button></div>
       </div>
     </div>
 
@@ -5458,6 +5458,7 @@ document.getElementById('mig-run').addEventListener('click',runMigration);
 document.getElementById('st-sp').addEventListener('click',function(){ if(isSteward()) openSponsorships(); });
 document.getElementById('st-strikes').addEventListener('click',function(){ if(isSteward()) openStrikes(); });
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
+document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
 function castleOf(pid){                                // the castle of theirs nearest the view (or their keep if none stands)
@@ -5759,6 +5760,38 @@ function openMarkFake(){
     scrollDialog({eyebrow:'Steward', title:'Remove '+esc(full(G.players[pid]))+'?', html:'<p>This cannot be undone.</p>', cancel:false,
       buttons:[{label:'Keep them',value:false},{label:'Remove as fake',value:true,primary:true}]}).then(function(r2){ if(r2.value) markFake(pid); });
   });
+}
+/* Give marches: the steward credits a player an exact number of marches (to put right a loss). It is added to their
+   count, never set, so whatever they have earned since is kept; their own screen folds the difference in the way it
+   folds in any change another hand makes to their record. Every grant is kept for good under grants/<id>. */
+function openGive(){
+  scrollDialog({eyebrow:'Steward', title:'Give marches', html:'<p>Who gets them?</p>', cancel:null,
+    list:playerList().map(function(pid){ return {label:esc(full(G.players[pid]))+(pid===ME?' <i>(you)</i>':''), cost:(G.players[pid].squares||0)+' now', value:pid}; }),
+    buttons:[{label:'Cancel',value:null}]}).then(function(res){
+    var pid=res.value; if(!pid||!G.players[pid]) return;
+    scrollDialog({eyebrow:'Steward', title:'Marches for '+esc(full(G.players[pid])),
+      html:'<div class="sc-field"><label for="gv-n">How many marches?</label><input id="gv-n" type="number" inputmode="numeric" min="1" max="500" value="100" style="font-size:16px"></div>'
+        +'<div class="sc-field"><label for="gv-why">Why? (kept on record)</label><input id="gv-why" maxlength="80" value="marches restored" style="font-size:16px"></div><p class="sc-note"></p>',
+      cancel:null, buttons:[{label:'Cancel',value:null},{label:'Give them',value:'ok',primary:true}],
+      check:function(v,box){ if(v!=='ok') return ''; var n=parseInt(box.querySelector('#gv-n').value,10); return (n>=1&&n<=500)?'':'Enter a number from 1 to 500.'; }}).then(function(r2){
+      if(r2.value!=='ok') return;
+      var n=parseInt(r2.box.querySelector('#gv-n').value,10), why=(r2.box.querySelector('#gv-why').value||'').trim().slice(0,80), id=q36(Date.now())+'-'+pid;
+      giveMarches(pid,n,why,id);
+    });
+  });
+}
+function giveMarches(pid,n,why,id){
+  var base='/marchland/'+gameCode, now=Date.now(), nm=full(G.players[pid]), rec={pid:pid,n:n,why:why,by:ME,t:now};
+  G.grants=G.grants||{}; G.grants[id]=rec;
+  if(pid===ME){                                           // my own record: add to it and write it the usual way
+    me().squares=(me().squares||0)+n; render(); pushMe();
+    dbPut(base+'/grants/'+id,rec).catch(function(){});
+    say('<span class="good">'+n+' marches added to your count.</span> You now have <b>'+me().squares+'</b>.'); return;
+  }
+  dbGet(base+'/players/'+pid+'/squares').then(function(cur){
+    var next=(cur||0)+n, patch={}; patch['players/'+pid+'/squares']=next; patch['grants/'+id]=rec; patch['rev']=now; myRev=now;
+    return dbPatch(base,patch).then(function(){ G.players[pid].squares=next; render(); say('<span class="good">'+n+' marches given to '+esc(nm)+'.</span> They now have <b>'+next+'</b>; their own screen picks it up within a minute.'); });
+  }).catch(function(){ nope('Could not reach the database, so nothing was given.'); });
 }
 function markFake(pid){
   var now=Date.now(), patch={}, s=sponsorRec(pid), nm=full(G.players[pid]||{name:'?'});
