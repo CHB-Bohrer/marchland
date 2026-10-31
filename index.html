@@ -1435,7 +1435,7 @@ function coverOn(q,r,notPid){        // the guns of manned castles of everyone e
   }
   return shots;
 }
-function touchesLiveSet(q,r,L){ for(var i=0;i<6;i++) if(L[key(q+AX[i][0],r+AX[i][1])]) return true; return false; }
+function touchesLiveSet(q,r,L){ for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===ME&&!building(n)) return true; } return false; }   // roads no longer gate claiming: any finished ground of mine beside it will do
 function nextToMine(q,r){ return !!attackBand(q,r); }
 
 /* ═══ bands ═════════════════════════════════════════════════════════════
@@ -1970,7 +1970,7 @@ function spendMarch(q,r){
   var c=cellOf(q,r);
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
   if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Tap it and choose <b>Build a bridge</b>; it takes a day.');
-  if(!c.o && !touchesLive(q,r,ME)) return nope('<span class="bad">No live road reaches it.</span> New land is claimed beside a live road square: one of your castles, a finished bridge, or a finished road joined to a castle.'+roadWhy(q,r));
+  if(!c.o && !touchesLive(q,r,ME)) return nope('<span class="bad">It is not beside your ground.</span> New land is claimed beside a finished square of yours.'+roadWhy(q,r));
   if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Batter it with trebuchets, or cut it off from its grain squares &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
   if(!c.o){
     if(pl.squares<1) return nope('Not enough marches — that cell costs 1. Claim today&rsquo;s steps.');
@@ -2062,9 +2062,9 @@ function lineText(units){
 }
 function pct(x){ return x>=0.995&&x<1?'99%':(x>0&&x<0.005?'under 1%':Math.round(x*100)+'%'); }
 /* the band of mine that would attack (q,r): the biggest standing beside it */
-function attackBand(q,r){                            // only a band standing on a live road square can attack
+function attackBand(q,r){                            // any band of mine standing beside the square can attack
   var best=null, L=liveRoads(ME);
-  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], nk=key(nq,nr), n=G.cells[nk]; if(n&&n.o===ME&&n.b>0&&!building(n)&&L[nk]&&(!best||n.b>best.n)) best={q:nq,r:nr,n:n.b}; }
+  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], nk=key(nq,nr), n=G.cells[nk]; if(n&&n.o===ME&&n.b>0&&!building(n)&&(!best||n.b>best.n)) best={q:nq,r:nr,n:n.b}; }
   return best;
 }
 /* ── spoils of capture ──
@@ -2099,7 +2099,7 @@ function goodsText(g){ var p=[]; GOODS.forEach(function(k){ if(g&&g[k]>0) p.push
 var fighting=false;
 function attackPrompt(q,r,note){
   var pl=me(), c=cellOf(q,r), band=attackBand(q,r), L=defenderLine(q,r);
-  if(!band) return nope('<span class="bad">No band of yours stands on a live road beside it.</span> Taking someone else&rsquo;s ground needs one of your bands on a live road square that touches it. Use <b>Move soldiers</b> to bring a band up.'+roadWhy(q,r));
+  if(!band) return nope('<span class="bad">No band of yours stands beside it.</span> Taking someone else&rsquo;s ground needs one of your bands on a square that touches it. Use <b>Move soldiers</b> to bring a band up.'+roadWhy(q,r));
   var o=battleOdds(band.n,L.p), who=esc(nameOf(c.o)), ruin=isRuin(c), loserN=Math.max(1,cellsOf(c.o));
   var sp=spoilsShare((G.players[c.o]||{}).res,loserN), what=c.k===TOWER?'tower':ruin?'fallen castle':c.t===RIVER?'bridge':'square';
   var html=(note?'<p class="sc-note">'+note+'</p>':'')
@@ -2330,13 +2330,12 @@ function artTrebuchet(g,x,y,s,col,t,n,arm){
 /* ═══ roads ══════════════════════════════════════════════════════════════
    A road is a flag on a square you hold (rd), with the moment its building is finished (rf), the
    way a bridge keeps its own. It takes a day (BRIDGE_MS) and costs a march and materials, and can
-   only be started on your own finished dry ground that touches a finished, live road square. A
+   only be started on your own finished dry ground that touches your finished ground. A
    castle counts as a live road square, and so does a finished bridge. A road is live only while an
    unbroken chain of your road squares, castles and finished bridges joins it to a standing castle;
    cut it off and it is dead: still there, drawn faded, but no use until it is joined up again.
-   Roads decide three things: new land can only be claimed beside a live road square; a band can
-   only attack from a live road square beside its target; and a band moves 1 hour a step between
-   two live road squares, 3 hours any other step. Supply is unchanged: it still runs over any of
+   Roads decide one thing: a band moves 1 hour a step between two live road squares, 3 hours any
+   other step. (They once also gated claiming and attacking; that was dropped.) Supply is unchanged: it still runs over any of
    your own ground. A captured square keeps its road (live for the captor only if it joins one of
    their castles), and an enemy road can be broken by a band beating the soldiers guarding it. */
 var ROAD_COST={timber:20, stone:10}, ROAD_MARCH=1, ROAD_MS=BRIDGE_MS, ROAD_STEP_MS=1*36e5, BREAK_ROAD_MARCH=1;
@@ -2375,9 +2374,9 @@ function liveRoads(pid){
   liveMemo[pid]={gen:cellsGen, until:until, set:set};
   return set;
 }
-function touchesLive(q,r,pid){
-  var L=liveRoads(pid||ME);
-  for(var i=0;i<6;i++) if(L[key(q+AX[i][0],r+AX[i][1])]) return true;
+function touchesLive(q,r,pid){                        // (name kept) does finished ground of pid touch (q,r)? Roads only quicken marches; they gate nothing
+  pid=pid||ME;
+  for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===pid&&!building(n)) return true; }
   return false;
 }
 /* ── showing where a road would help ── */
@@ -2401,7 +2400,7 @@ function buildRoad(q,r){
   if(building(c)) return nope('Finish the bridge first.');
   if(c.k===CASTLE) return nope('A castle already counts as a road square.');
   if(c.rd) return nope(roadUp(c)?'The road here is finished in <b>'+hoursLeft(c.rf)+'</b>.':'There is already a road here.');
-  if(!touchesLive(q,r,ME)) return nope('<span class="bad">A road has to start from a live road.</span> Build it on a square touching one of your castles, a finished bridge or a finished road joined to a castle.');
+  if(!touchesLive(q,r,ME)) return nope('<span class="bad">A road has to touch your ground.</span> Build it on a square beside a finished square of yours.');
   if(pl.squares<ROAD_MARCH) return nope('A road takes a march to start. Claim today&rsquo;s steps first.');
   for(k in ROAD_COST) if((pl.res[k]||0)<ROAD_COST[k]) return nope('Not enough materials &mdash; a road needs '+costLine(ROAD_COST)+'. '+shortBy(ROAD_COST));
   for(k in ROAD_COST) pl.res[k]-=ROAD_COST[k];
@@ -2443,7 +2442,7 @@ function breakRoadPrompt(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!c.o||c.o===ME||!c.rd) return nope('Pick a road on someone else&rsquo;s ground.');
   var band=attackBand(q,r);
-  if(!band) return nope('<span class="bad">No band of yours stands on a live road beside it.</span> Breaking a road takes a band standing on a live road square that touches it.'+roadWhy(q,r));
+  if(!band) return nope('<span class="bad">No band of yours stands beside it.</span> Breaking a road takes a band standing on a square that touches it.'+roadWhy(q,r));
   if(pl.squares<BREAK_ROAD_MARCH) return nope('Breaking a road costs a march. Claim today&rsquo;s steps.');
   var L=roadBreakLine(q,r), o=battleOdds(band.n,L.p);
   scrollDialog({eyebrow:'Break a road', title:'Break '+esc(nameOf(c.o))+'&rsquo;s road?',
@@ -2587,7 +2586,7 @@ function bridge(q,r){
   if(c.t!==RIVER) return nope('Bridges go on river cells. Pick a river cell touching your ground.');
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
   if(c.o) return nope('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Tap it and choose <b>Take this bridge</b> &mdash; two marches, like the rest of their ground.');
-  if(!touchesLive(q,r,ME)) return nope('<span class="bad">No live road reaches this bank.</span> A bridge starts beside a live road square: a castle, another finished bridge, or a finished road joined to a castle.'+roadWhy(q,r));
+  if(!touchesLive(q,r,ME)) return nope('<span class="bad">No ground of yours touches this bank.</span> A bridge starts beside a finished square of yours.'+roadWhy(q,r));
   if(pl.squares<1) return nope('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
   for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return nope('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'. '+shortBy(BRIDGE_COST)); }
   for(var k2 in BRIDGE_COST) pl.res[k2]-=BRIDGE_COST[k2];
@@ -2992,9 +2991,9 @@ function lackText(cost){
   for(var k in cost){ var have=Math.floor(pl.res[k]||0); if(have<cost[k]) miss.push((cost[k]-have)+' more '+k); }
   return miss.length?'Needs '+andList(miss):'';
 }
-function bestBandBeside(q,r){                        // the biggest band of mine on a live road square beside (q,r)
+function bestBandBeside(q,r){                        // the biggest band of mine beside (q,r)
   var m=0, L=liveRoads(ME);
-  for(var i=0;i<6;i++){ var nk=key(q+AX[i][0],r+AX[i][1]), c=G.cells[nk]; if(c&&c.o===ME&&c.b>0&&!building(c)&&L[nk]&&c.b>m) m=c.b; }
+  for(var i=0;i<6;i++){ var nk=key(q+AX[i][0],r+AX[i][1]), c=G.cells[nk]; if(c&&c.o===ME&&c.b>0&&!building(c)&&c.b>m) m=c.b; }
   return m;
 }
 function cellTitle(c){
@@ -3018,12 +3017,12 @@ function cellActions(q,r){
   var A=function(label,cost,run,why){ out.push({label:label,cost:cost||'',run:run,why:why||''}); };
   var marches=function(n){ return pl.squares<n?'Needs '+n+' marches (you have '+pl.squares+')':''; };
   if(!own && !c.o){
-    if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Needs a live road square beside it':marches(1));
-    else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Needs a live road square on this bank':(marches(1)||lackText(BRIDGE_COST)));
+    if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Needs ground of yours beside it':marches(1));
+    else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Needs ground of yours on this bank':(marches(1)||lackText(BRIDGE_COST)));
   } else if(!own){
     var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need2=guns+guard.n, L=defenderLine(q,r), band=attackBand(q,r);
-    var bandWhy=function(n){ return !beside?'Needs one of your bands on a live road beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
-    var whyTake=!band?'Needs one of your bands on a live road beside it':marches(ATTACK_COST);
+    var bandWhy=function(n){ return !beside?'Needs one of your bands beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
+    var whyTake=!band?'Needs one of your bands beside it':marches(ATTACK_COST);
     var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'');
     var take=function(){ spendMarch(q,r); };
     if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
@@ -3032,7 +3031,7 @@ function cellActions(q,r){
     else if(wet) A('Take this bridge',price,take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
-    if(c.rd){ var RL=roadBreakLine(q,r); A('Break their road',BREAK_ROAD_MARCH+' march'+(band?' &middot; '+pct(battleOdds(band.n,RL.p).win):''),function(){ breakRoadPrompt(q,r); },!band?'Needs one of your bands on a live road beside it':marches(BREAK_ROAD_MARCH)); }
+    if(c.rd){ var RL=roadBreakLine(q,r); A('Break their road',BREAK_ROAD_MARCH+' march'+(band?' &middot; '+pct(battleOdds(band.n,RL.p).win):''),function(){ breakRoadPrompt(q,r); },!band?'Needs one of your bands beside it':marches(BREAK_ROAD_MARCH)); }
   } else if(building(c)){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
   } else {
@@ -3062,7 +3061,7 @@ function cellActions(q,r){
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
       }
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
-      if(c.k!==CASTLE && !c.rd) A('Build a road',ROAD_MARCH+' march &middot; '+costLine(ROAD_COST)+' &middot; 24 h',function(){ buildRoad(q,r); },!touchesLive(q,r,ME)?'Must touch a live road, castle or finished bridge':(marches(ROAD_MARCH)||lackText(ROAD_COST)));
+      if(c.k!==CASTLE && !c.rd) A('Build a road',ROAD_MARCH+' march &middot; '+costLine(ROAD_COST)+' &middot; 24 h',function(){ buildRoad(q,r); },!touchesLive(q,r,ME)?'Must touch your ground':(marches(ROAD_MARCH)||lackText(ROAD_COST)));
       if(c.rd) A(roadUp(c)?'Dig up the unfinished road':'Dig up the road',refundLine(halfOf(spentOnRoad(c))),function(){ demolishRoad(q,r); });
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
       if(c.k===CASTLE) A('Tear down the castle',isRuin(c)?'a ruin: nothing back':refundLine(demolishRefund(c,'castle',q,r)),function(){ tearDown(q,r,'castle'); });
@@ -5247,8 +5246,8 @@ canvas.addEventListener('wheel',function(ev){
 var MODES={menu:'m-menu',claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop',move:'m-move',break:'m-break'};
 var HINTS={
   menu:'Tap any square on the map. A small menu opens beside it with everything you can do there and what it costs; anything you can&rsquo;t do right now is greyed, with the reason. The buttons below the map are shortcuts that stay on one action &mdash; handy for claiming several squares in a row.',
-  claim:'Click any dashed cell beside a live road square of yours (a castle, a finished bridge, or a finished road joined to a castle) to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it on a live road square: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
-  bridge:'Click a dashed river cell beside a live road square of yours to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
+  claim:'Click any dashed cell beside a square of yours to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it on a live road square: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
+  bridge:'Click a dashed river cell beside a square of yours to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. It needs nobody inside: it has 10 health (20 and 30 when upgraded), makes every attack on your ground in its range harder, and a damaged tower mends 1 health a tick for 1 stone.',
   castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle must be built where your own ground links it to a grain square (a farm you hold), never on one: if no farm is connected to it, it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
@@ -5920,7 +5919,7 @@ function letterCount(){ var t=document.getElementById('cv-letter'), n=(t.value||
    hours anyone else (not the target) may take the cross; a player belongs to one crusade at a time,
    a target faces one at a time, and a player has one proclaimed crusade going at once. Members pay
    marches into the treasury, and any member may launch a pooled strike on a square of the target's:
-   every soldier of every member whose band stands on a live road square touching it fights as one
+   every soldier of every member whose band stands standing beside it fights as one
    pool in the duel chain (trebuchets are not in the pool; they fire on their own). The strike's
    marches come from the treasury first, then from the striker. Losses are shared in proportion to
    the soldiers each member committed (largest remainder); if the pool wins but the striker would
@@ -5954,12 +5953,12 @@ function shareOut(n,weights){
   for(var i=0;used<n;i++,used++) out[rem[i%rem.length].k]++;
   return out;
 }
-/* the pool for a square of the target's: every member band on a live road square beside it */
+/* the pool for a square of the target's: every member band beside it */
 function crusadePool(c,q,r){
   var pool=[];
   Object.keys(c.members||{}).sort().forEach(function(pid){
     var L=liveRoads(pid);
-    for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr, n=G.cells[nk]; if(n&&n.o===pid&&n.b>0&&!building(n)&&L[nk]) pool.push({pid:pid,q:nq,r:nr,n:n.b}); }
+    for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr, n=G.cells[nk]; if(n&&n.o===pid&&n.b>0&&!building(n)) pool.push({pid:pid,q:nq,r:nr,n:n.b}); }
   });
   return pool;
 }
@@ -6016,7 +6015,7 @@ function strikeMenu(id){
     var tot=pool.reduce(function(a,b){ return a+b.n; },0), L=defenderLine(q,r);
     opts.push({label:(tc.k===TOWER?'Their tower':isRuin(tc)?'Their fallen castle':'Their square')+' at '+q+','+r, cost:tot+' soldiers &middot; '+pct(battleOdds(tot,L.p).win), value:[q,r]});
   }
-  if(!opts.length) return nope('No square of '+esc(nameOf(c.target))+'&rsquo;s has one of your bands on a live road beside it. A strike needs your own band in the pool.');
+  if(!opts.length) return nope('No square of '+esc(nameOf(c.target))+'&rsquo;s has one of your bands beside it. A strike needs your own band in the pool.');
   scrollDialog({eyebrow:'Crusade strike', title:'Strike where?', cancel:null, list:opts, buttons:[{label:'Not now',value:null}]}).then(function(res){ if(res.value) strikePrompt(id,res.value[0],res.value[1]); });
 }
 function strikePrompt(id,q,r){
@@ -6220,8 +6219,10 @@ var NOTES=[
    html:'<p>A battle is now a chain of duels, and a scroll shows your odds before you attack. Take a square and you carry off a share of its owner&rsquo;s stores.</p>'
      +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'},
   {id:'nov26-roads', eyebrow:'New this November', title:'Roads',
-   html:'<p>Land is now claimed, and attacks are made, only from <b>live roads</b>: your castles, finished bridges, and roads joined to a castle. Your old ground has no roads yet.</p>'
-     +'<p>Tap a square beside a castle and choose <b>Build a road</b> (1 march, 20 timber, 10 stone, a day). Armies move 1 hour a square on roads, 3 off them.</p>'},
+   html:'<p>Roads make your soldiers faster, and nothing else: an army walks 1 hour a square along a road joined to one of your castles, 3 hours a square off it. Claiming land and attacking work from any ground you hold.</p>'
+     +'<p>Tap a square beside your ground and choose <b>Build a road</b> (1 march, 20 timber, 10 stone, a day).</p>'},
+  {id:'nov26-roads2', eyebrow:'A change', title:'Roads only quicken marches',
+   html:'<p>Roads no longer limit anything. You can claim land and attack from any ground you hold, as before. A road only makes an army walk faster: 1 hour a square along a road joined to a castle, 3 hours a square off it.</p>'},
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
@@ -6769,7 +6770,7 @@ function coachTargets(){
       if(seen[nk]) continue; seen[nk]=1;
       var n=G.cells[nk]; if(n && (n.o||n.k)) continue;
       var t=groundAt(nq,nr); if(t===RIVER) continue;
-      if(!touchesLive(nq,nr,ME)) continue;            // only land beside a live road can be claimed
+      if(!touchesLive(nq,nr,ME)) continue;            // land beside your ground can be claimed
       var y=YIELD[t], score = y ? (y.r==='grain' ? (R.net<0?6:2.6) : y.r==='iron' ? 2.4 : 2) : 0.3;
       if(sup[k]) score+=1.5;                          // it joins supplied ground, so it produces at once
       score-=hexDist(nq,nr,pl.q,pl.r)*0.04;
@@ -6824,7 +6825,7 @@ function coachPlan(){
     }
   }
   if(pl.squares>=ROAD_MARCH && pl.res.timber>=ROAD_COST.timber && pl.res.stone>=ROAD_COST.stone){
-    var rs=roadSpot(); if(rs) return {key:'road', txt:'No open land touches a live road of yours. A <b>road</b> (1 march, 20 timber, 10 stone, a day to build) on the edge of your ground reaches further.'+extra, mode:'menu', target:rs, label:'Idea: a road here', go:'Suggest a spot'};
+    var rs=roadSpot(); if(rs) return {key:'road', txt:'No open land touches your ground. A <b>bridge</b> or new castle ground may open more.'+extra, mode:'menu', target:rs, label:'Idea: a road here', go:'Suggest a spot'};
   }
   if(!done && pl.squares<1) return {key:'claim', txt:'You&rsquo;re out of marches. After you walk, type <b>today&rsquo;s step count</b> from the Health app in the box above the map and press <b>Claim</b> to get more.', el:'stepsin'};
   if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? A <b>watchtower</b> on your border is one way to use them &mdash; it makes every attack on your ground nearby harder.'+extra, mode:'tower', target:bt, label:'Idea: a tower here', go:'Suggest a spot'}; }
