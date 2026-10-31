@@ -554,6 +554,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <span>the map wraps at its edges</span>
         <span>dotted ring = a tower&rsquo;s reach or a castle&rsquo;s guns</span>
         <span>dashed cell = you can take it</span>
+        <span><span class="sw" style="background:#DCCDA6;border-color:#A8946C"></span> road (faded: cut off)</span>
       </div>
     </div>
 
@@ -724,7 +725,7 @@ function wrapC(x){ return ((x+HALF)%WORLD+WORLD)%WORLD-HALF; }
 var YIELD={}; YIELD[FOREST]={r:'timber',n:2}; YIELD[QUARRY]={r:'stone',n:2};
 YIELD[IRON]={r:'iron',n:1}; YIELD[FARM]={r:'grain',n:3};
 var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
-/* A castle lives off the farms linked to it by a road of its owner's ground: if no grain square (a farm) is connected to it,
+/* A castle lives off the farms linked to it by unbroken ground of its owner's: if no grain square (a farm) is connected to it,
    it loses a tick of health every tick and falls after 5 days (30 ticks). While a farm
    is attached it heals at exactly the rate it was losing. A fallen castle is a ruin that
    gives no supply and holds no garrison; whoever seizes it destroys it and gets the bounty. */
@@ -959,7 +960,7 @@ function tidyBoard(g){
 /* a bridge that is still going up: owned, but nothing crosses it or draws supply through it yet.
    A held river cell with no finish time is a bridge that was already there. */
 function building(c){ return !!(c && c.f && c.f>Date.now()); }
-/* land on fire: still held, still part of the road, but it yields nothing until the fire (c.bn) burns out */
+/* land on fire: still held, still part of the unbroken ground, but it yields nothing until the fire (c.bn) burns out */
 function burning(c,at){ return !!(c && c.bn && c.bn>(at||Date.now())); }
 
 /* ── castle health ── */
@@ -967,7 +968,7 @@ function castleH(c){ return c.h==null?CASTLE_MAX_H:c.h; }
 function isRuin(c){ return !!c && c.k===CASTLE && c.h!=null && c.h<=0; }
 function isFarmCell(c,q,r){ return !!c && !building(c) && (c.f?groundAt(q,r):terrainAt(q,r))===FARM; }
 /* connected = a finished farm held by the castle's owner can be reached from the castle over an
-   unbroken road of the owner's own ground (the same road that carries supply). The farm does not
+   unbroken stretch of the owner's own ground (the same ground that carries supply). The farm does not
    have to touch the castle, but a castle never stands on a grain square itself. */
 function castleFed(q,r,pid){
   q=wrapC(q); r=wrapC(r);
@@ -984,7 +985,7 @@ function castleFed(q,r,pid){
   }
   return false;
 }
-/* castleFed for drawing: the road-walk is too heavy to run for every castle on every frame, so each castle's
+/* castleFed for drawing: the walk over the ground is too heavy to run for every castle on every frame, so each castle's
 answer is remembered for a couple of seconds. (Only the little healing/starving arrow uses this.) */
 var fedMemo={};
 function castleFedCached(c){
@@ -1216,8 +1217,8 @@ function castleAlert(pid){
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||c.o!==pid||c.h==null) continue;
     var p=k.split('_'), fed=castleFed(parseInt(p[0],10),parseInt(p[1],10),pid);
-    if(isRuin(c)){ out={ruin:true, short:'castle fallen', long:'<span class="bad">One of your castles has fallen</span> and can be seized for '+CASTLE_BOUNTY+' marches. '+(fed?'It is connected to a farm again and is healing.':'Link a farm to it by an unbroken road of your ground to bring it back.')}; break; }
-    if(!fed){ var dl=c.ht+c.h*TICK_MS; if(!out||dl<out.dl) out={dl:dl, short:'castle starving — '+hoursLeft(dl), long:'<span class="bad">A castle of yours has no farm connected to it</span> and falls in '+hoursLeft(dl)+'. Link a grain square to it by an unbroken road of your ground to stop that.'}; }
+    if(isRuin(c)){ out={ruin:true, short:'castle fallen', long:'<span class="bad">One of your castles has fallen</span> and can be seized for '+CASTLE_BOUNTY+' marches. '+(fed?'It is connected to a farm again and is healing.':'Link a farm to it by unbroken ground of yours to bring it back.')}; break; }
+    if(!fed){ var dl=c.ht+c.h*TICK_MS; if(!out||dl<out.dl) out={dl:dl, short:'castle starving — '+hoursLeft(dl), long:'<span class="bad">A castle of yours has no farm connected to it</span> and falls in '+hoursLeft(dl)+'. Link a grain square to it by unbroken ground of yours to stop that.'}; }
   }
   return out;
 }
@@ -1364,10 +1365,8 @@ function coverOn(q,r,notPid){        // the guns of manned castles of everyone e
   }
   return shots;
 }
-function adjacentTo(q,r,pid){
-  for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o===pid&&!building(n)) return true; }
-  return false;
-}
+function touchesLiveSet(q,r,L){ for(var i=0;i<6;i++) if(L[key(q+AX[i][0],r+AX[i][1])]) return true; return false; }
+function nextToMine(q,r){ return !!attackBand(q,r); }
 
 /* ═══ bands ═════════════════════════════════════════════════════════════
    Soldiers are not a number in a purse: they stand on the map, in bands, on
@@ -1405,24 +1404,6 @@ function drawSoldiers(pid,q,r,n){
     changed.push([bs[i].q,bs[i].r]);
   }
   return changed;
-}
-/* shortest walk from a to b over pid's own finished ground; -1 if there is no road */
-function roadLength(pid,aq,ar,bq,br){
-  var goal=key(bq,br);
-  if(key(aq,ar)===goal) return 0;
-  var seen={}, frontier=[[aq,ar]], d=0; seen[key(aq,ar)]=1;
-  while(frontier.length && d<400){
-    d++; var next=[];
-    for(var f=0;f<frontier.length;f++) for(var i=0;i<6;i++){
-      var nq=frontier[f][0]+AX[i][0], nr=frontier[f][1]+AX[i][1], nk=key(nq,nr);
-      if(seen[nk]) continue; seen[nk]=1;
-      var c=G.cells[nk]; if(!c || c.o!==pid || building(c)) continue;
-      if(nk===goal) return d;
-      next.push([nq,nr]);
-    }
-    frontier=next;
-  }
-  return -1;
 }
 /* Before bands existed, soldiers were a single number on the player. The first
    time an old record loads, those soldiers are stood at the home keep. */
@@ -1890,7 +1871,7 @@ function spendMarch(q,r){
   var c=cellOf(q,r);
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already hold that ground.');
   if(c.t===RIVER && !c.o) return nope('That&rsquo;s a river &mdash; you can&rsquo;t march into it. Tap it and choose <b>Build a bridge</b>; it takes a day.');
-  if(!adjacentTo(q,r,ME)) return nope('Marches extend a border — pick a cell touching your own ground.');
+  if(!c.o && !touchesLive(q,r,ME)) return nope('<span class="bad">No live road reaches it.</span> New land is claimed beside a live road square: one of your castles, a finished bridge, or a finished road joined to a castle.'+roadWhy(q,r));
   if(c.k===CASTLE && !isRuin(c)) return nope('A castle cannot be stormed while it stands. Batter it with trebuchets, or cut it off from its grain squares &mdash; after 5 days it falls, and then it can be seized for '+CASTLE_BOUNTY+' marches.');
   if(!c.o){
     if(pl.squares<1) return nope('Not enough marches — that cell costs 1. Claim today&rsquo;s steps.');
@@ -1982,9 +1963,9 @@ function lineText(units){
 }
 function pct(x){ return x>=0.995&&x<1?'99%':(x>0&&x<0.005?'under 1%':Math.round(x*100)+'%'); }
 /* the band of mine that would attack (q,r): the biggest standing beside it */
-function attackBand(q,r){
-  var best=null;
-  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=G.cells[key(nq,nr)]; if(n&&n.o===ME&&n.b>0&&!building(n)&&(!best||n.b>best.n)) best={q:nq,r:nr,n:n.b}; }
+function attackBand(q,r){                            // only a band standing on a live road square can attack
+  var best=null, L=liveRoads(ME);
+  for(var i=0;i<6;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], nk=key(nq,nr), n=G.cells[nk]; if(n&&n.o===ME&&n.b>0&&!building(n)&&L[nk]&&(!best||n.b>best.n)) best={q:nq,r:nr,n:n.b}; }
   return best;
 }
 /* ── spoils of capture ──
@@ -2019,7 +2000,7 @@ function goodsText(g){ var p=[]; GOODS.forEach(function(k){ if(g&&g[k]>0) p.push
 var fighting=false;
 function attackPrompt(q,r,note){
   var pl=me(), c=cellOf(q,r), band=attackBand(q,r), L=defenderLine(q,r);
-  if(!band) return nope('<span class="bad">No soldiers next to that square.</span> Taking someone else&rsquo;s ground needs one of your bands standing beside it. Use <b>Move soldiers</b> to bring a band up.');
+  if(!band) return nope('<span class="bad">No band of yours stands on a live road beside it.</span> Taking someone else&rsquo;s ground needs one of your bands on a live road square that touches it. Use <b>Move soldiers</b> to bring a band up.'+roadWhy(q,r));
   var o=battleOdds(band.n,L.p), who=esc(nameOf(c.o)), ruin=isRuin(c), loserN=Math.max(1,cellsOf(c.o));
   var sp=spoilsShare((G.players[c.o]||{}).res,loserN), what=c.k===TOWER?'tower':ruin?'fallen castle':c.t===RIVER?'bridge':'square';
   var html=(note?'<p class="sc-note">'+note+'</p>':'')
@@ -2067,7 +2048,7 @@ function attackNow(q,r,band0,shown){
     if(res.won){
       c.o=ME; c.w=0; delete c.wd; delete c.tb; delete c.tr; c.b=res.left;
       if(ruin){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; bounty=CASTLE_BOUNTY; pl.squares+=bounty; }   // the ruin is razed, and the captor is paid
-      if(c.cs) c.cs={n:1};                                          // whatever still stands here cost the captor nothing
+      if(c.cs || c.rd || c.t===RIVER) c.cs={n:1};                   // a road or bridge left standing cost the captor nothing
       if(from){ delete from.b; }
     } else if(from){ from.b=res.left; if(!from.b) delete from.b; }
     writeCell(q,r,c);
@@ -2247,6 +2228,258 @@ function artTrebuchet(g,x,y,s,col,t,n,arm){
   }
 }
 
+/* ═══ roads ══════════════════════════════════════════════════════════════
+   A road is a flag on a square you hold (rd), with the moment its building is finished (rf), the
+   way a bridge keeps its own. It takes a day (BRIDGE_MS) and costs a march and materials, and can
+   only be started on your own finished dry ground that touches a finished, live road square. A
+   castle counts as a live road square, and so does a finished bridge. A road is live only while an
+   unbroken chain of your road squares, castles and finished bridges joins it to a standing castle;
+   cut it off and it is dead: still there, drawn faded, but no use until it is joined up again.
+   Roads decide three things: new land can only be claimed beside a live road square; a band can
+   only attack from a live road square beside its target; and a band moves 1 hour a step between
+   two live road squares, 3 hours any other step. Supply is unchanged: it still runs over any of
+   your own ground. A captured square keeps its road (live for the captor only if it joins one of
+   their castles), and an enemy road can be broken by a band beating the soldiers guarding it. */
+var ROAD_COST={timber:20, stone:10}, ROAD_MARCH=1, ROAD_MS=BRIDGE_MS, ROAD_STEP_MS=1*36e5, BREAK_ROAD_MARCH=1;
+var ROADS_CONVERT=false;                              // the one-time update turns existing ground into road only if the owner says so (he said no)
+function roadDone(c,now){ return !!(c && c.rd && !(c.rf && c.rf>(now||Date.now()))); }
+function roadUp(c,now){ return !!(c && c.rd && c.rf && c.rf>(now||Date.now())); }
+/* a square that carries a road for its owner: a finished road, a standing castle, or a finished bridge */
+function roadSq(c,q,r,now){
+  if(!c || !c.o) return false;
+  if(c.k===CASTLE && !isRuin(c)) return true;
+  if(roadDone(c,now)) return true;
+  return groundAt(q,r)===RIVER && !building(c);
+}
+/* every live road square of pid, flooding out from their standing castles; remembered until the cells change
+   or a road or bridge under way is finished */
+var liveMemo={};
+function liveRoads(pid){
+  var now=Date.now(), m=liveMemo[pid];
+  if(m && m.gen===cellsGen && now<m.until) return m.set;
+  var set={}, stack=[], until=Infinity, k, c, p;
+  for(k in G.cells){
+    c=G.cells[k]; if(c.o!==pid) continue;
+    if(c.rd && c.rf>now) until=Math.min(until,c.rf);
+    if(c.f>now) until=Math.min(until,c.f);
+    if(c.k===CASTLE && !isRuin(c)){ set[k]=1; p=k.split('_'); stack.push([parseInt(p[0],10),parseInt(p[1],10)]); }
+  }
+  while(stack.length){
+    var cur=stack.pop();
+    for(var i=0;i<6;i++){
+      var nq=wrapC(cur[0]+AX[i][0]), nr=wrapC(cur[1]+AX[i][1]), nk=nq+'_'+nr;
+      if(set[nk]) continue;
+      var n=G.cells[nk];
+      if(n && n.o===pid && roadSq(n,nq,nr,now)){ set[nk]=1; stack.push([nq,nr]); }
+    }
+  }
+  liveMemo[pid]={gen:cellsGen, until:until, set:set};
+  return set;
+}
+function touchesLive(q,r,pid){
+  var L=liveRoads(pid||ME);
+  for(var i=0;i<6;i++) if(L[key(q+AX[i][0],r+AX[i][1])]) return true;
+  return false;
+}
+/* ── showing where a road would help ── */
+var roadHint=null;
+function hintRoads(q,r){
+  var keys=[];
+  for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), c=G.cells[nq+'_'+nr]; if(c && c.o===ME && !building(c) && groundAt(nq,nr)!==RIVER) keys.push([nq,nr]); }
+  roadHint=keys.length?{cells:keys, until:clock()+7}:null;
+  if(roadHint) coachKickHint();
+  return keys.length;
+}
+function coachKickHint(){ (function tick(){ if(!roadHint||clock()>roadHint.until){ roadHint=null; draw(); return; } if(!animRaf) draw(); requestAnimationFrame(tick); })(); }
+function roadWhy(q,r){
+  var n=hintRoads(q,r);
+  return n ? ' A <b>road</b> on one of the squares lit up beside it would do it (tap one and choose <b>Build a road</b>).' : ' Claim ground up to it first, then build a road there.';
+}
+function buildRoad(q,r){
+  var pl=me(), c=cellOf(q,r), k;
+  if(c.o!==ME) return nope('Roads go on ground you hold.');
+  if(c.t===RIVER) return nope('A river needs a bridge, not a road &mdash; and a finished bridge already counts as road.');
+  if(building(c)) return nope('Finish the bridge first.');
+  if(c.k===CASTLE) return nope('A castle already counts as a road square.');
+  if(c.rd) return nope(roadUp(c)?'The road here is finished in <b>'+hoursLeft(c.rf)+'</b>.':'There is already a road here.');
+  if(!touchesLive(q,r,ME)) return nope('<span class="bad">A road has to start from a live road.</span> Build it on a square touching one of your castles, a finished bridge or a finished road joined to a castle.');
+  if(pl.squares<ROAD_MARCH) return nope('A road takes a march to start. Claim today&rsquo;s steps first.');
+  for(k in ROAD_COST) if((pl.res[k]||0)<ROAD_COST[k]) return nope('Not enough materials &mdash; a road needs '+costLine(ROAD_COST)+'. '+shortBy(ROAD_COST));
+  for(k in ROAD_COST) pl.res[k]-=ROAD_COST[k];
+  pl.squares-=ROAD_MARCH;
+  c.rd=1; c.rf=Date.now()+ROAD_MS; if(c.cs) delete c.cs.n; spendAdd(c,'rd',ROAD_COST,{});
+  writeCell(q,r,c); logMove('road',q,r,fromFor(q,r,ME),null,0,{v:2});
+  render(); pushCell(q,r); pushMe();
+  say('<b>Road started.</b> It is finished in 24 hours; until then it carries nothing and the next square of road can&rsquo;t start from it. <b>'+avail()+'</b> marches left.');
+}
+function demolishRoad(q,r){
+  var pl=me(), k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null;
+  if(razing[k]) return;
+  razing[k]=1;
+  cellFresh(q,r).then(function(f){
+    var fc=f.c?JSON.parse(JSON.stringify(f.c)):null;
+    if(!fc||fc.o!==ME||!fc.rd) throw {msg:'There is no road of yours here any more.'};
+    fc.q=q; fc.r=r;
+    var back=halfOf(spentOnRoad(fc));
+    delete fc.rd; delete fc.rf; if(fc.cs){ delete fc.cs.rd; if(!Object.keys(fc.cs).length) delete fc.cs; }
+    writeCell(q,r,fc);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; throw {msg:'That square changed while you were digging it up. Try once more.'}; }
+      for(var g in back) pl.res[g]=(pl.res[g]||0)+back[g];
+      logMove('dm',q,r,null,null,0,{v:2,dm:'road',label:refundLine(back)});
+      render(); pushMe();
+      say('<b>The road is dug up.</b> '+(Object.keys(back).length?'<span class="good">'+refundLine(back)+'</span> (the march is not given back).':'Nothing comes back: you did not build it.'));
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing was dug up.'); })
+    .then(function(){ delete razing[k]; });
+}
+function spentOnRoad(c){ if(c.cs && c.cs.rd) return c.cs.rd; if(c.cs && c.cs.n) return {}; return {timber:ROAD_COST.timber, stone:ROAD_COST.stone}; }
+/* breaking an enemy road: a band that could attack the square pays a march and fights only the soldiers guarding it */
+function roadBreakLine(q,r){
+  var c=cellOf(q,r), g=guardOn(q,r,c.o), units=[];
+  for(var i=0;i<g.n;i++) units.push({t:'guard',p:DUEL_P.guard});
+  return {units:units, p:units.map(function(u){ return u.p; }), guard:g};
+}
+function breakRoadPrompt(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!c.o||c.o===ME||!c.rd) return nope('Pick a road on someone else&rsquo;s ground.');
+  var band=attackBand(q,r);
+  if(!band) return nope('<span class="bad">No band of yours stands on a live road beside it.</span> Breaking a road takes a band standing on a live road square that touches it.'+roadWhy(q,r));
+  if(pl.squares<BREAK_ROAD_MARCH) return nope('Breaking a road costs a march. Claim today&rsquo;s steps.');
+  var L=roadBreakLine(q,r), o=battleOdds(band.n,L.p);
+  scrollDialog({eyebrow:'Break a road', title:'Break '+esc(nameOf(c.o))+'&rsquo;s road?',
+    html:'<p>Your band of <b>'+band.n+'</b> has to beat '+(L.units.length?'<b>'+lineText(L.units)+'</b>':'nobody &mdash; no one guards it')+'. Walls and towers don&rsquo;t stop this.</p>'
+      +'<p style="font-size:22px;margin:6px 0 2px">Chance: <b>'+pct(o.win)+'</b></p><p>Soldiers you can expect to lose: <b>'+(Math.round(o.expLoss*10)/10)+'</b>.</p>'
+      +'<p><i>Costs '+BREAK_ROAD_MARCH+' march. The square stays theirs; only the road goes.</i></p>',
+    cancel:false, buttons:[{label:'Hold back',value:false},{label:'Break it &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){
+    if(res.value) breakRoadNow(q,r,band,L.p);
+  });
+}
+function breakRoadNow(q,r,band0,shown){
+  var pl=me(), k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null;
+  if(fighting) return; fighting=true;
+  cellFresh(q,r).then(function(f){
+    if(f.c) G.cells[k]=f.c; else delete G.cells[k];
+    var c=cellOf(q,r), prev=c.o;
+    if(!prev||prev===ME||!c.rd) throw {msg:'That road is gone already.'};
+    var band=attackBand(q,r), L=roadBreakLine(q,r);
+    if(!band) throw {msg:'<span class="bad">Your band beside it has gone.</span>'};
+    if(band.n!==band0.n || JSON.stringify(L.p)!==JSON.stringify(shown)){ fighting=false; return breakRoadPrompt(q,r); }
+    if(pl.squares<BREAK_ROAD_MARCH) throw {msg:'Breaking a road costs a march.'};
+    var seed=newSeed(), res=fightOut(band.n,L.p,seed), gl=res.killed, snaps={}, from=G.cells[key(band.q,band.r)];
+    var snap=function(kk){ if(!(kk in snaps)) snaps[kk]=G.cells[kk]?JSON.parse(JSON.stringify(G.cells[kk])):null; };
+    snap(key(band.q,band.r)); L.guard.cells.forEach(function(g){ snap(key(g[0],g[1])); });
+    var touched=[];
+    L.guard.cells.forEach(function(g){
+      if(gl<=0) return; var gc=G.cells[key(g[0],g[1])]; if(!gc||!(gc.b>0)) return;
+      var d=Math.min(gc.b,gl); gc.b-=d; gl-=d; addGraves(gc,d); if(!gc.b) delete gc.b;
+      if(key(g[0],g[1])!==k) touched.push(g);
+    });
+    pl.squares-=BREAK_ROAD_MARCH;
+    if(from){ from.b=res.left; if(!from.b) delete from.b; }
+    addGraves(c,res.lost);
+    if(res.won){ delete c.rd; delete c.rf; if(c.cs){ delete c.cs.rd; if(!Object.keys(c.cs).length) delete c.cs; } }
+    writeCell(q,r,c);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=BREAK_ROAD_MARCH; throw {msg:'That square changed at the last moment. Nothing happened.'}; }
+      pushCell(band.q,band.r); touched.forEach(function(g){ pushCell(g[0],g[1]); });
+      logMove('roadbreak',q,r,[band.q,band.r],prev,res.lost,{v:2,seed:seed,n:band.n,ln:L.p.map(function(x){ return Math.round(x*100); }),won:res.won?1:0,kl:res.killed});
+      render(); pushMe();
+      say(res.won?'<span class="good"><b>The road is broken.</b></span> '+(res.killed?'Its '+res.killed+' guard'+(res.killed>1?'s':'')+' fell. ':'')+(res.lost?'<span class="bad">'+res.lost+' of yours fell.</span> ':'')+'The square is still '+esc(nameOf(prev))+'&rsquo;s.'
+        :'<span class="bad"><b>Beaten back.</b></span> All '+band.n+' of your band fell'+(res.killed?', after bringing down '+res.killed+' guard'+(res.killed>1?'s':''):'')+'. The road stands.');
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing happened.'); })
+    .then(function(){ fighting=false; });
+}
+/* ── the fastest way over your own ground ──
+   Dijkstra over pid's finished squares: a step between two live road squares takes an hour, any other
+   step three. Ties go the same way every time (the earlier-found square first, neighbours in a fixed
+   order), and the route is stored on the walk, so every screen shows the same road. */
+function trekPath(pid,aq,ar,bq,br){
+  aq=wrapC(aq); ar=wrapC(ar); bq=wrapC(bq); br=wrapC(br);
+  var L=liveRoads(pid), start=aq+'_'+ar, goal=bq+'_'+br, dist={}, prevK={}, seq=0, heap=[], done={};
+  function push(d,k,q,r){ heap.push({d:d,s:seq++,k:k,q:q,r:r}); var i=heap.length-1; while(i>0){ var pi=(i-1)>>1; if(less(heap[i],heap[pi])){ var t=heap[i]; heap[i]=heap[pi]; heap[pi]=t; i=pi; } else break; } }
+  function less(a,b){ return a.d<b.d || (a.d===b.d && a.s<b.s); }
+  function pop(){ var top=heap[0], last=heap.pop(); if(heap.length){ heap[0]=last; var i=0; for(;;){ var l=2*i+1, r=l+1, m=i; if(l<heap.length&&less(heap[l],heap[m])) m=l; if(r<heap.length&&less(heap[r],heap[m])) m=r; if(m===i) break; var t=heap[i]; heap[i]=heap[m]; heap[m]=t; i=m; } } return top; }
+  dist[start]=0; push(0,start,aq,ar);
+  while(heap.length){
+    var cur=pop(); if(done[cur.k]) continue; done[cur.k]=1;
+    if(cur.k===goal) break;
+    for(var i=0;i<6;i++){
+      var nq=wrapC(cur.q+AX[i][0]), nr=wrapC(cur.r+AX[i][1]), nk=nq+'_'+nr;
+      if(done[nk]) continue;
+      var c=G.cells[nk]; if(!c || c.o!==pid || building(c)) continue;
+      var step=(L[cur.k]&&L[nk])?ROAD_STEP_MS:TREK_MS_CELL, nd=cur.d+step;
+      if(dist[nk]==null || nd<dist[nk]){ dist[nk]=nd; prevK[nk]=cur.k; push(nd,nk,nq,nr); }
+    }
+  }
+  if(dist[goal]==null) return null;
+  var path=[], dt=[], k=goal, road=0, off=0;
+  while(k!==start){ var pk=prevK[k]; var p1=k.split('_'); path.unshift([parseInt(p1[0],10),parseInt(p1[1],10)]); var st=(L[pk]&&L[k])?ROAD_STEP_MS:TREK_MS_CELL; dt.unshift(st); if(st===ROAD_STEP_MS) road++; else off++; k=pk; }
+  path.unshift([aq,ar]);
+  return {path:path, dt:dt, ms:dist[goal], road:road, off:off};
+}
+function pathText(tp){ return fmtDur(tp.ms)+' ('+(tp.road?tp.road+' road square'+(tp.road>1?'s':''):'')+(tp.road&&tp.off?', ':'')+(tp.off?tp.off+' off-road':'')+(!tp.road&&!tp.off?'already there':'')+')'; }
+/* where a walk is: walks set off since roads follow their stored path, step by step; older ones run straight */
+function trekPoints(tk){
+  var pts=[], prev=null;
+  arr(tk.path).forEach(function(p,i){ var c=i?nearCopy(p[0],p[1],prev[0],prev[1]):nearCopy(p[0],p[1],viewQ,viewR); pts.push(c); prev=c; });
+  return pts;
+}
+function trekPos(tk,t){
+  if(!tk.path) return null;
+  var pts=trekPoints(tk), dt=arr(tk.dt), e=Math.max(0,t-tk.t), i=0;
+  while(i<dt.length && e>=dt[i]){ e-=dt[i]; i++; }
+  if(i>=dt.length){ var L=pts[pts.length-1]; return {q:L[0],r:L[1],i:dt.length,f:0,pts:pts}; }
+  var f=dt[i]?e/dt[i]:1, A=pts[i], B=pts[i+1];
+  return {q:A[0]+(B[0]-A[0])*f, r:A[1]+(B[1]-A[1])*f, i:i, f:f, pts:pts};
+}
+/* ── the road on the map: a pale packed-earth track between the centres of neighbouring road squares ── */
+function drawRoads(roads,detail){
+  if(!roads.length) return;
+  var now=Date.now(), thin=S<12, lw=thin?Math.max(1,S*0.08):Math.max(2,S*0.2), done={};
+  ctx.save(); ctx.lineCap='round'; ctx.lineJoin='round';
+  roads.forEach(function(e){
+    var c=e[0], p=e[1], q=c.q, r=c.r, o=c.o, live=liveRoads(o)[key(q,r)], up=roadUp(c,now), nb=0;
+    var alpha=up?0.6:(live?0.95:0.38);
+    for(var i=0;i<6;i++){
+      var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[nq+'_'+nr];
+      if(!n || n.o!==o || !(n.rd || (n.k===CASTLE&&!isRuin(n)) || (groundAt(nq,nr)===RIVER&&!building(n)))) continue;
+      nb++;
+      var pair=[key(q,r),nq+'_'+nr].sort().join('|'); if(done[pair]) continue; done[pair]=1;
+      var P2=toScreen(p.q+AX[i][0],p.r+AX[i][1]), x0=p.x, y0=p.y, x1=(P2[0]+x0)/2, y1=(P2[1]+y0)/2;
+      if(n.rd) { x1=P2[0]; y1=P2[1]; }                               // road to road runs centre to centre; to a castle or bridge it stops at the edge
+      var nAlpha=Math.min(alpha, n.rd?(roadUp(n,now)?0.6:(liveRoads(o)[nq+'_'+nr]?0.95:0.38)):0.95);
+      roadSeg(x0,y0,x1,y1,lw,nAlpha,(up||roadUp(n,now)),thin);
+    }
+    if(!nb) roadSeg(p.x-S*0.3,p.y+S*0.1,p.x+S*0.3,p.y-S*0.1,lw,alpha,up,thin);   // a lone stretch
+    if(up && !thin && S>=14){                                         // a road being laid: how far along it is
+      var k=1-Math.max(0,c.rf-now)/ROAD_MS;
+      ctx.globalAlpha=0.9; ctx.strokeStyle=NAT.wood2; ctx.lineWidth=Math.max(1.5,S*0.06);
+      ctx.beginPath(); ctx.arc(p.x,p.y,S*0.2,-Math.PI/2,-Math.PI/2+k*Math.PI*2); ctx.stroke();
+    }
+    if(!live && !up && !thin && S>=16){                               // a dead road grows over
+      ctx.globalAlpha=0.7; ctx.strokeStyle=NAT.grass; ctx.lineWidth=Math.max(0.8,S*0.03);
+      for(var w=0;w<3;w++){ var wx=p.x+(artHash(wrapC(q),wrapC(r),300+w)-0.5)*S*0.6, wy=p.y+(artHash(wrapC(q),wrapC(r),310+w)-0.5)*S*0.3, wh=S*0.1;
+        ctx.beginPath(); ctx.moveTo(wx-wh*0.4,wy-wh); ctx.lineTo(wx,wy); ctx.lineTo(wx+wh*0.4,wy-wh); ctx.moveTo(wx,wy); ctx.lineTo(wx,wy-wh*1.1); ctx.stroke(); }
+    }
+  });
+  ctx.restore();
+}
+function roadSeg(x0,y0,x1,y1,lw,alpha,up,thin){
+  ctx.globalAlpha=alpha;
+  if(thin){ ctx.strokeStyle=NAT.road2; ctx.lineWidth=lw; if(up) ctx.setLineDash([3,3]); ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); ctx.setLineDash([]); return; }
+  ctx.strokeStyle=NAT.road2; ctx.lineWidth=lw+Math.max(1,S*0.04); if(up) ctx.setLineDash([lw*0.9,lw*0.7]);
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+  ctx.strokeStyle=NAT.road; ctx.lineWidth=lw;
+  ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke(); ctx.setLineDash([]);
+  if(!up && S>=20){                                                    // wheel ruts
+    var dx=x1-x0, dy=y1-y0, L=Math.hypot(dx,dy)||1, nx=-dy/L*lw*0.22, ny=dx/L*lw*0.22;
+    ctx.globalAlpha=alpha*0.5; ctx.strokeStyle=NAT.road2; ctx.lineWidth=Math.max(0.6,S*0.015);
+    ctx.beginPath(); ctx.moveTo(x0+nx,y0+ny); ctx.lineTo(x1+nx,y1+ny); ctx.moveTo(x0-nx,y0-ny); ctx.lineTo(x1-nx,y1-ny); ctx.stroke();
+  }
+}
+
 /* Crossing a river takes a bridge: a march and some materials to start, and a
    full day before anything can cross. Once finished it is ordinary ground —
    borders and supply run over it, and someone else can take it for two. */
@@ -2255,7 +2488,7 @@ function bridge(q,r){
   if(c.t!==RIVER) return nope('Bridges go on river cells. Pick a river cell touching your ground.');
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
   if(c.o) return nope('That bridge is '+esc(nameOf(c.o))+'&rsquo;s. Tap it and choose <b>Take this bridge</b> &mdash; two marches, like the rest of their ground.');
-  if(!adjacentTo(q,r,ME)) return nope('Build from your own bank &mdash; pick a river cell touching ground you hold.');
+  if(!touchesLive(q,r,ME)) return nope('<span class="bad">No live road reaches this bank.</span> A bridge starts beside a live road square: a castle, another finished bridge, or a finished road joined to a castle.'+roadWhy(q,r));
   if(pl.squares<1) return nope('Starting a bridge takes a march. Claim today&rsquo;s steps first.');
   for(var k in BRIDGE_COST){ if(pl.res[k]<BRIDGE_COST[k]) return nope('Not enough materials &mdash; a bridge needs '+costLine(BRIDGE_COST)+'. '+shortBy(BRIDGE_COST)); }
   for(var k2 in BRIDGE_COST) pl.res[k2]-=BRIDGE_COST[k2];
@@ -2287,7 +2520,7 @@ function build(q,r,kind){
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
     if(isFarmCell(c,wrapC(q),wrapC(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, linked by your own land to a farm (&equiv;) you hold.');
-    if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square connected to it.</span> This cell has no unbroken road of your ground to a farm (&equiv;) you hold &mdash; a castle cut off from every farm would starve and fall within 5 days.');
+    if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square connected to it.</span> This cell is not joined by unbroken ground of yours to a farm (&equiv;) you hold &mdash; a castle cut off from every farm would starve and fall within 5 days.');
     var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
     if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
@@ -2303,7 +2536,7 @@ function build(q,r,kind){
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
     ? 'Watchtower raised, at full health ('+towerMax(1)+'). Every attack on your ground within '+SPEC[TOWER].range[1]+' square of it is harder, and it stands in the way of anyone taking its own square.'
-    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep its road to a farm open: if no grain square is connected to it, it loses health and falls in 5 days.');
+    : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep it joined to a farm by unbroken ground: if no grain square is connected to it, it loses health and falls in 5 days.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
 /* what is missing for a cost, and where it comes from */
@@ -2384,11 +2617,11 @@ function sayMove(){
 }
 /* the "how many?" scroll is parked in the corner of the map farthest from the band, and never over a square
    the band could be sent to: of the four corners it takes the one that covers none of your ground, or the least */
-var sendMenuSig='', sendMenuPos='', sendSpotSig='', sendPick=null, sendTPick=null;
+var sendMenuSig='', sendMenuPos='', sendSpotSig='', sendPick=null, sendTPick=null, sendHover=null;
 function placeSendMenu(){
   var box=document.getElementById('sendmenu'); if(!box) return;
   var c=sel&&(mode==='move'||mode==='menu')&&G&&G.cells[key(sel.q,sel.r)], n=c&&c.b||0, nt=c&&c.tb||0;
-  if(!sel||(mode!=='move'&&mode!=='menu')||(n<2&&!nt)){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; if(sendPick) sendPick.close(false); if(sendTPick) sendTPick.close(false); } return; }
+  if(!sel||(mode!=='move'&&mode!=='menu')||(!n&&!nt)){ if(sendMenuSig!==''){ box.classList.add('hide'); sendMenuSig=''; if(sendPick) sendPick.close(false); if(sendTPick) sendTPick.close(false); } return; }
   if(!sendPick) sendPick=scrollPick(document.getElementById('sendsel'),{label:'How many soldiers to send',title:'How many soldiers go?',
     onPick:function(v){ if(!sel) return; sendN=parseInt(v,10)||0; sayMove(); draw(); }});
   if(!sendTPick) sendTPick=scrollPick(document.getElementById('sendtb'),{label:'How many trebuchets to send',title:'How many trebuchets go?',
@@ -2399,11 +2632,13 @@ function placeSendMenu(){
     if(none) o.push({value:-1,label:'None',short:'no'});
     return o;
   };
-  document.getElementById('sendsel').classList.toggle('hide',!n); document.getElementById('sendsel-l').textContent=n?'Send':'';
+  document.getElementById('sendsel').classList.toggle('hide',!(n>1||(n&&nt))); document.getElementById('sendsel-l').textContent=n?(n>1||nt?'Send':'Send 1 soldier'):'';
   document.getElementById('sendtb').classList.toggle('hide',!nt); var tbl=document.getElementById('sendtb-l'); tbl.classList.toggle('hide',!nt); tbl.textContent=n?'and trebuchets':'Send trebuchets';
   if(n){ sendPick.setOptions(counts(n,'soldier',nt>0)); var want=String(sendN<0&&nt?-1:(sendN&&sendN<n?sendN:0)); if(sendPick.value!==want) sendPick.set(want); }
   if(nt){ sendTPick.setOptions(counts(nt,'trebuchet',n>0)); var wt=String(sendT<0&&n?-1:(sendT&&sendT<nt?sendT:0)); if(sendTPick.value!==wt) sendTPick.set(wt); }
   sendMenuSig=n+':'+sendN+':'+nt+':'+sendT;
+  var eta=document.getElementById('sendeta'), et=sendHover?sendHover.txt:'Tap a square of yours to send them: 1 h a square on live roads, 3 h off them.';
+  if(eta.innerHTML!==et) eta.innerHTML=et;
   if(box.classList.contains('hide')){ box.classList.remove('hide'); unfurl(box); sendSpotSig=''; }
   var bw=box.offsetWidth||150, bh=box.offsetHeight||52, m=14, spotSig=[sel.q,sel.r,viewQ,viewR,Math.round(panX),Math.round(panY),S,W,H,bw,bh,cellsGen].join(',');
   if(spotSig===sendSpotSig) return;
@@ -2423,7 +2658,7 @@ function moveClick(q,r){
   var pl=me(), c=cellOf(q,r);
   if(selTrek) return redirectTrek(q,r);              // a walking band is selected: this click is its new destination
   if(!sel){
-    if(c.o!==ME || !(c.b>0||c.tb>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground, a trebuchet, or a band walking on the road.');
+    if(c.o!==ME || !(c.b>0||c.tb>0)) return nope('Click one of your bands first &mdash; the numbered badges on your ground, a trebuchet, or a band on the march.');
     sel={q:q,r:r}; sendN=0; sendT=0; draw(); return sayMove();
   }
   if(key(q,r)===key(sel.q,sel.r)){ sel=null; draw(); return say('Cancelled.'); }
@@ -2432,11 +2667,11 @@ function moveClick(q,r){
   if(!n&&!nt){ sel=null; draw(); return nope('That band is gone.'); }
   var send=sendCount(sendN,n), sendt=sendCount(sendT,nt);
   if(!send&&!sendt) return nope('Nobody is set to go &mdash; choose how many soldiers or trebuchets on the scroll.');
-  var d=roadLength(ME,sel.q,sel.r,q,r);
-  if(d<0) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground between here and there.');
-  // the walk costs no marches; the men leave the cell now and step onto the far one when the time is up
-  var oq=sel.q, or=sel.r, now=Date.now(), ms=d*TREK_MS_CELL, id=ME+'-'+now.toString(36);
-  var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapC(oq),wrapC(or)], to:[wrapC(q),wrapC(r)]};
+  var tp=trekPath(ME,sel.q,sel.r,q,r);
+  if(!tp) return nope('<span class="bad">No way through.</span> There is no unbroken path of your own ground between here and there.');
+  // the walk costs no marches; the men leave the cell now, follow the fastest way, and step onto the far one when the time is up
+  var oq=sel.q, or=sel.r, now=Date.now(), ms=Math.max(60000,tp.ms), id=ME+'-'+now.toString(36), d=tp.path.length-1;
+  var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapC(oq),wrapC(or)], to:[wrapC(q),wrapC(r)], path:tp.path, dt:tp.dt};
   if(sendt){ var trs=arr(from.tr).slice(0,nt); while(trs.length<nt) trs.push(0); tk.tb=sendt; tk.tr=trs.slice(0,sendt); from.tr=trs.slice(sendt); from.tb=nt-sendt; if(!from.tb){ delete from.tb; delete from.tr; } }
   G.treks=G.treks||{}; G.treks[id]=tk;
   from.b-=send; if(!from.b) delete from.b;
@@ -2444,10 +2679,11 @@ function moveClick(q,r){
   logMove('mv',q,r,[oq,or],null,0,{n:send,tb:sendt||null});
   render();
   putPath('/treks/'+id,tk).then(function(){ return pushCell(oq,or); });
-  say('<b>'+(send?send+' soldier'+(send>1?'s':''):'')+(send&&sendt?' and ':'')+(sendt?sendt+' trebuchet'+(sendt>1?'s':''):'')+'</b> set off along '+d+' cell'+(d>1?'s':'')+' of road &mdash; no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>, and guard nothing until they do.');
+  say('<b>'+(send?send+' soldier'+(send>1?'s':''):'')+(send&&sendt?' and ':'')+(sendt?sendt+' trebuchet'+(sendt>1?'s':''):'')+'</b> set off &mdash; no marches spent. They arrive in <b>'+pathText(tp)+'</b>, and guard nothing until they do.');
 }
 /* where a walking band is right now: its map coordinates (on the copy of the world nearest the view) and screen point */
 function trekAt(tk,t){
+  var tp=trekPos(tk,t); if(tp) return {q:tp.q, r:tp.r, P:toScreen(tp.q,tp.r), i:tp.i, f:tp.f, pts:tp.pts};   // a walk that follows its stored path
   var k=Math.max(0,Math.min(1,(t-tk.t)/Math.max(1,tk.eta-tk.t)));
   var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
   var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k;
@@ -2467,7 +2703,7 @@ function trekAtPoint(x,y){
 function pickTrek(id){
   var tk=G.treks&&G.treks[id]; if(!tk) return;
   selTrek=id; draw();
-  say('Band of <b>'+(tk.n||1)+'</b> on the road selected. Tap any of your squares to send them there instead &mdash; they turn from where they are now, and it costs no marches. Tap the band again to cancel.');
+  say('Band of <b>'+(tk.n||1)+'</b> on the march selected. Tap any of your squares to send them there instead &mdash; they turn from where they are now, and it costs no marches. Tap the band again to cancel.');
 }
 function trekTap(x,y){
   if(sel) return false;
@@ -2482,23 +2718,30 @@ function redirectTrek(q,r){
   var c=cellOf(q,r);
   if(c.o!==ME || building(c)) return nope('Bands only walk on your own finished ground. Click one of your own cells to send them there.');
   if(key(q,r)===key(tk.to[0],tk.to[1])) return say('They are already heading there. Click a different cell of yours, or the band to cancel.');
-  // they turn from where they stand: the road is measured from the nearest finished cell of yours
-  // (their position now, or where they set out from, or where they were going), plus the short way back to it
-  var pos=trekAt(tk,now), here=cubeRound(pos.q,pos.r);
-  var cands=[here, cubeRound(tk.from[0],tk.from[1]), [tk.to[0],tk.to[1]]], pick=null;
-  for(var i=0;i<cands.length && !pick;i++){
-    var cc=G.cells[key(cands[i][0],cands[i][1])];
-    if(!cc||cc.o!==ME||building(cc)) continue;
-    var d=roadLength(ME,cands[i][0],cands[i][1],q,r);
-    if(d>=0) pick={d:d, back:hexDist(pos.q,pos.r,cands[i][0],cands[i][1])};
+  // they turn from where they stand: finishing the step they are on, or turning back to the square they just left,
+  // whichever is quicker, and from there the fastest way to the new spot
+  var pos=trekAt(tk,now), opts=[], r3=function(v){ return Math.round(v*1000)/1000; };
+  if(tk.path){
+    var pp=arr(tk.path), dts=arr(tk.dt), i=Math.min(pos.i,dts.length-1), f=pos.i>=dts.length?1:pos.f;
+    if(i>=0 && dts.length){ opts.push({c:pp[i+1], lead:Math.round((1-f)*dts[i])}); opts.push({c:pp[i], lead:Math.round(f*dts[i])}); }
+    else opts.push({c:pp[pp.length-1], lead:0});
+  } else {                                             // a walk set off before roads: the nearest finished square of mine on its line
+    var here=cubeRound(pos.q,pos.r);
+    [here, cubeRound(tk.from[0],tk.from[1]), [tk.to[0],tk.to[1]]].forEach(function(cd){ opts.push({c:cd, lead:Math.round(hexDist(pos.q,pos.r,cd[0],cd[1])*TREK_MS_CELL)}); });
   }
-  if(!pick) return nope('<span class="bad">No road.</span> There is no unbroken path of your own ground from where they are to there.');
-  var ms=Math.max(60000,Math.round((pick.d+pick.back)*TREK_MS_CELL));
-  var r3=function(v){ return Math.round(v*1000)/1000; };
-  tk.from=[r3(wrapC(pos.q)),r3(wrapC(pos.r))]; tk.to=[wrapC(q),wrapC(r)]; tk.t=now; tk.eta=now+ms;
+  var pick=null;
+  opts.forEach(function(o){
+    var cc=G.cells[key(o.c[0],o.c[1])]; if(!cc||cc.o!==ME||building(cc)) return;
+    var tp=trekPath(ME,o.c[0],o.c[1],q,r); if(!tp) return;
+    if(!pick || o.lead+tp.ms<pick.ms) pick={ms:o.lead+tp.ms, lead:o.lead, tp:tp};
+  });
+  if(!pick) return nope('<span class="bad">No way through.</span> There is no unbroken path of your own ground from where they are to there.');
+  var ms=Math.max(60000,pick.ms), start=[r3(wrapC(pos.q)),r3(wrapC(pos.r))];
+  tk.from=start; tk.to=[wrapC(q),wrapC(r)]; tk.t=now; tk.eta=now+ms;
+  tk.path=[start].concat(pick.tp.path); tk.dt=[Math.max(1,pick.lead)].concat(pick.tp.dt);
   selTrek=null; draw();
   putPath('/treks/'+id,tk);
-  say('New orders: <b>'+(tk.n||1)+'</b> soldier'+(tk.n>1?'s':'')+' turn toward the new spot, no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>.');
+  say('New orders: <b>'+(tk.n||'')+(tk.tb?(tk.n?' + ':'')+tk.tb+' treb':'')+'</b> turn toward the new spot, no marches spent. They arrive in about <b>'+fmtDur(ms)+'</b>.');
 }
 /* ═══ scrolls ════════════════════════════════════════════════════════════
    One component for every menu and picker: each option is a line of ink on parchment with its
@@ -2648,9 +2891,9 @@ function lackText(cost){
   for(var k in cost){ var have=Math.floor(pl.res[k]||0); if(have<cost[k]) miss.push((cost[k]-have)+' more '+k); }
   return miss.length?'Needs '+andList(miss):'';
 }
-function bestBandBeside(q,r){
-  var m=0;
-  for(var i=0;i<6;i++){ var c=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(c&&c.o===ME&&c.b>0&&!building(c)&&c.b>m) m=c.b; }
+function bestBandBeside(q,r){                        // the biggest band of mine on a live road square beside (q,r)
+  var m=0, L=liveRoads(ME);
+  for(var i=0;i<6;i++){ var nk=key(q+AX[i][0],r+AX[i][1]), c=G.cells[nk]; if(c&&c.o===ME&&c.b>0&&!building(c)&&L[nk]&&c.b>m) m=c.b; }
   return m;
 }
 function cellTitle(c){
@@ -2663,21 +2906,23 @@ function cellTitle(c){
   if(c.o&&c.b>0) sub.push('band of '+c.b);
   if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]+(c.wd?' (cracked)':''));
   if(c.o&&c.tb>0) sub.push(c.tb+' trebuchet'+(c.tb>1?'s':''));
+  if(c.o&&c.rd) sub.push(roadUp(c)?'road ready in '+hoursLeft(c.rf):(liveRoads(c.o)[key(c.q,c.r)]?'live road':'dead road, cut off from every castle'));
+  else if(c.o===ME&&c.k===CASTLE&&!isRuin(c)) sub.push('counts as road');
   if(c.k===CASTLE&&c.h!=null&&!isRuin(c)) sub.push('health '+castleH(c)+' of '+CASTLE_MAX_H);
   return t+(sub.length?'<span class="sc-sub">'+sub.join(' &middot; ')+'</span>':'');
 }
 function refundLine(r){ var p=[]; GOODS.forEach(function(k){ if(r[k]>0) p.push(r[k]+' '+k); }); return p.length?'+'+p.join(', ')+' back':'nothing back'; }
 function cellActions(q,r){
-  var pl=me(), c=cellOf(q,r), out=[], wet=c.t===RIVER, own=c.o===ME, adj=adjacentTo(q,r,ME), beside=bestBandBeside(q,r);
+  var pl=me(), c=cellOf(q,r), out=[], wet=c.t===RIVER, own=c.o===ME, adj=touchesLive(q,r,ME), beside=bestBandBeside(q,r);
   var A=function(label,cost,run,why){ out.push({label:label,cost:cost||'',run:run,why:why||''}); };
   var marches=function(n){ return pl.squares<n?'Needs '+n+' marches (you have '+pl.squares+')':''; };
   if(!own && !c.o){
-    if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Pick a square touching your ground':marches(1));
-    else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Build from your own bank':(marches(1)||lackText(BRIDGE_COST)));
+    if(!wet) A('Claim this square','1 march',function(){ spendMarch(q,r); },!adj?'Needs a live road square beside it':marches(1));
+    else A('Build a bridge','1 march &middot; '+costLine(BRIDGE_COST),function(){ bridge(q,r); },!adj?'Needs a live road square on this bank':(marches(1)||lackText(BRIDGE_COST)));
   } else if(!own){
     var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need2=guns+guard.n, L=defenderLine(q,r), band=attackBand(q,r);
-    var bandWhy=function(n){ return !beside?'Needs one of your bands standing beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
-    var whyTake=!adj?'Pick a square touching your ground':(!band?'Needs one of your bands standing beside it':marches(ATTACK_COST));
+    var bandWhy=function(n){ return !beside?'Needs one of your bands on a live road beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
+    var whyTake=!band?'Needs one of your bands on a live road beside it':marches(ATTACK_COST);
     var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'');
     var take=function(){ spendMarch(q,r); };
     if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
@@ -2686,10 +2931,11 @@ function cellActions(q,r){
     else if(wet) A('Take this bridge',price,take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
+    if(c.rd){ var RL=roadBreakLine(q,r); A('Break their road',BREAK_ROAD_MARCH+' march'+(band?' &middot; '+pct(battleOdds(band.n,RL.p).win):''),function(){ breakRoadPrompt(q,r); },!band?'Needs one of your bands on a live road beside it':marches(BREAK_ROAD_MARCH)); }
   } else if(building(c)){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
   } else {
-    if(c.b>0||c.tb>0) A(c.b>0&&c.tb>0?'Move soldiers and trebuchets':c.tb>0?'Move trebuchets':'Move soldiers','free &middot; '+(TREK_MS_CELL/36e5)+' h a square',function(){ startMove(q,r); });
+    if(c.b>0||c.tb>0) A(c.b>0&&c.tb>0?'Move soldiers and trebuchets':c.tb>0?'Move trebuchets':'Move soldiers','free &middot; '+(ROAD_STEP_MS/36e5)+' h a square on roads, '+(TREK_MS_CELL/36e5)+' off',function(){ startMove(q,r); });
     if(c.tb>0){
       var rdy=trebReady(c), tgt=fireTargets(q,r).length;
       A('Fire'+(rdy?' ('+rdy+' ready)':''),TREB_SHOT+' stone &middot; '+TREB_DMG+' damage &middot; range '+TREB_RANGE,function(){ fireMenu(q,r); },
@@ -2711,10 +2957,12 @@ function cellActions(q,r){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
-        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs a road of your ground to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
+        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
       }
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
+      if(c.k!==CASTLE && !c.rd) A('Build a road',ROAD_MARCH+' march &middot; '+costLine(ROAD_COST)+' &middot; 24 h',function(){ buildRoad(q,r); },!touchesLive(q,r,ME)?'Must touch a live road, castle or finished bridge':(marches(ROAD_MARCH)||lackText(ROAD_COST)));
+      if(c.rd) A(roadUp(c)?'Dig up the unfinished road':'Dig up the road',refundLine(halfOf(spentOnRoad(c))),function(){ demolishRoad(q,r); });
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
       if(c.k===CASTLE) A('Tear down the castle',isRuin(c)?'a ruin: nothing back':refundLine(demolishRefund(c,'castle',q,r)),function(){ tearDown(q,r,'castle'); });
     }
@@ -2734,7 +2982,7 @@ function renderCellMenu(){
   if(at.trek){
     var tk=G.treks&&G.treks[at.trek];
     if(!tk||tk.o!==ME||Date.now()>=tk.eta) return closeCellMenu();
-    title='Your band of '+(tk.n||1)+'<span class="sc-sub">on the road</span>';
+    title='Your band of '+(tk.n||1)+'<span class="sc-sub">on the march</span>';
     acts=[{label:'Change course',cost:'free',why:'',run:function(){ pickTrek(at.trek); }}];
   } else { title=cellTitle(cellOf(at.q,at.r)); acts=cellActions(at.q,at.r); }
   menuActions=acts;
@@ -2846,17 +3094,17 @@ function drawTreks(now,amb){
   var list=Object.keys(G.treks||{}), t=Date.now();
   list.forEach(function(id){
     var tk=G.treks[id]; if(!tk||t>=tk.eta||t<tk.t) return;
-    var k=(t-tk.t)/(tk.eta-tk.t);
+    var at=trekAt(tk,t), P=at.P, rest=null;
     var A=nearCopy(tk.from[0],tk.from[1],viewQ,viewR), B=nearCopy(tk.to[0],tk.to[1],A[0],A[1]);
-    var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
+    if(at.pts){ rest=[]; for(var ri=Math.min(at.i+1,at.pts.length-1);ri<at.pts.length;ri++) rest.push(toScreen(at.pts[ri][0],at.pts[ri][1])); B=at.pts[at.pts.length-1]; }
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
     if(id===selTrek){ ctx.save(); ctx.strokeStyle=T['--ink']; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(P[0],P[1],Math.max(14,S*0.8),0,6.284); ctx.stroke(); ctx.restore(); }
-    var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=PB[0]>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,tk.n||0);
+    var PA=toScreen(A[0],A[1]), PB=toScreen(B[0],B[1]), col=pColor(tk.o), face=((rest&&rest.length?rest[0]:PB)[0])>=P[0]?1:-1, h=Math.max(8,S*0.72), cnt=Math.min(3,tk.n||0);
     // the road still to walk: a dashed line from where they are to where they are going, so a band
     // reads as "heading there" even when the map is too small to make out the walkers themselves
     ctx.save(); ctx.strokeStyle=col; ctx.globalAlpha=.7; ctx.lineWidth=Math.max(1.5,S*0.09); ctx.setLineDash([Math.max(3,S*0.28),Math.max(3,S*0.2)]);
     if(amb) ctx.lineDashOffset=-(now*14)%40;
-    ctx.beginPath(); ctx.moveTo(P[0],P[1]); ctx.lineTo(PB[0],PB[1]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(P[0],P[1]); if(rest) rest.forEach(function(pt){ ctx.lineTo(pt[0],pt[1]); }); else ctx.lineTo(PB[0],PB[1]); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha=.9; ctx.beginPath(); ctx.arc(PB[0],PB[1],Math.max(3,S*0.16),0,6.284); ctx.fillStyle=col; ctx.fill(); ctx.restore();
     if(S>=16){                                       // close in: the men themselves, walking
       if(tk.tb>0) artTrebuchet(ctx,P[0]-face*S*0.55,P[1]+S*0.32,S*0.5,col,now,tk.tb);   // a trebuchet hauled along behind
@@ -2867,7 +3115,7 @@ function drawTreks(now,amb){
       var lab=(tk.n||'')+(tk.tb?(tk.n?' + ':'')+tk.tb+' treb':'')+(tk.o===ME?' · '+fmtDur(tk.eta-t):'');
       artLabel(ctx,P[0],P[1]+S*0.3+h*0.6,lab,Math.max(10,S*0.3),col,1);
     } else {                                         // zoomed out: a numbered badge like a standing band, but with a dashed ring and a pointer toward where it is headed
-      var s=Math.max(11,S*0.5), R=s*0.62, ang=Math.atan2(PB[1]-P[1],PB[0]-P[0]);
+      var nx=rest&&rest.length?rest[0]:PB, s=Math.max(11,S*0.5), R=s*0.62, ang=Math.atan2(nx[1]-P[1],nx[0]-P[0]);
       ctx.save();
       ctx.beginPath(); ctx.arc(P[0],P[1],R,0,6.284); ctx.fillStyle=T['--surface']; ctx.fill();
       ctx.lineWidth=2; ctx.strokeStyle=col; ctx.setLineDash([3,2.5]); ctx.stroke(); ctx.setLineDash([]);
@@ -3064,7 +3312,7 @@ function natPalette(dark){
     wheat:'#D4B24F', wheat2:'#A88932', soil:'#6E5236', soil2:'#58412A', grass:'#6B9160',
     stone:'#AEA99D', stone2:'#837F75', stoneHi:'#CBC6BA', mortar:'#5A574F', gate:'#221D1A',
     wood:'#A77B4F', wood2:'#77532F', rope:'#C9B27E',
-    skin:'#E0B48E', line:'#111518', steel:'#C9D1D6', wave:'#D4ECF4', shadow:'rgba(0,0,0,0.35)'
+    skin:'#E0B48E', line:'#111518', steel:'#C9D1D6', wave:'#D4ECF4', shadow:'rgba(0,0,0,0.35)', road:'#A39271', road2:'#6F624A'
   } : {
     leaf:'#4C8D52', leaf2:'#2E6A3D', leafHi:'#79B07A', trunk:'#6B4A2B',
     rock:'#A7A79F', rock2:'#85867E', rockHi:'#D0D0C8', block:'#BCB5A5', blockTop:'#D9D3C4',
@@ -3072,7 +3320,7 @@ function natPalette(dark){
     wheat:'#D8B14A', wheat2:'#B08C2D', soil:'#9C7B52', soil2:'#826543', grass:'#7FA36A',
     stone:'#BEB9AC', stone2:'#948F83', stoneHi:'#DAD5C9', mortar:'#726E65', gate:'#3A322C',
     wood:'#B08355', wood2:'#7A5534', rope:'#8C7547',
-    skin:'#E6BA92', line:'#26292B', steel:'#8A949B', wave:'#EFF8FB', shadow:'rgba(20,30,20,0.22)'
+    skin:'#E6BA92', line:'#26292B', steel:'#8A949B', wave:'#EFF8FB', shadow:'rgba(20,30,20,0.22)', road:'#DCCDA6', road2:'#A8946C'
   };
 }
 natPalette(false);
@@ -3745,7 +3993,7 @@ function draw(){
   var sup=me()?supplied(ME):{};
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
-  var guns=[], walls=[], builds=[], spans=[], bands=[], trebs=[], detail=S>=7, now=clock();
+  var guns=[], walls=[], builds=[], spans=[], bands=[], trebs=[], roads=[], detail=S>=7, now=clock(), myLive=me()?liveRoads(ME):{};
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
@@ -3763,7 +4011,7 @@ function draw(){
       for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
       ctx.stroke(); ctx.restore();
     }
-    if(haveMarch&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='menu' || mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&adjacentTo(q,r,ME)){
+    if(haveMarch&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='menu' || mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&(c.o?nextToMine(q,r):touchesLiveSet(q,r,myLive))){
       ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=pColor(ME); ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
       if(glowOn){ ctx.save(); ctx.globalAlpha=0.14+0.16*(0.5+0.5*Math.sin(now*4.5)); ctx.fillStyle=pColor(ME); hexPath(p[0],p[1],S*0.9); ctx.fill(); ctx.restore(); }
@@ -3783,6 +4031,7 @@ function draw(){
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
     if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!G.cells[key(q,r)].bx);
+    if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.k===TOWER||(c.g>0&&!isRuin(c))) guns.push([c,p,col]); }
     if(c.tb>0 && c.o && !vl) trebs.push([c,p,col]);
@@ -3799,6 +4048,13 @@ function draw(){
     }
   }
   if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
+  drawRoads(roads,detail);                            // the roads: above the ground, below everything built
+  if(roadHint && now<roadHint.until){                 // where a road would let you reach a square you tried for
+    ctx.save(); ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,S*0.08); ctx.setLineDash([Math.max(3,S*0.16),Math.max(3,S*0.12)]); ctx.lineDashOffset=-now*8;
+    ctx.globalAlpha=0.55+0.35*Math.sin(now*4);
+    roadHint.cells.forEach(function(hc){ var P=toNear(hc[0],hc[1]); hexPath(P[0],P[1],S*0.86); ctx.stroke(); });
+    ctx.restore();
+  }
   ctx.setLineDash([3,4]);
   if(amb) ctx.lineDashOffset=-(now*3)%7;             // the fields of fire turn slowly, like a watch being kept
   guns.forEach(function(e){
@@ -3898,14 +4154,14 @@ function animTick(){
 }
 /* event kinds: m march · b battle · br bridge · w wall · tw tower · cs castle · up upgrade · ms muster
    (claims are not logged twice: the claim log already has them, and replays read it) */
-var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze',duel:'battle',fire:'shot',collapse:'raze',spoils:'loot',tbk:'build'};
+var ANIM_KIND={brk:'move',m:'march',b:'battle',br:'build',w:'wall',tw:'raise',cs:'raise',up:'upgrade',ms:'muster',claim:'claim',dm:'raze',duel:'battle',fire:'shot',collapse:'raze',spoils:'loot',tbk:'build',road:'build',roadbreak:'battle'};
 /* replays play only kinds this version knows; anything older (the October guillotine, for one) is skipped quietly */
-var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1,duel:1,fire:1,collapse:1,spoils:1,tbk:1};
+var REPLAY_KINDS={m:1,b:1,br:1,w:1,tw:1,cs:1,up:1,ms:1,mv:1,brk:1,cv:1,claim:1,dm:1,duel:1,fire:1,collapse:1,spoils:1,tbk:1,road:1,roadbreak:1};
 function replayable(e){ return !!(e && REPLAY_KINDS[e.k] && !e.ex && !e.bt && !e.gs); }
 function veilFor(ev){                                // how the cell looked just before this move
   switch(ev.k){
     case 'm': case 'br': return {o:null};
-    case 'mv': return null;      // (a band's walk is drawn live on the road, see drawTreks)
+    case 'mv': return null;      // (a band's walk is drawn live as it goes, see drawTreks)
     case 'brk': return {o:ev.prev||ev.pid};
     case 'b': case 'duel': return {o:ev.prev||null, w:ev.pw||0, k:ev.pk||null, l:ev.pl||0, g:ev.pg||0};
     case 'w': return {o:ev.pid, w:(ev.lvl||1)-1, k:ev.bk||null, l:ev.bl||0};
@@ -3920,9 +4176,9 @@ function play(ev,delay){
   var kind=ANIM_KIND[ev.k]; if(!kind) return 0;
   if(ev.k==='brk') kind=ev.prev?'battle':'move';
   var veil=veilFor(ev), dl=null, lost=false, lab=ev.label;
-  if(ev.k==='duel' && ev.ln && ev.seed!=null){       // the same fight again, duel by duel, from the stored seed
+  if((ev.k==='duel'||ev.k==='roadbreak') && ev.ln && ev.seed!=null){       // the same fight again, duel by duel, from the stored seed
     var fo=fightOut(ev.n||0,arr(ev.ln).map(function(x){ return x/100; }),ev.seed); dl=fo.log; lost=!fo.won;
-    lab=fo.won?'Taken'+(ev.sp?' · +'+goodsText(ev.sp):''):'Beaten back';
+    lab=fo.won?(ev.k==='roadbreak'?'Road broken':'Taken'+(ev.sp?' · +'+goodsText(ev.sp):'')):'Beaten back';
   }
   if(ev.k==='spoils') lab='+'+goodsText(ev.sp||{});
   anims.push({kind:kind, t0:clock()+(delay||0), from:ev.fq!=null?[ev.fq,ev.fr]:null, to:[ev.q,ev.r], log:dl, lost:lost,
@@ -3972,6 +4228,8 @@ function describe(e){
   if(e.k==='cv') return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+goodsLine(e.g||{})+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan.';
   if(e.k==='m') return who+' marched into new ground.';
   if(e.k==='tbk') return who+' built a trebuchet.';
+  if(e.k==='road') return who+' started a road.';
+  if(e.k==='roadbreak') return e.won?(e.prev===ME?who+' <span class="bad">broke one of your roads</span>':who+' broke a road of '+esc(nameOf(e.prev)))+(e.loss?' (lost '+e.loss+')':'')+'.':who+' tried to break a road of '+(e.prev===ME?'yours':esc(nameOf(e.prev)))+' and was beaten back.';
   if(e.k==='fire') return (e.prev===ME?who+' <span class="bad">hit your '+(e.tg||'works')+' with a trebuchet</span>':who+' hit a '+(e.tg||'target')+' of '+esc(nameOf(e.prev))+' with a trebuchet')+(e.out?' &mdash; '+esc(e.out):'')+'.';
   if(e.k==='collapse') return e.prev===ME?'<span class="bad">One of your towers collapsed.</span>':'A tower of '+esc(nameOf(e.prev))+' collapsed.';
   if(e.k==='spoils') return e.prev===ME?who+' <span class="bad">carried off '+goodsText(e.sp||{})+' of yours</span>.':who+' carried off '+goodsText(e.sp||{})+' from '+esc(nameOf(e.prev))+'.';
@@ -3980,7 +4238,7 @@ function describe(e){
     if(e.won) return (e.prev===ME?who+' <span class="bad">took your '+dw+'</span>':who+' took a '+dw+' from '+esc(nameOf(e.prev)))+dl2+(e.cb?' and '+e.cb+' marches':'')+(e.sp?', with '+goodsText(e.sp)+' in spoils':'')+'.';
     return (e.prev===ME?who+' attacked your '+dw+' and <span class="good">was beaten back</span>':who+' attacked a '+dw+' of '+esc(nameOf(e.prev))+' and was beaten back')+(e.kl?', after bringing down '+e.kl+' defender'+(e.kl>1?'s':''):'')+'.';
   }
-  if(e.k==='dm') return who+' tore down '+({wall:'a wall course',tower:'a tower',castle:'a castle',bridge:'a bridge',treb:'a trebuchet'}[e.dm]||'something')+' of their own'+(e.label&&e.label!=='nothing back'?' ('+esc(e.label)+')':'')+'.';
+  if(e.k==='dm') return who+' tore down '+({wall:'a wall course',tower:'a tower',castle:'a castle',bridge:'a bridge',treb:'a trebuchet',road:'a road'}[e.dm]||'something')+' of their own'+(e.label&&e.label!=='nothing back'?' ('+esc(e.label)+')':'')+'.';
   if(!REPLAY_KINDS[e.k]) return '';
   var lost=e.loss?' &mdash; and lost '+e.loss+' soldier'+(e.loss>1?'s':'')+' doing it':'';
   var base;
@@ -4655,7 +4913,14 @@ canvas.addEventListener('pointerdown',function(ev){
   }
 });
 canvas.addEventListener('pointermove',function(ev){
-  if(!pointers[ev.pointerId]) return;
+  if(!pointers[ev.pointerId]){                         // just hovering: with a band picked, say how long the walk to this square takes
+    if(!G||!me()||!sel||(mode!=='move'&&mode!=='menu')) return;
+    var hb=canvas.getBoundingClientRect(), hh=fromScreen(ev.clientX-hb.left,ev.clientY-hb.top), hk=key(hh[0],hh[1]);
+    if(sendHover && sendHover.k===hk) return;
+    var hc=G.cells[hk], tp=(hc&&hc.o===ME&&!building(hc)&&hk!==key(sel.q,sel.r))?trekPath(ME,sel.q,sel.r,hh[0],hh[1]):null;
+    sendHover={k:hk, txt:tp?'To there: arrives in '+pathText(tp):'Tap a square of yours to send them: 1 h a square on live roads, 3 h off them.'};
+    placeSendMenu(); return;
+  }
   pointers[ev.pointerId]={x:ev.clientX,y:ev.clientY};
   var p=pts();
   if(p.length>=2 && pinchFrom){
@@ -4702,15 +4967,15 @@ canvas.addEventListener('wheel',function(ev){
 var MODES={menu:'m-menu',claim:'m-claim',bridge:'m-bridge',wall:'m-wall',tower:'m-tower',castle:'m-castle',upgrade:'m-upgrade',troop:'m-troop',move:'m-move',break:'m-break'};
 var HINTS={
   menu:'Tap any square on the map. A small menu opens beside it with everything you can do there and what it costs; anything you can&rsquo;t do right now is greyed, with the reason. The buttons below the map are shortcuts that stay on one action &mdash; handy for claiming several squares in a row.',
-  claim:'Click any dashed cell touching your ground to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
-  bridge:'Click a dashed river cell touching your ground to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
+  claim:'Click any dashed cell beside a live road square of yours (a castle, a finished bridge, or a finished road joined to a castle) to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it on a live road square: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
+  bridge:'Click a dashed river cell beside a live road square of yours to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
   tower:'Click ground you hold to raise a watchtower. It needs nobody inside: it has 10 health (20 and 30 when upgraded), makes every attack on your ground in its range harder, and a damaged tower mends 1 health a tick for 1 stone.',
   castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle must be built where your own ground links it to a grain square (a farm you hold), never on one: if no farm is connected to it, it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
   upgrade:'Click one of your towers or castles to upgrade it — a tower gains health and reach; a castle gains reach and more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
   break:'Click a bridge with one of your bands standing beside it. Breaking it costs '+BREAK_COST+' marches (and soldiers, if someone else holds it and defends it). The river is left bare until someone builds a new bridge, which takes a day.',
-  move:'Click one of your bands, then any cell of yours to march it there. The road has to run over your own ground. It costs no marches, but the band walks 1 cell every 3 hours and guards nothing while it is on the road. Once it stands still, a band guards the cells around it: an attacker has to win a duel against each of its soldiers. To change a walking band\'s course, click it on the map, then click a new destination.'
+  move:'Click one of your bands, then any cell of yours to march it there. The way has to run over your own unbroken ground. It costs no marches; the band walks 1 hour a square along live roads and 3 hours a square off them, and guards nothing while it is on the march. Once it stands still, a band guards the cells around it: an attacker has to win a duel against each of its soldiers. To change a walking band\'s course, click it on the map, then click a new destination.'
 };
 var NAMES={bridge:'start a bridge',wall:'build a wall',tower:'raise a tower',castle:'found a castle',troop:'muster a soldier',move:'move soldiers',break:'break a bridge'};
 function whyLocked(m){
@@ -4807,7 +5072,7 @@ document.getElementById('claims-more').addEventListener('click',function(){ show
    older code than the board refuses to play and asks for a reload. */
 var STEWARDS={p16vnclj:1};                            // Bohrer
 function isSteward(pid){ return !!STEWARDS[pid==null?ME:pid]; }
-var DATA_V=2;                                         // the newest board layout this code understands
+var DATA_V=3;                                         // the newest board layout this code understands
 function migMeta(b){ return (b&&b.meta&&b.meta.migration)||{}; }
 function boardVersion(b){ return migMeta(b).v||0; }
 function migrationPending(b){ var st=migMeta(b).steps||{}; return MIGRATIONS.filter(function(s){ return s.stage<=DATA_V && !st[s.id]; }); }
@@ -4839,6 +5104,17 @@ var MIGRATIONS=[
       var c=cells[k]; if(!c||c.k!==TOWER) return;
       if((c.g||0)>0){ patch['cells/'+k+'/b']=(c.b||0)+c.g; patch['cells/'+k+'/g']=0; patch['cells/'+k+'/d']=0; n++; }
       if(c.h!=null){ patch['cells/'+k+'/h']=null; if(!(c.g>0)) n++; }      // full health is no health stored
+    });
+    return {n:n, patch:patch};
+  }},
+  {id:'roads', stage:3, title:'Mark existing owned ground as road'+(ROADS_CONVERT?'':' (skipped: the owner chose not to)'), scan:function(b){
+    if(!ROADS_CONVERT) return {n:0, patch:{}};
+    var patch={}, n=0, cells=b.cells||{};
+    Object.keys(cells).forEach(function(k){
+      var c=cells[k]; if(!c||!c.o||c.rd) return;
+      var p=k.split('_'); if(groundAt(parseInt(p[0],10),parseInt(p[1],10))===RIVER) return;   // a finished bridge already counts as road
+      if(c.f && c.f>Date.now()) return;
+      patch['cells/'+k+'/rd']=1; n++;
     });
     return {n:n, patch:patch};
   }}
@@ -4938,7 +5214,10 @@ var NOTES=[
      +'<p>You can <b>tear down</b> your own walls, towers, castles and bridges from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
   {id:'nov26-battles', eyebrow:'New this November', title:'Battles, towers and trebuchets',
    html:'<p>A battle is now a chain of duels, and a scroll shows your odds before you attack. Take a square and you carry off a share of its owner&rsquo;s stores.</p>'
-     +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'}
+     +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'},
+  {id:'nov26-roads', eyebrow:'New this November', title:'Roads',
+   html:'<p>Land is now claimed, and attacks are made, only from <b>live roads</b>: your castles, finished bridges, and roads joined to a castle. Your old ground has no roads yet.</p>'
+     +'<p>Tap a square beside a castle and choose <b>Build a road</b> (1 march, 20 timber, 10 stone, a day). Armies move 1 hour a square on roads, 3 off them.</p>'}
 ];
 function noteSeen(id){
   var pl=me();
@@ -5401,6 +5680,7 @@ function coachTargets(){
       if(seen[nk]) continue; seen[nk]=1;
       var n=G.cells[nk]; if(n && (n.o||n.k)) continue;
       var t=groundAt(nq,nr); if(t===RIVER) continue;
+      if(!touchesLive(nq,nr,ME)) continue;            // only land beside a live road can be claimed
       var y=YIELD[t], score = y ? (y.r==='grain' ? (R.net<0?6:2.6) : y.r==='iron' ? 2.4 : 2) : 0.3;
       if(sup[k]) score+=1.5;                          // it joins supplied ground, so it produces at once
       score-=hexDist(nq,nr,pl.q,pl.r)*0.04;
@@ -5408,6 +5688,17 @@ function coachTargets(){
     }
   }
   return out.sort(function(a,b){ return b.score-a.score; });
+}
+function roadSpot(){                                  // a square of mine where a road could start and reach open land
+  var L=liveRoads(ME), best=null, bs=-1;
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==ME||c.rd||c.k===CASTLE||building(c)) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    if(groundAt(q,r)===RIVER||!touchesLiveSet(q,r,L)) continue;
+    var open=0; for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(!n||!n.o) open++; }
+    if(open>bs){ bs=open; best=[q,r]; }
+  }
+  return bs>0?best:null;
 }
 function borderCell(){                                // a cell of mine worth fortifying: facing someone, or facing open ground
   var best=null, bs=0;
@@ -5442,6 +5733,9 @@ function coachPlan(){
         +(R.net<0?' Your soldiers eat more grain than you grow, so farms (&equiv;) matter most.':'')+extra,
         mode:'claim', target:[b.q,b.r], glow:true, label:'Not sure? Try here', go:'Suggest a move'};
     }
+  }
+  if(pl.squares>=ROAD_MARCH && pl.res.timber>=ROAD_COST.timber && pl.res.stone>=ROAD_COST.stone){
+    var rs=roadSpot(); if(rs) return {key:'road', txt:'No open land touches a live road of yours. A <b>road</b> (1 march, 20 timber, 10 stone, a day to build) on the edge of your ground reaches further.'+extra, mode:'menu', target:rs, label:'Idea: a road here', go:'Suggest a spot'};
   }
   if(!done && pl.squares<1) return {key:'claim', txt:'You&rsquo;re out of marches. After you walk, type <b>today&rsquo;s step count</b> from the Health app in the box above the map and press <b>Claim</b> to get more.', el:'stepsin'};
   if(pl.res.stone>=40 && pl.res.timber>=30){ var bt=borderCell(); if(bt) return {key:'tower', txt:'Spare stone and timber? A <b>watchtower</b> on your border is one way to use them &mdash; it makes every attack on your ground nearby harder.'+extra, mode:'tower', target:bt, label:'Idea: a tower here', go:'Suggest a spot'}; }
