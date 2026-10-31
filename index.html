@@ -4197,32 +4197,6 @@ function draw(){
   placeSendMenu();
   placeCellMenu();
 
-  // Anyone off the edge of the screen gets an arrow pointing at their keep, with
-  // how far away it is — otherwise a distant opponent is simply invisible.
-  Object.keys(G.players).forEach(function(pid){
-    if(pid===ME||!me()) return;
-    var p=G.players[pid], nc=nearCopy(p.q,p.r,viewQ,viewR), sp=toScreen(nc[0],nc[1]);
-    var pad=26;
-    if(sp[0]>pad && sp[0]<W-pad && sp[1]>pad && sp[1]<H-pad) return;   // visible already
-    var cx=W/2, cy=H/2, dx=sp[0]-cx, dy=sp[1]-cy, len=Math.hypot(dx,dy)||1;
-    var t=Math.min((W/2-pad)/Math.abs(dx||1e-6), (H/2-pad)/Math.abs(dy||1e-6));
-    var ax=cx+dx*t, ay=cy+dy*t, ang=Math.atan2(dy,dx);
-    var col=pColor(pid);
-    ctx.save();
-    ctx.translate(ax,ay); ctx.rotate(ang);
-    ctx.fillStyle=col;
-    ctx.beginPath(); ctx.moveTo(10,0); ctx.lineTo(-7,6); ctx.lineTo(-7,-6); ctx.closePath(); ctx.fill();
-    ctx.restore();
-    if(!SHOW_NAMES) return;                              // the player has switched the name labels off: just the arrow
-    if(S>=TRIBE_LABEL_MAX_S) return;                    // zoomed in: just the arrow, the name labels would crowd the map
-    var label=full(p)+' · '+hexDist(me().q,me().r,p.q,p.r)+' cells';
-    ctx.font='500 11px ui-monospace, monospace';
-    var tw=ctx.measureText(label).width;
-    var lx=Math.min(Math.max(ax-tw/2,4), W-tw-8), ly=ay+(ay<H/2?22:-14);
-    ctx.fillStyle=T['--surface']; ctx.globalAlpha=.9;
-    ctx.fillRect(lx-4,ly-11,tw+8,15); ctx.globalAlpha=1;
-    ctx.fillStyle=col; ctx.fillText(label,lx,ly);
-  });
 }
 
 /* ═══ moves, animations and the replay ═════════════════════════════════
@@ -5263,17 +5237,7 @@ document.getElementById('why').addEventListener('click',function(){
 document.getElementById('zin').addEventListener('click',function(){ setZoom(S*1.35); draw(); });
 document.getElementById('zout').addEventListener('click',function(){ setZoom(S/1.35); draw(); });
 document.getElementById('home').addEventListener('click',function(){ if(me()){ centreOn(me().q,me().r); draw(); } });
-document.getElementById('rival').addEventListener('click',function(){
-  var best=null,bd=Infinity;
-  Object.keys(G.players).forEach(function(pid){
-    if(pid===ME) return;
-    var p=G.players[pid], d=hexDist(me().q,me().r,p.q,p.r);
-    if(d<bd){ bd=d; best=p; }
-  });
-  if(!best) return say('Nobody else has joined this march yet. Send them the invite link above.');
-  var bc=nearCopy(best.q,best.r,viewQ,viewR); centreOn(bc[0],bc[1]); draw();
-  say('Centred on <b>'+esc(full(best))+'</b>&rsquo;s keep &mdash; '+bd+' cells from yours. Drag the map to move, pinch or use +/&minus; to zoom.');
-});
+document.getElementById('rival').addEventListener('click',function(){ document.getElementById('namesbtn').click(); });
 document.getElementById('collect').addEventListener('click',collect);
 document.getElementById('stepsin').addEventListener('keydown',function(e){ if(e.key==='Enter') collect(); });
 document.getElementById('shotin').addEventListener('change',function(){
