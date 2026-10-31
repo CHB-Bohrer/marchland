@@ -99,6 +99,9 @@ html.hv.hv-night body::before{ background:
     background-size:auto,auto,auto,52px 90px,auto; }
 }
 html.hv h1::after{ content:""; display:inline-block; width:1.05em; height:.7em; margin-left:.25em; vertical-align:.05em; pointer-events:none; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 32'%3E%3Cpath d='M2 6 C10 4 18 12 26 14 C32 16 38 13 42 9 L46 22 C38 28 26 28 16 22 C10 18 6 12 2 6Z' fill='%23A9672C' stroke='%236B3D1E' stroke-width='1.2'/%3E%3Cpath d='M12 12 C18 17 24 19 30 19 M18 9 C22 14 28 16 34 15' fill='none' stroke='%236B3D1E' stroke-width='.9'/%3E%3Ccircle cx='42' cy='15' r='4.2' fill='%23E0832A'/%3E%3Ccircle cx='38' cy='21' r='3.4' fill='%23B23F2E'/%3E%3Ccircle cx='45' cy='22' r='3' fill='%23D9B13A'/%3E%3Cpath d='M41 10 C40 6 43 4 45 5' fill='none' stroke='%235E6B2A' stroke-width='1.4'/%3E%3C/svg%3E") center/contain no-repeat; }
+.thanks{ background-size:220% 100% !important; animation:thanksShine 7s ease-in-out infinite; }
+@keyframes thanksShine{ 0%,100%{ background-position:0% 50%; } 50%{ background-position:100% 50%; } }
+@media (prefers-reduced-motion: reduce){ .thanks{ animation:none; } }
 .thanks{ text-align:center; font-family:var(--display); font-size:18px; letter-spacing:.02em; border-color:#B8652A !important; color:#8E3F12 !important; background:linear-gradient(90deg,rgba(224,131,42,.12),rgba(217,177,58,.16),rgba(224,131,42,.12)) !important; pointer-events:none; }
 @media (prefers-color-scheme: dark){ .thanks{ color:#F0B26A !important; } }
 /* ═══ end of the HARVEST LAYER (CSS) ═══ */
@@ -4178,7 +4181,7 @@ function draw(){
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
-  if(HV) harvestKeeps(ctx,builds,now);              // HARVEST LAYER
+  if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); }   // HARVEST LAYER
   trebs.forEach(function(e){                         // trebuchets stand to the lower left of the square, out of the band badge's way
     if(S>=12) artTrebuchet(ctx,e[1][0]-S*0.3,e[1][1]+S*0.66,S*0.82,e[2],now,e[0].tb);
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
@@ -4820,16 +4823,28 @@ function harvestGround(g,farms,opens,now){
   g.save();
   farms.forEach(function(f){
     var q=wrapC(f[1]), r=wrapC(f[2]), h=artHash(q,r,401), x=f[0][0]+(artHash(q,r,402)-0.5)*s*0.5, y=f[0][1]+s*(0.28+artHash(q,r,403)*0.12);
+    var sw=mv?Math.sin(now*1.3+artHash(q,r,406)*6)*0.05:0;           // the corn and the sheaves sway in the breeze
     if(h<0.45) hvPumpkin(g,x,y,s*0.11);
-    else if(h<0.75) hvCorn(g,x,y,s*0.42);
-    else hvSheaf(g,x,y,s*0.36);
+    else { g.save(); g.translate(x,y); g.rotate(sw); if(h<0.75) hvCorn(g,0,0,s*0.42); else hvSheaf(g,0,0,s*0.36); g.restore(); }
     if(artHash(q,r,404)<0.35) hvPumpkin(g,x+s*0.22,y+s*0.04,s*0.08);
+    if(artHash(q,r,405)<0.14) hvScarecrow(g,f[0][0]-s*0.28,f[0][1]+s*0.3,s*0.5,sw*1.6);   // now and then a scarecrow keeps watch
   });
   if(st!=='autumn') opens.forEach(function(o){
     var q=wrapC(o[1]), r=wrapC(o[2]); if(artHash(q,r,411)>0.07) return;
     var ph=mv?now*0.1+artHash(q,r,412)*9:artHash(q,r,412)*9, x=o[0][0]+Math.sin(ph)*s*0.25, y=o[0][1]+s*0.2+Math.cos(ph*0.7)*s*0.06;
     hvTurkey(g,x,y,s*0.13,Math.cos(ph)>=0?1:-1,mv?Math.sin(now*3+q)>0.6:false);
   });
+  g.restore();
+}
+/* a scarecrow on a post, in a straw hat, swaying a little */
+function hvScarecrow(g,x,y,h,sw){
+  g.save(); g.translate(x,y); g.rotate(sw);
+  g.strokeStyle='#6B4A2A'; g.lineCap='round'; g.lineWidth=Math.max(1.2,h*0.07);
+  g.beginPath(); g.moveTo(0,0); g.lineTo(0,-h); g.moveTo(-h*0.42,-h*0.68); g.lineTo(h*0.42,-h*0.68); g.stroke();
+  g.fillStyle='#B8652A'; g.beginPath(); g.moveTo(-h*0.2,-h*0.68); g.lineTo(h*0.2,-h*0.68); g.lineTo(h*0.14,-h*0.4); g.lineTo(-h*0.14,-h*0.4); g.closePath(); g.fill();   // the shirt
+  g.strokeStyle='#DDB651'; g.lineWidth=Math.max(1,h*0.05); g.beginPath(); g.moveTo(-h*0.42,-h*0.68); g.lineTo(-h*0.5,-h*0.58); g.moveTo(h*0.42,-h*0.68); g.lineTo(h*0.5,-h*0.58); g.stroke();   // straw hands
+  blob(g,0,-h*0.86,h*0.13,h*0.13,'#E8D49A');
+  g.fillStyle='#8B5A2B'; g.beginPath(); g.moveTo(-h*0.2,-h*0.9); g.lineTo(h*0.2,-h*0.9); g.lineTo(h*0.08,-h*1.12); g.lineTo(-h*0.08,-h*1.12); g.closePath(); g.fill();   // the hat
   g.restore();
 }
 function hvTurkey(g,x,y,z,face,peck){
@@ -4855,9 +4870,31 @@ function harvestKeeps(g,builds,now){
     var gx=cx, gy=cy+s*0.24*rs, wr=s*0.075*rs;                       // a wreath of leaves over the gate
     g.lineWidth=Math.max(1.4,s*0.035); g.strokeStyle='#8E4A1E'; g.beginPath(); g.arc(gx,gy,wr,0,6.284); g.stroke();
     for(var i=0;i<8;i++){ var a=i*Math.PI/4; blob(g,gx+Math.cos(a)*wr,gy+Math.sin(a)*wr,s*0.022,s*0.016,LEAF_COL[i%LEAF_COL.length]); }
+    var bx0=cx-s*0.4*rs, bx1=cx+s*0.4*rs, by0=cy-s*0.3*rs, sag=s*0.07*rs+(mv?Math.sin(now*1.6+bx0)*s*0.012:0);     // bunting in autumn colours between the towers
+    g.strokeStyle='rgba(90,60,30,.8)'; g.lineWidth=Math.max(0.8,s*0.012); g.beginPath(); g.moveTo(bx0,by0); g.quadraticCurveTo(cx,by0+sag*2,bx1,by0); g.stroke();
+    for(var f=0;f<7;f++){ var ft=(f+0.5)/7, fx=bx0+(bx1-bx0)*ft, fy=by0+sag*2*ft*(1-ft)*2, fw=s*0.034*rs;
+      g.fillStyle=LEAF_COL[f%LEAF_COL.length]; g.beginPath(); g.moveTo(fx-fw,fy); g.lineTo(fx+fw,fy); g.lineTo(fx,fy+fw*2.1+(mv?Math.sin(now*3+f)*fw*0.2:0)); g.closePath(); g.fill(); }
+    var tx=cx+s*0.31*rs, ty=cy+s*0.36*rs, tw=s*0.13*rs;                           // a little feast table: a roast on a platter, steaming
+    g.fillStyle='#7A4C26'; g.fillRect(tx-tw,ty,tw*2,s*0.02); g.fillRect(tx-tw*0.8,ty+s*0.02,s*0.015,s*0.05*rs); g.fillRect(tx+tw*0.8-s*0.015,ty+s*0.02,s*0.015,s*0.05*rs);
+    blob(g,tx,ty-s*0.012,tw*0.55,s*0.03*rs,'#E8E0CC'); blob(g,tx,ty-s*0.03,tw*0.42,s*0.028*rs,'#A8591F'); blob(g,tx-tw*0.3,ty-s*0.05,s*0.014,s*0.014,'#C4661A'); blob(g,tx+tw*0.32,ty-s*0.05,s*0.014,s*0.014,'#D9B13A');
+    if(mv) for(var sk=0;sk<2;sk++){ var su=((now*0.4+sk*0.5+artHash(wrapC(c.q),wrapC(c.r),422))%1); g.strokeStyle='rgba(235,230,220,'+(0.5*(1-su)).toFixed(3)+')'; g.lineWidth=Math.max(0.8,s*0.012);
+      g.beginPath(); g.moveTo(tx+(sk?0.4:-0.4)*tw*0.5,ty-s*0.06); g.quadraticCurveTo(tx+Math.sin(su*6+sk)*s*0.03,ty-s*0.06-su*s*0.1,tx+(sk?0.4:-0.4)*tw*0.5+Math.sin(su*5)*s*0.03,ty-s*0.06-su*s*0.2); g.stroke(); }
     if(mv) for(var k=0;k<3;k++){ var u=((now*0.25+k/3+artHash(wrapC(c.q),wrapC(c.r),421))%1), sx=cx+s*0.22*rs+Math.sin(u*5)*s*0.04, sy=cy-s*0.45*rs-u*s*0.6;
       g.fillStyle='rgba(150,140,128,'+(0.35*(1-u)).toFixed(3)+')'; g.beginPath(); g.arc(sx,sy,s*(0.03+0.06*u),0,6.284); g.fill(); }
   });
+  g.restore();
+}
+/* a flock of geese now and then crosses the sky in a V: a few seconds in each 46 */
+function harvestGeese(g,now){
+  var st=harvestState(); if(!st||!harvestMoves()||S<HV_DECOR_S) return;
+  var cyc=now/46, k=Math.floor(cyc), u=cyc-k; if(u>0.5) return;
+  var t=u/0.5, dir=artHash(k,1,451)<0.5?1:-1, cx=(dir>0?-90:W+90)+dir*t*(W+180), cy=H*(0.14+0.5*artHash(k,2,452))+Math.sin(t*6)*S*0.2;
+  var n=5+Math.floor(artHash(k,3,453)*4), z=Math.max(5,S*0.2);
+  g.save(); g.strokeStyle=T['--ink']||'#222'; g.globalAlpha=0.7; g.lineWidth=Math.max(1.2,z*0.16); g.lineCap='round'; g.lineJoin='round';
+  for(var i=0;i<n;i++){
+    var row=Math.ceil(i/2), side=i===0?0:(i%2?1:-1), gx=cx-dir*row*z*1.6, gy=cy+side*row*z*0.9, fl=Math.sin(now*7+i*0.9)*z*0.5;
+    g.beginPath(); g.moveTo(gx-z*0.65,gy-fl); g.quadraticCurveTo(gx-z*0.2,gy-z*0.1,gx,gy); g.quadraticCurveTo(gx+z*0.2,gy-z*0.1,gx+z*0.65,gy-fl); g.stroke();
+  }
   g.restore();
 }
 /* leaves drifting down over the land: at most 40, fewer zoomed out, more on Thanksgiving Day */
