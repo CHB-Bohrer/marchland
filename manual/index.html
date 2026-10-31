@@ -2034,7 +2034,6 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
     o.connect(g).connect(a.destination); o.start(t0); o.stop(t0+1.1);
     noise(a,0.35,'lowpass',900,0.22*power,3);
   }
-  function tick(){ var a=audio(); if(a) noise(a,0.07,'highpass',2600,0.16,2); }
   function whoosh(dur,gain){ var a=audio(); if(a) noise(a,dur,'bandpass',700,gain,1.2); }
   function crash(){ var a=audio(); if(a) noise(a,1.8,'highpass',4200,0.2,2); }
   function startRiser(){
@@ -2051,7 +2050,6 @@ function keepGlyph(x,y,col,kind,scale){ (kind==='castle'?artCastle:artTower)(ctx
     riser=null;
   };
   var EVENTS=[];
-  STEPS.forEach(function(s){ EVENTS.push([s.t,tick]); });
   EVENTS.push([T_HIT,function(){ drum(1.25); whoosh(1.4,0.16); }]);
   seedT.forEach(function(t){ EVENTS.push([t,function(){ drum(0.55); }]); });
   EVENTS.push([T_RIVER,function(){ whoosh(2.0,0.1); }]);
@@ -2488,6 +2486,12 @@ try{
 })();
 </script>
 
-<script src="../music/music.js?v=3"></script>
+<script>
+/* the tutorial's music sits louder than the game's, with a little compression so it never clips.
+   Measured with ffmpeg ebur128: the narration clips are about -17.6 LUFS; at 1.2 the music is about
+   -12.7 LUFS (5.5 dB louder than before), and ducked to 0.25 it is about -23.5 LUFS, 6 dB under the voice. */
+window.MARCHLAND_MUSIC={level:1.2, ducked:0.25, punch:true};
+</script>
+<script src="../music/music.js?v=4"></script>
 </body>
 </html>

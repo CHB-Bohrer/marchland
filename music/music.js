@@ -1,11 +1,16 @@
 /* Marchland background music: a soft, looping string bed shared by the game
    and the tutorial. Starts on the first tap, ducks under the narrator, and a
-   small Music button switches it off (your choice is remembered). */
+   small Music button switches it off (your choice is remembered).
+   A page may set window.MARCHLAND_MUSIC={level, ducked, punch} before this script loads:
+   level and ducked are the music's gain normally and under the narrator, and punch puts a
+   gentle compressor and a small bass and treble lift on the output so a louder level does
+   not clip. Without it the game's own values below apply. */
 (function(){
   var KEY='marchland.music', script=document.currentScript;
   var base=script&&script.src?script.src.replace(/[^\/]*$/,''):'';
   var URL=base+'adventure.mp3?v=3';
-  var LEVEL=0.9, DUCKED=0.3;
+  var OPT=window.MARCHLAND_MUSIC||{};
+  var LEVEL=OPT.level!=null?+OPT.level:0.9, DUCKED=OPT.ducked!=null?+OPT.ducked:0.3, PUNCH=!!OPT.punch;
   var ac=null, gain=null, src=null, buf=null, loading=false, started=false;
   var on=true, talking=0;
   try{ if(localStorage.getItem(KEY)==='off') on=false; }catch(e){}
@@ -31,7 +36,16 @@
     var AC=window.AudioContext||window.webkitAudioContext; if(!AC) return;
     try{ ac=ac||new AC(); }catch(e){ return; }
     if(ac.state==='suspended') ac.resume();
-    if(!gain){ gain=ac.createGain(); gain.gain.value=0; gain.connect(ac.destination); }
+    if(!gain){
+      gain=ac.createGain(); gain.gain.value=0;
+      if(PUNCH){                                         // a little more body and air, then a soft compressor to keep the peaks in
+        var lo=ac.createBiquadFilter(), hi=ac.createBiquadFilter(), comp=ac.createDynamicsCompressor();
+        lo.type='lowshelf'; lo.frequency.value=110; lo.gain.value=3;
+        hi.type='highshelf'; hi.frequency.value=4500; hi.gain.value=2.5;
+        comp.threshold.value=-20; comp.knee.value=12; comp.ratio.value=3; comp.attack.value=0.006; comp.release.value=0.22;
+        gain.connect(lo); lo.connect(hi); hi.connect(comp); comp.connect(ac.destination);
+      } else gain.connect(ac.destination);
+    }
     if(buf){ play(); return; }
     if(loading) return; loading=true;
     fetch(URL).then(function(r){ if(!r.ok) throw 0; return r.arrayBuffer(); })
