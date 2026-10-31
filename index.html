@@ -5668,7 +5668,7 @@ function waitSponsor(pid,rec){
 function requestsForMe(){
   var now=Date.now();
   return Object.keys(G.pending||{}).map(function(pid){ var p=G.pending[pid]; return p&&{pid:pid,p:p}; })
-    .filter(function(x){ return x && !x.p.ok && !x.p.no && ((x.p.sponsor===ME && !barredSponsor(ME,G) && !(probationNamed(ME,G) && probationNamed(x.pid,G))) || (isSteward() && (x.p.probe || now-x.p.t>SPONSOR_ESCALATE_MS))); })
+    .filter(function(x){ return x && !x.p.ok && !x.p.no && ((x.p.sponsor===ME && !barredSponsor(ME,G) && !(probationNamed(ME,G) && probationNamed(x.pid,G))) || (isSteward() && now-x.p.t>SPONSOR_ESCALATE_MS)); })
     .sort(function(a,b){ return a.p.t-b.p.t; });
 }
 function renderSponsorBtn(){
