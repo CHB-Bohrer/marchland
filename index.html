@@ -1753,7 +1753,7 @@ function nope(h,el){
   if(v.seen){ hideWhy(); return; }
   document.getElementById('why-msg').textContent=headline(h)||'That can’t be done.';
   w.classList.toggle('up',v.above);
-  document.getElementById('why-arrow').innerHTML=v.above?'&uarr;':'&darr;';
+  document.getElementById('why-arrow').innerHTML='';   // no arrow glyph any more
   w.classList.remove('hide','show'); void w.offsetWidth; w.classList.add('show'); whyAt=Date.now();
   clearTimeout(whyT); whyT=setTimeout(hideWhy,10000);
 }
@@ -3217,9 +3217,6 @@ function drawTreks(now,amb){
       ctx.save();
       ctx.beginPath(); ctx.arc(P[0],P[1],R,0,6.284); ctx.fillStyle=T['--surface']; ctx.fill();
       ctx.lineWidth=2; ctx.strokeStyle=col; ctx.setLineDash([3,2.5]); ctx.stroke(); ctx.setLineDash([]);
-      var ax=P[0]+Math.cos(ang)*(R+3), ay=P[1]+Math.sin(ang)*(R+3), ah=Math.max(4,R*0.5);   // arrowhead just outside the badge
-      ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(ax+Math.cos(ang)*ah,ay+Math.sin(ang)*ah);
-      ctx.lineTo(ax+Math.cos(ang+2.4)*ah,ay+Math.sin(ang+2.4)*ah); ctx.lineTo(ax+Math.cos(ang-2.4)*ah,ay+Math.sin(ang-2.4)*ah); ctx.closePath(); ctx.fill();
       ctx.fillStyle=T['--ink']; ctx.font='600 '+Math.round(s*0.78)+'px ui-monospace, monospace';
       ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(tk.n?String(tk.n):'T',P[0],P[1]+0.5);
       ctx.restore();
