@@ -48,6 +48,7 @@ button:disabled{ opacity:.5; }
 <script>
 var DB_URL="https://marchland-352fc-default-rtdb.firebaseio.com";
 var GAME_CODE="OCT26";           // keep in step with GAME_CODE in ../index.html
+try{ var gq=/[?&]game=([A-Za-z0-9_-]{1,24})/.exec(location.search); if(gq && /^test/i.test(gq[1])) GAME_CODE=gq[1]; }catch(e){}   // ?game=test: the test copy, as in the game
 var players={}, claims={}, shots={};
 
 function db(path,opt){
