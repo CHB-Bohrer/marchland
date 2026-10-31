@@ -5676,6 +5676,21 @@ function renderSponsorBtn(){
   var n=requestsForMe().length;
   b.classList.toggle('hide',!n && !isSteward());
   document.getElementById('sp-badge').textContent=String(n); document.getElementById('sp-badge').classList.toggle('hide',!n);
+  if(n) setTimeout(promptRequests,900);
+}
+/* a scroll appears by itself when someone has asked me to vouch for them: when I sign in, and when a request arrives while I play.
+   Once per request in a visit; "Later" leaves it waiting behind the Sponsor requests button, and it comes up again next visit. */
+var spPrompted={}, spPrompting=false;
+function promptRequests(){
+  if(spPrompting||!G||!me()||PLOCK||ELIM) return;
+  var list=requestsForMe().filter(function(x){ return !spPrompted[x.pid+'@'+x.p.t]; });
+  if(!list.length) return;
+  if(document.querySelector('.sc-dlg:not(.hide),.rulesnote:not(.hide)')) return;      // another notice is open: try again a little later
+  spPrompting=true; list.forEach(function(x){ spPrompted[x.pid+'@'+x.p.t]=1; });
+  var many=list.length>1, who=list.map(function(x){ return '<b>'+esc(x.p.name)+'</b> <i>('+esc(x.p.rn)+')</i>'; }).join(', ');
+  scrollDialog({eyebrow:'A request for you', title:many?'Players ask you to vouch for them':'A player asks you to vouch for them',
+    html:'<p>'+who+(many?' have':' has')+' asked you to be '+(many?'their sponsor':'their sponsor')+'. Only vouch for someone you know in real life.</p>', cancel:null,
+    buttons:[{label:'Later',value:null},{label:'Look at it',value:'go',primary:true}]}).then(function(r){ spPrompting=false; if(r.value==='go') openRequests(); });
 }
 function openRequests(){
   var list=requestsForMe();
