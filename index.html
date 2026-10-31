@@ -1583,7 +1583,7 @@ function pushAll(){
    is lower than the one this tab last saw, or whose last claim is older, was written back by a screen that slept
    with an old copy (or still runs the old page): nothing of it is folded in, and this tab writes the true record
    back over it at once. */
-var meTag=null, meBase=null, meBaseX=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp'];
+var meTag=null, meBase=null, meBaseX=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp','lids'];
 function snapRes(r){ var o={}; GOODS.forEach(function(k){ o[k]=(r&&r[k])||0; }); return o; }
 function snapX(v){ v=v||{}; return {sq:v.squares||0, col:v.collected||0, owed:v.owed||0, lc:v.lastCollect||0, wv:v.wv||0}; }
 function isRollback(v){ return !!(meBaseX && v && ((v.wv||0)<meBaseX.wv || (v.lastCollect||0)<meBaseX.lc)); }
@@ -1683,6 +1683,7 @@ function applyRemote(remote){
     mineMoved=true; meTag=null;
     if(absorbMine(rv)) setTimeout(function(){ pushMe(); },0);   // an old copy was written over mine: put the true one back
   }
+  if(mine && rv && JSON.stringify(rv.lids||{})!==JSON.stringify(mine.lids||{})){ mine.lids=rv.lids||{}; mineMoved=true; setTimeout(loadLetters,0); }   // a letter was posted to me
   Object.keys(G.players).forEach(function(pid){
     if(pid!==ME && !remote.players[pid]) delete G.players[pid];
   });
@@ -5841,14 +5842,47 @@ function markFake(pid){
    at marchland_letters/<board code>/<recipient>/<caravan id>, so a board download never carries it,
    and only the sender (who writes it) and the recipient (who reads it) ever fetch it; the caravan
    itself only carries lt:1, and the replay log never sees the text, just a sealed scroll on the wagon.
-   (Filed under the recipient, so their shelf is one small read without an index.) The privacy
-   promised here is privacy inside the game: anyone who can read the raw database could read it. */
+   Nothing is ever listed: the database rules forbid reading the letters section as a whole or a
+   recipient's shelf, so a letter can only be fetched by its exact address. The recipient learns the
+   addresses from an index on their own player record (lids: {caravan id: arrival time}), which the
+   sender adds to when the letter is posted (a tiny write, folded in by the recipient's screen like
+   any change another hand makes to their record). The text is also stored scrambled (AES-GCM, key
+   made from the board code, the two players and the letter's id), so the raw database shows
+   gibberish. That is privacy from other players and from casual browsing, not from someone who
+   reads this page's code and knows the address: with no accounts the database cannot tell who is asking. */
 var LETTERS_ROOT='marchland_letters', LETTER_MAX=280;
 function letterPath(to,id){ return '/'+LETTERS_ROOT+'/'+gameCode+'/'+to+(id?'/'+id:''); }
-var letters={list:{}, blocked:false};
+var letters={list:{}, gone:{}, blocked:false};
+function b64(u){ var s='',i; for(i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); return btoa(s); }
+function unb64(t){ var s=atob(t), u=new Uint8Array(s.length), i; for(i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+function letterKey(to,from,id){
+  var enc=new TextEncoder();
+  return crypto.subtle.importKey('raw',enc.encode('marchland|'+gameCode+'|'+to+'|'+from+'|'+id),'PBKDF2',false,['deriveKey'])
+    .then(function(k){ return crypto.subtle.deriveKey({name:'PBKDF2',salt:enc.encode('marchland-letters'),iterations:20000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']); });
+}
+function sealLetter(text,to,from,id){                                   // → the fields to store in place of the text
+  if(!(window.crypto&&crypto.subtle&&window.TextEncoder)) return Promise.resolve({text:text});   // a page that cannot scramble (not served over https) keeps it plain
+  var iv=crypto.getRandomValues(new Uint8Array(12));
+  return letterKey(to,from,id).then(function(k){ return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,new TextEncoder().encode(text)); })
+    .then(function(ct){ return {enc:1,iv:b64(iv),ct:b64(new Uint8Array(ct))}; });
+}
+function unsealLetter(d,to,id){                                         // → the same letter with its text back
+  if(!d||!d.enc) return Promise.resolve(d);
+  return letterKey(to,d.from,id).then(function(k){ return crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(d.iv)},k,unb64(d.ct)); })
+    .then(function(buf){ d.text=new TextDecoder().decode(buf); return d; },function(){ d.text='(this letter could not be unsealed)'; return d; });
+}
 function loadLetters(){
   if(!online||!me()) return;
-  dbGet(letterPath(ME)).then(function(d){ letters.list=d||{}; letters.blocked=false; renderLetterBtn(); },function(){ letters.blocked=true; });
+  var idx=me().lids||{};
+  Object.keys(letters.list).forEach(function(id){ if(!idx[id]) delete letters.list[id]; });         // gone from my index: gone from my shelf
+  var todo=Object.keys(idx).filter(function(id){ return !letters.list[id] && !letters.gone[id]; });
+  if(!todo.length){ renderLetterBtn(); return; }
+  Promise.all(todo.map(function(id){
+    return dbGet(letterPath(ME,id)).then(function(d){
+      if(!d){ letters.gone[id]=1; return; }
+      return unsealLetter(d,ME,id).then(function(l){ letters.list[id]=l; });
+    }).catch(function(){ letters.blocked=true; });
+  })).then(function(){ renderLetterBtn(); });
 }
 function lettersHere(){
   var now=Date.now();
@@ -5876,7 +5910,7 @@ function readLetter(id){
       +'<p class="letter-text">'+esc(l.text||'')+'</p>',
     cancel:null, buttons:[{label:'Close',value:null},{label:'Delete',value:'del'},{label:'Reply',value:'reply',primary:true}]}).then(function(res){
     if(res.value==='reply'){ if(G.players[l.from]) openCaravanOnMap(l.from); else nope('They are no longer on the board.'); }
-    if(res.value==='del'){ delete letters.list[id]; dbPut(letterPath(ME,id),null).catch(function(){}); renderLetterBtn(); say('The letter is burned.'); }
+    if(res.value==='del'){ delete letters.list[id]; if(me().lids) delete me().lids[id]; dbPut(letterPath(ME,id),null).catch(function(){}); dbPut('/marchland/'+gameCode+'/players/'+ME+'/lids/'+id,null).catch(function(){}); renderLetterBtn(); say('The letter is burned.'); }
   });
 }
 function letterCount(){ var t=document.getElementById('cv-letter'), n=(t.value||'').length; document.getElementById('cv-count').textContent=n+'/'+LETTER_MAX; }
@@ -6596,7 +6630,11 @@ function sendCaravan(){
   var now=Date.now(), id=ME+'-'+now.toString(36), them=G.players[to];
   if(txt && online && !sendCaravan.letterOk){          // the letter goes first, outside the board; only if it lands does the wagon leave
     say('Sealing the letter&hellip;');
-    return dbPut(letterPath(to,id),{from:ME,to:to,text:txt,t:now,eta:now+cvTravel(ME,to),read:0}).then(function(){
+    var eta0=now+cvTravel(ME,to);
+    return sealLetter(txt,to,ME,id).then(function(body){
+      body.from=ME; body.to=to; body.t=now; body.eta=eta0; body.read=0;
+      return dbPut(letterPath(to,id),body);
+    }).then(function(){ return dbPut('/marchland/'+gameCode+'/players/'+to+'/lids/'+id,eta0); }).then(function(){
       sendCaravan.letterOk={id:id,t:now}; sendCaravan();
     },function(){ nope('<span class="bad">Letters can&rsquo;t be sent yet</span> &mdash; the database does not allow them. The wagon has not left.',btn); });
   }
