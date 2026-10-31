@@ -4181,7 +4181,7 @@ function draw(){
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
-  if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); }   // HARVEST LAYER
+  if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); harvestTrot(ctx,now); }   // HARVEST LAYER
   trebs.forEach(function(e){                         // trebuchets stand to the lower left of the square, out of the band badge's way
     if(S>=12) artTrebuchet(ctx,e[1][0]-S*0.3,e[1][1]+S*0.66,S*0.82,e[2],now,e[0].tb);
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
@@ -4829,11 +4829,26 @@ function harvestGround(g,farms,opens,now){
     if(artHash(q,r,404)<0.35) hvPumpkin(g,x+s*0.22,y+s*0.04,s*0.08);
     if(artHash(q,r,405)<0.14) hvScarecrow(g,f[0][0]-s*0.28,f[0][1]+s*0.3,s*0.5,sw*1.6);   // now and then a scarecrow keeps watch
   });
-  if(st!=='autumn') opens.forEach(function(o){
-    var q=wrapC(o[1]), r=wrapC(o[2]); if(artHash(q,r,411)>0.07) return;
-    var ph=mv?now*0.1+artHash(q,r,412)*9:artHash(q,r,412)*9, x=o[0][0]+Math.sin(ph)*s*0.25, y=o[0][1]+s*0.2+Math.cos(ph*0.7)*s*0.06;
-    hvTurkey(g,x,y,s*0.13,Math.cos(ph)>=0?1:-1,mv?Math.sin(now*3+q)>0.6:false);
+  opens.forEach(function(o){                                       // turkeys wander the open ground all November, more of them on Thanksgiving Day
+    var q=wrapC(o[1]), r=wrapC(o[2]); if(artHash(q,r,411)>(st==='day'?0.26:0.16)) return;
+    var ph=mv?now*0.1+artHash(q,r,412)*9:artHash(q,r,412)*9, x=o[0][0]+Math.sin(ph)*s*0.38, y=o[0][1]+s*0.2+Math.cos(ph*0.7)*s*0.06;
+    hvTurkey(g,x,y,s*0.17,Math.cos(ph)>=0?1:-1,mv?Math.sin(now*3+q)>0.6:false);
+    if(mv && S>=20 && Math.floor(now/2.5+artHash(q,r,413)*20)%7===0){                // now and then one gobbles
+      g.save(); g.font='italic 600 '+Math.round(Math.max(10,s*0.2))+'px '+getComputedStyle(document.body).fontFamily; g.textAlign='center'; g.textBaseline='middle';
+      g.fillStyle=T['--ink']; g.globalAlpha=0.85; g.fillText('gobble!',x,y-s*0.42); g.restore(); }
   });
+  g.restore();
+}
+/* the turkey trot: every so often a line of turkeys runs across the map */
+function harvestTrot(g,now){
+  var st=harvestState(); if(!st||!harvestMoves()||S<HV_DECOR_S) return;
+  var cyc=now/34, k=Math.floor(cyc), u=cyc-k; if(u>0.45) return;
+  var t=u/0.45, dir=artHash(k,4,461)<0.5?1:-1, n=4+Math.floor(artHash(k,5,462)*3), y0=H*(0.3+0.45*artHash(k,6,463)), z=Math.max(7,S*0.2);
+  g.save();
+  for(var i=0;i<n;i++){
+    var x=(dir>0?-60:W+60)+dir*(t*(W+120+n*z*3.2)-i*z*3.2), y=y0-Math.abs(Math.sin(now*9+i))*z*0.25+Math.sin(i*2.1)*z*0.5;
+    hvTurkey(g,x,y,z,dir,false);
+  }
   g.restore();
 }
 /* a scarecrow on a post, in a straw hat, swaying a little */
