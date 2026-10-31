@@ -1358,7 +1358,7 @@ function seedPlayer(pid,name){
   var s=findStartSpot();
   if(!s) return false;
   G.players[pid]={name:name,seat:seat,q:s.q,r:s.r,res:{stone:120,timber:100,iron:60,grain:80},
-    field:0,squares:10,lastCollect:Date.now()-864e5,collected:0,lastTick:Date.now(),seen:Date.now()};
+    field:0,squares:10,lastCollect:Date.now()-864e5,collected:0,lastTick:Date.now(),seen:Date.now(),joined:Date.now()};
   // a small holding and a keep
   var q=[[s.q,s.r]],seen={},placed=0,guard=0;
   while(q.length&&placed<13&&guard++<300){
@@ -4401,18 +4401,25 @@ document.getElementById('skipreplay').addEventListener('click',endReplay);
   paint(); })();
 
 /* the list of players, one tap from the map: choose a name and the map goes to their castle */
-document.getElementById('namesbtn').addEventListener('click',function(){
+function openPlayerList(byJoin){
   if(!G||!me()) return;
-  var ids=Object.keys(G.players).sort(function(a,b){ return cellsOf(b)-cellsOf(a); });
-  scrollDialog({eyebrow:'Players', title:'Go to a castle', cancel:null,
-    list:ids.map(function(pid){ return {label:esc(full(G.players[pid]))+(pid===ME?' <i>(you)</i>':''), cost:cellsOf(pid)+' squares', value:pid}; }),
-    buttons:[{label:'Close',value:null,primary:true}]}).then(function(res){
-    var pid=res.value; if(!pid||!G||!G.players[pid]) return;
+  var ps=G.players, ids=Object.keys(ps).sort(byJoin
+    ? function(a,b){ return ((ps[a].joined||0)-(ps[b].joined||0)) || ((ps[a].seat||0)-(ps[b].seat||0)); }   // when they joined (older accounts have no date, so their seat number, which was handed out in joining order, decides)
+    : function(a,b){ return cellsOf(b)-cellsOf(a); });
+  scrollDialog({eyebrow:'Players', title:byJoin?'In order of joining':'Go to a castle', cancel:null,
+    html:byJoin?'<p class="sc-note" style="color:inherit">Oldest first. Older accounts were never dated, so for them the order is by seat number, which can be a little off where someone left and their seat was reused.</p>':'',
+    list:ids.map(function(pid,i){ return {label:(byJoin?(i+1)+'. ':'')+esc(full(ps[pid]))+(pid===ME?' <i>(you)</i>':''), cost:cellsOf(pid)+' squares', value:pid}; }),
+    buttons:[{label:'Close',value:null,primary:true},{label:byJoin?'By squares':'By joining',value:'__flip'}]}).then(function(res){
+    var pid=res.value; if(!pid) return;
+    if(pid==='__flip') return openPlayerList(!byJoin);
+    if(!G||!G.players[pid]) return;
     var at=castleOf(pid); if(!at) return;
     closeCellMenu(); centreOn(at[0],at[1]); draw();
     say('Centred on <b>'+esc(full(G.players[pid]))+'</b>&rsquo;s castle.');
   });
-});
+}
+document.getElementById('namesbtn').addEventListener('click',function(){ openPlayerList(false); });
+
 
 /* ═══ the living map ═══════════════════════════════════════════════════
    Between moves the board is never quite still: light glints on the rivers,
