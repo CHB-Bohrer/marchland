@@ -6632,12 +6632,14 @@ function sendCaravan(){
   if(txt && online && !sendCaravan.letterOk){          // the letter goes first, outside the board; only if it lands does the wagon leave
     say('Sealing the letter&hellip;');
     var eta0=now+cvTravel(ME,to);
+    var step='sealing';
     return sealLetter(txt,to,ME,id).then(function(body){
       body.from=ME; body.to=to; body.t=now; body.eta=eta0; body.read=0;
+      step='writing the letter to '+LETTERS_ROOT;
       return dbPut(letterPath(to,id),body);
-    }).then(function(){ return dbPut('/marchland/'+gameCode+'/players/'+to+'/lids/'+id,eta0); }).then(function(){
+    }).then(function(){ step='posting it to the recipient&rsquo;s list'; return dbPut('/marchland/'+gameCode+'/players/'+to+'/lids/'+id,eta0); }).then(function(){
       sendCaravan.letterOk={id:id,t:now}; sendCaravan();
-    },function(){ nope('<span class="bad">Letters can&rsquo;t be sent yet</span> &mdash; the database does not allow them. The wagon has not left.',btn); });
+    },function(e){ nope('<span class="bad">Letters can&rsquo;t be sent yet</span> &mdash; the database refused it while '+step+' ('+esc(String((e&&e.message)||e))+'). The wagon has not left.',btn); });
   }
   if(sendCaravan.letterOk){ id=sendCaravan.letterOk.id; now=sendCaravan.letterOk.t; sendCaravan.letterOk=null; }
   GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
