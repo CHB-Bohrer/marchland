@@ -1415,7 +1415,7 @@ function ratesFor(pid,at){
   var g=garrisonNeed(pid), pl=G.players[pid];
   var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
   var wg=wagonsAt(pid,Date.now());                   // and so do the wagons: 1 grain a tick for each caravan on the road
-  var tg=trebsOf(pid)*TREB_GRAIN;                     // and the trebuchets, 2 a tick each
+  var tg=trebsOf(pid)*TREB_GRAIN+towerGrain(pid);     // and the trebuchets, 2 a tick each, and the towers' upkeep
   return {out:out,sup:s,own:own,mouths:f+g[0]+wg+tg,net:out.grain-(f+g[0]+wg+tg),supset:sup,gar:g,field:f,wagons:wg,trebs:tg};
 }
 /* Caravan upkeep: every caravan a player has sent costs them 1 grain at each tick while it is still
@@ -2185,6 +2185,13 @@ function attackNow(q,r,band0,shown){
    the count in tb and, in tr, the moment each one can next fire; shots unused do not stack. */
 var TREB_COST={timber:60,iron:40,stone:30}, TREB_GRAIN=2, TREB_SHOT=5, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
 function arr(x){ if(Array.isArray(x)) return x.filter(function(v){ return v!=null; }); if(!x||typeof x!=='object') return []; return Object.keys(x).sort(function(a,b){ return a-b; }).map(function(k){ return x[k]; }); }   // (the database can hand an array back as an object)
+/* Tower upkeep: every finished tower costs its owner grain each tick, equal to its level (1, 2 or 3),
+   as its old garrison once did. A tower needs no men, but its keepers still eat. */
+function towerGrain(pid){
+  var n=0;
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.k===TOWER && !building(c)) n+=Math.max(1,Math.min(3,c.l||1)); }
+  return n;
+}
 function trebsOf(pid){
   var n=0, k, T=(G&&G.treks)||{};
   for(k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.tb>0) n+=c.tb; }
@@ -3055,7 +3062,7 @@ function cellActions(q,r){
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
       if(!c.k){
         var tc=SPEC[TOWER].cost;
-        A('Raise a tower',costLine(tc),function(){ build(q,r,TOWER); },lackText(tc));
+        A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
         var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
@@ -5249,7 +5256,7 @@ var HINTS={
   claim:'Click any dashed cell beside a square of yours to spend a march. Empty ground needs nothing else. Someone else&rsquo;s ground costs two marches <i>and</i> needs one of your bands standing next to it on a live road square: your soldiers fight their walls, guards, castle guns, tower and trebuchets one duel at a time, and a scroll shows the odds before you commit. Rivers can&rsquo;t be marched into &mdash; bridge them.',
   bridge:'Click a dashed river cell beside a square of yours to start a bridge: one march, 40 timber and 20 stone. It is finished 24 hours later, and from then on your border and your supply run across it.',
   wall:'Click ground you hold to fortify it. 30 stone a course, three levels.',
-  tower:'Click ground you hold to raise a watchtower. It needs nobody inside: it has 10 health (20 and 30 when upgraded), makes every attack on your ground in its range harder, and a damaged tower mends 1 health a tick for 1 stone.',
+  tower:'Click ground you hold to raise a watchtower. It needs nobody inside, but it eats grain every tick (1, 2 or 3 by level): it has 10 health (20 and 30 when upgraded), makes every attack on your ground in its range harder, and a damaged tower mends 1 health a tick for 1 stone.',
   castle:'Castles are rare and dear: each costs more than the last and they must stand '+CASTLE_SPACING+' cells apart. Only cells with an unbroken path of your own ground back to a castle produce anything &mdash; the faded, hatched ones are cut off and yield nothing. A castle must be built where your own ground links it to a grain square (a farm you hold), never on one: if no farm is connected to it, it loses health and falls after 5 days, and whoever seizes the ruin earns '+CASTLE_BOUNTY+' marches.',
   upgrade:'Click one of your towers or castles to upgrade it — a tower gains health and reach; a castle gains reach and more men locked inside.',
   troop:'Click one of your castles to muster a soldier. He joins the band standing at that castle, which is why a castle near the front matters.',
