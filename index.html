@@ -563,7 +563,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="home" aria-label="Centre on your keep" title="Centre on your keep">◎</button>
           <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
-          <button id="namesbtn" aria-label="Name labels" title="Name labels on/off">Aa</button>
+          <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
@@ -4426,10 +4426,19 @@ document.getElementById('skipreplay').addEventListener('click',endReplay);
   b.addEventListener('click',function(){ REDUCE=!REDUCE; try{ localStorage.setItem('marchland.calm',REDUCE?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); });
   paint(); })();
 
-(function(){ var b=document.getElementById('namesbtn'); b.style.display='none';   // nothing left for it to switch
-  function paint(){ b.style.opacity=SHOW_NAMES?'.95':'.5'; b.setAttribute('aria-pressed',SHOW_NAMES?'true':'false'); b.title=SHOW_NAMES?'Name labels are on - tap to hide them':'Name labels are off - tap to show them'; }
-  b.addEventListener('click',function(){ SHOW_NAMES=!SHOW_NAMES; try{ localStorage.setItem('marchland.names',SHOW_NAMES?'1':'0'); }catch(e){} paint(); if(G) draw(); });
-  paint(); })();
+/* the list of players, one tap from the map: choose a name and the map goes to their castle */
+document.getElementById('namesbtn').addEventListener('click',function(){
+  if(!G||!me()) return;
+  var ids=Object.keys(G.players).sort(function(a,b){ return cellsOf(b)-cellsOf(a); });
+  scrollDialog({eyebrow:'Players', title:'Go to a castle', cancel:null,
+    list:ids.map(function(pid){ return {label:esc(full(G.players[pid]))+(pid===ME?' <i>(you)</i>':''), cost:cellsOf(pid)+' squares', value:pid}; }),
+    buttons:[{label:'Close',value:null,primary:true}]}).then(function(res){
+    var pid=res.value; if(!pid||!G||!G.players[pid]) return;
+    var at=castleOf(pid); if(!at) return;
+    closeCellMenu(); centreOn(at[0],at[1]); draw();
+    say('Centred on <b>'+esc(full(G.players[pid]))+'</b>&rsquo;s castle.');
+  });
+});
 
 /* ═══ the living map ═══════════════════════════════════════════════════
    Between moves the board is never quite still: light glints on the rivers,
@@ -5685,12 +5694,12 @@ function answerRequest(pid,p){
 /* a player's profile on a scroll: who vouched for them, and (for yourself) your strikes */
 function openProfile(pid){
   var p=G.players[pid]; if(!p) return;
-  var s=sponsorRec(pid), mine=pid===ME, strikes=mine?sponsorStrikes(ME):[];
+  var s=sponsorRec(pid), mine=pid===ME, strikes=sponsorStrikes(pid);
   scrollDialog({eyebrow:'Player', title:esc(p.name)+(p.rn?' <span class="sc-sub">'+esc(p.rn)+'</span>':''),
     html:'<p>'+cellsOf(pid)+' squares &middot; '+castlesOf(pid)+' castle'+(castlesOf(pid)===1?'':'s')+'</p>'
       +'<p>'+(s?(s.by==='founding'?'A founding player.':'Sponsored by <b>'+esc(nameOf(s.by))+'</b>, '+new Date(s.t).toLocaleDateString()+'.'):'No sponsor on record.')+'</p>'
-      +(mine?'<p>Your strikes as a sponsor: <b>'+strikes.length+'</b> of '+STRIKES_MAX+(strikes.length>=STRIKES_MAX?' &mdash; you can no longer sponsor anyone.':'.')+'</p>'
-        +(strikes.length?'<ul>'+strikes.map(function(x){ return '<li>'+x.reason+' <i>('+new Date(x.t).toLocaleDateString()+')</i></li>'; }).join('')+'</ul>':''):''),
+      +'<p>'+(mine?'Your':'Their')+' strikes as a sponsor: <b>'+strikes.length+'</b> of '+STRIKES_MAX+(strikes.length>=STRIKES_MAX?' &mdash; '+(mine?'you can':'they can')+' no longer sponsor anyone.':'.')+'</p>'
+        +(strikes.length?'<ul>'+strikes.map(function(x){ return '<li>'+x.reason+' <i>('+new Date(x.t).toLocaleDateString()+')</i></li>'; }).join('')+'</ul>':''),
     buttons:[{label:'Close',value:null,primary:true}]});
 }
 /* ── the steward's tools ── */
