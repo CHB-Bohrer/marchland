@@ -568,6 +568,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
+          <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
       </div>
@@ -3069,6 +3070,7 @@ function cellActions(q,r){
       var mine=fieldOf(ME);
       if(c.k){
         if(c.k===CASTLE) A('Muster a soldier','25 iron &middot; 40 grain',function(){ muster(q,r); },isRuin(c)?'A fallen castle can&rsquo;t muster':lackText({iron:25,grain:40}));
+        if(c.k===CASTLE) A('How trebuchets work','a short tutorial',function(){ trebTutorial(0); });
         if(c.k===CASTLE) A('Build a trebuchet',costLine(TREB_COST)+' &middot; eats '+TREB_GRAIN+' grain a tick',function(){ buildTreb(q,r); },isRuin(c)?'Nothing is built at a ruin':lackText(TREB_COST));
         var lvl=c.l+1, uc={}; for(var k in SPEC[c.k].cost) uc[k]=SPEC[c.k].cost[k]*lvl;
         A('Upgrade to level '+ROMAN[Math.min(3,lvl)],costLine(uc),function(){ upgrade(q,r); },c.l>=3?'Already level III':(isRuin(c)?'A fallen castle can&rsquo;t be upgraded':lackText(uc)));
@@ -4227,7 +4229,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov1-e';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov1-f';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -6202,6 +6204,43 @@ function crusadeTutorial(i){
     if(res.value==='next') crusadeTutorial(i+1); else if(res.value==='back') crusadeTutorial(i-1);
   });
 }
+
+/* ── a little tutorial on trebuchets: five scrolls, each with a drawing (uses the crusade tutorial's drawing helpers) ── */
+function trebDraw(x,y,k){   // a trebuchet: frame, throwing arm, counterweight and sling
+  return '<g stroke="#3a2f18" stroke-width="2" fill="none" stroke-linecap="round"><path d="M'+(x-18*k)+' '+y+' L'+x+' '+(y-26*k)+' L'+(x+18*k)+' '+y+'"/><path d="M'+(x-22*k)+' '+(y-14*k)+' L'+(x+30*k)+' '+(y-38*k)+'"/></g>'
+    +'<rect x="'+(x-30*k)+'" y="'+(y-10*k)+'" width="'+(10*k)+'" height="'+(12*k)+'" fill="#6d5e40" stroke="#3a2f18"/><circle cx="'+(x+34*k)+'" cy="'+(y-40*k)+'" r="'+(4*k)+'" fill="#8a8a8a" stroke="#3a2f18"/>';
+}
+var TB_STEPS=[
+  {title:'Build one at a castle', pic:function(){
+     return crSvg(crHex(70,64,34,'#e9dcb6')+'<rect x="58" y="50" width="24" height="26" fill="#8a7a5a"/><rect x="55" y="44" width="30" height="8" fill="#6d5e40"/>'+trebDraw(150,80,1)
+       +crTxt(215,56,TREB_COST.timber+' timber',11,'start')+crTxt(215,72,TREB_COST.iron+' iron',11,'start')+crTxt(215,88,TREB_COST.stone+' stone',11,'start')); },
+   html:'<p>A <b>trebuchet</b> is a siege engine. It can only be built at one of <b>your castles</b>. Open the castle&rsquo;s menu and choose <b>Build a trebuchet</b>.</p><p>It costs '+costLine(TREB_COST)+' and is ready to throw at once. A castle can hold several.</p>'},
+  {title:'Range and targets', pic:function(){
+     return crSvg('<circle cx="70" cy="64" r="56" fill="#efe3c0" stroke="#8E1B1B" stroke-dasharray="5 4"/>'+trebDraw(70,76,0.9)+crTxt(70,108,'range '+TREB_RANGE,11)
+       +crHex(200,36,16,'#d9c2c2')+'<rect x="193" y="26" width="14" height="14" fill="#8a6a6a"/>'+crTxt(200,64,'castle',10)
+       +crHex(236,86,16,'#d9c2c2')+'<rect x="230" y="70" width="12" height="20" fill="#7a5a5a"/>'+crTxt(236,114,'tower',10)
+       +'<rect x="150" y="82" width="22" height="8" fill="#a07a4a" stroke="#3a2f18"/>'+crTxt(161,104,'wall',10)); },
+   html:'<p>A trebuchet reaches <b>'+TREB_RANGE+' squares</b>. It aims only at an enemy <b>wall, tower or standing castle</b>. It never targets soldiers, bands, caravans, roads or bridges.</p><p>Tap the square and choose <b>Fire</b>. If nothing is in range, move the trebuchet closer with your soldiers.</p>'},
+  {title:'Fire', pic:function(){
+     return crSvg(trebDraw(50,88,1)+'<path d="M84 50 Q150 -10 214 56" stroke="#3a2f18" stroke-width="2" stroke-dasharray="5 4" fill="none"/><circle cx="214" cy="58" r="5" fill="#8a8a8a" stroke="#3a2f18"/>'
+       +crHex(236,78,22,'#d9c2c2','#8E1B1B',2)+crTxt(236,82,'-'+TREB_DMG,13)); },
+   html:'<p>Each shot costs <b>'+TREB_SHOT+' stone</b> and does <b>'+TREB_DMG+' damage</b>. It <b>never misses</b>.</p><p>A tower or castle loses '+TREB_DMG+' health a shot. A wall course takes two hits to fall, and partial damage is kept.</p>'},
+  {title:'Reloading', pic:function(){
+     return crSvg('<circle cx="140" cy="60" r="40" fill="#efe3c0" stroke="#3a2f18" stroke-width="2"/><path d="M140 60 V30 M140 60 L162 72" stroke="#3a2f18" stroke-width="3" stroke-linecap="round"/>'+crTxt(140,112,'once every 4 hours',12)); },
+   html:'<p>Each trebuchet throws <b>once every 4 hours</b>. Unused shots do not stack, so fire when it is ready.</p><p>Several trebuchets at one castle fire separately. The menu says how many are ready and when the next one will be.</p>'},
+  {title:'Upkeep and danger', pic:function(){
+     return crSvg(trebDraw(70,88,0.9)+crTxt(70,108,'eats '+TREB_GRAIN+' grain a tick',11)+crHex(200,56,24,'#dfe8d0','#8E1B1B',2.5)+trebDraw(200,70,0.5)+crTxt(200,106,'90% lost in a fight',11)); },
+   html:'<p>A trebuchet eats <b>'+TREB_GRAIN+' grain every tick</b>. If your grain runs out, trebuchets are abandoned along with deserting soldiers.</p><p>On a square it is the <b>last defender</b> in the line and loses 90% of its duels. Taking its square <b>destroys</b> it. You may <b>dismantle</b> one for half its cost back. Trebuchets are not part of a crusade strike pool: they fire on their own.</p>'}
+];
+function trebTutorial(i){
+  i=i||0; var st=TB_STEPS[i], last=i===TB_STEPS.length-1;
+  var btns=[]; if(i>0) btns.push({label:'Back',value:'back'});
+  btns.push(last?{label:'Done',value:'close',primary:true}:{label:'Next',value:'next',primary:true});
+  if(!last) btns.push({label:'Close',value:'close'});
+  scrollDialog({eyebrow:'How trebuchets work &middot; '+(i+1)+' of '+TB_STEPS.length, title:st.title, html:st.pic()+st.html, cancel:'close', buttons:btns}).then(function(res){
+    if(res.value==='next') trebTutorial(i+1); else if(res.value==='back') trebTutorial(i-1);
+  });
+}
 function renderCrusades(){
   var el=document.getElementById('crusade-strip'); if(!el) return;
   if(!CRUSADE_OK||!me()){ el.classList.add('hide'); return; }
@@ -6982,6 +7021,7 @@ function drawCoach(now){
   ctx.restore();
 }
 document.getElementById('coach-go').addEventListener('click',function(){ coachShow(false); });
+document.getElementById('trebhelp').addEventListener('click',function(){ trebTutorial(0); });
 document.getElementById('helpme').addEventListener('click',function(){
   coach.hidden=false; try{ localStorage.removeItem('marchland.tips'); }catch(e){}
   coachShow(false);
