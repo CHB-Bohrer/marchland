@@ -1318,7 +1318,7 @@ function paletteAt(i){
   return 'hsl('+Math.round((i*137.508+20)%360)+(palDark?',58%,68%)':',55%,38%)');
 }
 /* colours picked by hand for particular players (by player id), light and dark: Theo is highlighter yellow */
-var PLAYER_COLOR_OVERRIDE={ 'p1rurnrd':['#F2E600','#FFFF1F'] };
+var PLAYER_COLOR_OVERRIDE={ 'p1rurnrd':['#F2E600','#FFFF1F'], 'p16vnclj':['#00AEEF','#4FD8FF'] };   // Bohrer: bright sky blue, unlike any seat colour
 function pColor(pid){
   if(!pid||!G||!G.players[pid]) return T['--ink-2']||(palDark?'#8DA1A2':'#54666A');
   if(PLAYER_COLOR_OVERRIDE[pid]) return PLAYER_COLOR_OVERRIDE[pid][palDark?1:0];
@@ -4227,7 +4227,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov1-c';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov1-d';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
