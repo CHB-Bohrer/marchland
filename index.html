@@ -2002,7 +2002,7 @@ function spendMarch(q,r){
    Rules run in the players' browsers, so a modified browser could lie about a roll; the seed
    only makes an honest fight repeatable. */
 var DUEL_P={wall:0.65, guard:0.50, gun:0.60, tower:0.55, treb:0.90};
-var TOWER_PENALTY=[0,0.03,0.06,0.09], TOWER_PEN_CAP=0.15, DUEL_MIN=0.10, TOWER_UNIT_H=10, TOWER_MAX_H=[0,10,20,30], ATTACK_COST=2;
+var TOWER_PENALTY=[0,0.02,0.03,0.04], TOWER_PEN_CAP=0.06, DUEL_MIN=0.10, TOWER_UNIT_H=10, TOWER_MAX_H=[0,10,20,30], ATTACK_COST=2;
 var UNIT_CODE={wall:'w',guard:'g',gun:'c',tower:'t',treb:'b'}, UNIT_FROM={w:'wall',g:'guard',c:'gun',t:'tower',b:'treb'};
 var UNIT_NAME={wall:['wall course','wall courses'],guard:['guarding soldier','guarding soldiers'],gun:['castle gun','castle guns'],tower:['tower unit','tower units'],treb:['trebuchet','trebuchets']};
 function towerMax(l){ return TOWER_MAX_H[Math.max(1,Math.min(3,l||1))]; }
@@ -4230,7 +4230,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov1-h';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov1-i';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
