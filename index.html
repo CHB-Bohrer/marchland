@@ -2199,7 +2199,7 @@ function attackNow(q,r,band0,shown){
    never targets soldiers, bands, caravans, roads or bridges. On a square it is the last defender
    in the line and loses 90 per cent of duels, and taking its square destroys it. A square keeps
    the count in tb and, in tr, the moment each one can next fire; shots unused do not stack. */
-var TREB_COST={timber:60,iron:40,stone:30}, TREB_GRAIN=2, TREB_SHOT=5, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
+var TREB_COST={timber:240,iron:160,stone:120}, TREB_GRAIN=2, TREB_SHOT=5, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
 function arr(x){ if(Array.isArray(x)) return x.filter(function(v){ return v!=null; }); if(!x||typeof x!=='object') return []; return Object.keys(x).sort(function(a,b){ return a-b; }).map(function(k){ return x[k]; }); }   // (the database can hand an array back as an object)
 /* Tower upkeep: every finished tower costs its owner grain each tick, equal to its level (1, 2 or 3),
    as its old garrison once did. A tower needs no men, but its keepers still eat. */
@@ -4230,7 +4230,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov1-i';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov1-j';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
