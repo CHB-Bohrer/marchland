@@ -3973,7 +3973,7 @@ function drawBuilding(c,cx,cy,r,col,detail){
     ctx.globalAlpha=.7; ctx.strokeStyle=T['--ink']; ctx.lineWidth=1; ctx.strokeRect(bx,by,bw,bh);
     ctx.restore();
   }
-  if(c.k===CASTLE && c.o && c.o!==ME && SHOW_NAMES && r>=9){      // whose keep is this? the owner's name sits above it (the Aa button switches it off)
+  if(c.k===CASTLE && c.o && CASTLE_NAMES && r>=9){      // whose keep is this? the owner's name sits above it
     var nmx=nameOf(c.o); if(nmx.length>12) nmx=nmx.slice(0,11)+'\u2026';
     var fs=Math.max(8,Math.min(13,r*0.36)), barUp=(c.h!=null)?Math.max(2,r*0.09)+3:0;
     ctx.save(); ctx.font='600 '+fs+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -4213,6 +4213,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
+var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
 function clock(){ return performance.now()/1000; }
