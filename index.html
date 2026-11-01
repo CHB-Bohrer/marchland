@@ -3044,7 +3044,7 @@ function cellActions(q,r){
     var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need2=guns+guard.n, L=defenderLine(q,r), band=attackBand(q,r);
     var bandWhy=function(n){ return !beside?'Needs one of your bands beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
     var whyTake=!band?'Needs one of your bands beside it':marches(ATTACK_COST);
-    var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'');
+    var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win'+(function(){ var n=soldiersFor70(L.p); return n==null?' &middot; 70% out of reach':(band.n>=n?' &middot; 70% needs '+n:' &middot; 70% needs '+n+' soldiers'); })():'');
     var take=function(){ spendMarch(q,r); };
     if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
     else if(c.k===CASTLE) A('Seize the fallen castle',price+' &middot; +'+CASTLE_BOUNTY+' marches',take,whyTake);
@@ -4227,7 +4227,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov1-b';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov1-c';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
