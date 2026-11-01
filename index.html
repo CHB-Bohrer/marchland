@@ -2044,6 +2044,19 @@ function battleOdds(attackers,line){
   expLoss+=lose*A; expKill+=win*n;
   return {win:win, lose:lose, expLoss:expLoss, expKill:expKill};
 }
+/* the fewest attackers whose chance of emptying the line beats 70% (null if even 400 would not) */
+function soldiersFor70(line){
+  var lo=1, hi=400;
+  if(battleOdds(hi,line).win<=0.7) return null;
+  while(lo<hi){ var mid=(lo+hi)>>1; if(battleOdds(mid,line).win>0.7) hi=mid; else lo=mid+1; }
+  return lo;
+}
+function need70Text(have,line){
+  var n=soldiersFor70(line);
+  if(n==null) return '<p>Even 400 soldiers would not give you a 70% chance here.</p>';
+  if(have>=n) return '<p>You already beat 70% (it takes <b>'+n+'</b> soldiers).</p>';
+  return '<p>To pass 70% you need <b>'+n+'</b> soldiers in the band (you have '+have+', so <b>'+(n-have)+' more</b>).</p>';
+}
 function mulberry32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; var t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function newSeed(){ try{ return crypto.getRandomValues(new Uint32Array(1))[0]; }catch(e){ return Math.floor(Math.random()*4294967296); } }
 /* the fight itself: the same order of duels battleOdds counts. log: 1 a defender fell, 0 an attacker fell */
@@ -2106,6 +2119,7 @@ function attackPrompt(q,r,note){
     +'<p>Your band of <b>'+band.n+'</b> beside it faces, front to back: <b>'+lineText(L.units)+'</b>.</p>'
     +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p>'
     +'<p>Soldiers you can expect to lose: <b>'+(Math.round(o.expLoss*10)/10)+'</b> of '+band.n+'.</p>'
+    +need70Text(band.n,L.p)
     +(L.towers?'<p><i>'+(L.towers>1?L.towers+' of their towers reach':'One of their towers reaches')+' this square and make'+(L.towers>1?'':'s')+' every duel harder (&minus;'+Math.round(L.pen*100)+'%).</i></p>':'')
     +(hasGoods(sp)?'<p>If you win you carry off '+(loserN>1?'1/'+loserN+' of what':'all that')+' '+who+' has banked: about <b>'+goodsText(sp)+'</b>.</p>':'')
     +(ruin?'<p>Seizing the ruin pays <b>'+CASTLE_BOUNTY+' marches</b>.</p>':'')
@@ -6031,7 +6045,7 @@ function strikePrompt(id,q,r){
   var tr=treasury(c);
   scrollDialog({eyebrow:'Crusade strike', title:'Strike '+esc(nameOf(c.target))+'&rsquo;s square?',
     html:'<p>The pool of <b>'+tot+'</b> faces <b>'+lineText(L.units)+'</b>.</p>'
-      +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p><p>Expected losses: <b>'+(Math.round(o.expLoss*10)/10)+'</b>, shared in proportion.</p>'
+      +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p><p>Expected losses: <b>'+(Math.round(o.expLoss*10)/10)+'</b>, shared in proportion.</p>'+need70Text(tot,L.p)
       +'<table class="sc-table"><tr><th>Member</th><th>Soldiers</th></tr>'+Object.keys(w).sort().map(function(p){ return '<tr><td>'+esc(nameOf(p))+'</td><td>'+w[p]+'</td></tr>'; }).join('')+'</table>'
       +'<p><i>'+ATTACK_COST+' marches: '+Math.min(tr,ATTACK_COST)+' from the treasury'+(tr<ATTACK_COST?', '+(ATTACK_COST-tr)+' from you':'')+'.</i></p>',
     cancel:false, buttons:[{label:'Hold back',value:false},{label:'Strike &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){ if(res.value) strikeNow(id,q,r,pool,L.p); });
