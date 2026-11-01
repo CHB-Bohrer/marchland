@@ -2123,7 +2123,7 @@ function attackPrompt(q,r,note){
     +(L.towers?'<p><i>'+(L.towers>1?L.towers+' of their towers reach':'One of their towers reaches')+' this square and make'+(L.towers>1?'':'s')+' every duel harder (&minus;'+Math.round(L.pen*100)+'%).</i></p>':'')
     +(hasGoods(sp)?'<p>If you win you carry off '+(loserN>1?'1/'+loserN+' of what':'all that')+' '+who+' has banked: about <b>'+goodsText(sp)+'</b>.</p>':'')
     +(ruin?'<p>Seizing the ruin pays <b>'+CASTLE_BOUNTY+' marches</b>.</p>':'')
-    +'<p><i>Costs '+ATTACK_COST+' marches, win or lose. Defenders you bring down stay down even if you fail.</i></p>';
+    +'<p><i>Costs '+ATTACK_COST+' marches, win or lose. Defenders you bring down stay down even if you fail.</i></p><p class="muted" style="font-size:11px">page version '+BUILD+'</p>';
   scrollDialog({eyebrow:'Battle', title:'Attack '+who+'&rsquo;s '+what+'?', html:html, cancel:false,
     buttons:[{label:'Hold back',value:false},{label:'Attack &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){
     if(res.value) attackNow(q,r,band,L.p);
@@ -4227,6 +4227,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
+var BUILD='nov1-b';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
