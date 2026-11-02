@@ -5933,8 +5933,7 @@ function readLetter(id){
   scrollDialog({eyebrow:'A letter', title:'From '+esc(nameOf(l.from)),
     html:'<div class="seal" aria-hidden="true">M</div><p class="sc-sub">Sent '+new Date(l.t).toLocaleString()+', arrived '+new Date(l.eta).toLocaleString()+'</p>'
       +'<p class="letter-text">'+esc(l.text||'')+'</p>',
-    cancel:null, buttons:[{label:'Close',value:null},{label:'Delete',value:'del'},{label:'Reply',value:'reply',primary:true}]}).then(function(res){
-    if(res.value==='reply'){ if(G.players[l.from]) openCaravanOnMap(l.from); else nope('They are no longer on the board.'); }
+    cancel:null, buttons:[{label:'Delete',value:'del'},{label:'Close',value:null,primary:true}]}).then(function(res){
     if(res.value==='del'){ delete letters.list[id]; if(me().lids) delete me().lids[id]; dbPut(letterPath(ME,id),null).catch(function(){}); dbPut('/marchland/'+gameCode+'/players/'+ME+'/lids/'+id,null).catch(function(){}); renderLetterBtn(); say('The letter is burned.'); }
   });
 }
