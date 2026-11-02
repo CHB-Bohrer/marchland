@@ -284,6 +284,7 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .cr-row{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; padding:8px 12px; font-size:14px; border-bottom:1px solid var(--rule); }
 .cr-row:last-child{ border-bottom:0; }
 .cr-row button{ min-height:40px; }
+.cr-members{ flex:0 0 100%; font-size:13.5px; color:var(--ink-2); overflow-wrap:anywhere; }
 .cr-cross{ width:18px; height:18px; flex:0 0 auto; border:1px solid #8E1B1B; background:linear-gradient(#8E1B1B,#8E1B1B) center/4px 100% no-repeat,linear-gradient(#8E1B1B,#8E1B1B) 50% 38%/100% 4px no-repeat,#F7EBC0; }
 .seal{ float:right; width:48px; height:48px; border-radius:50%; margin:0 0 6px 12px; background:radial-gradient(circle at 35% 30%,#D9564A,#9E1F17 60%,#6E120D); color:#F6D7C8; font:700 22px/48px var(--fell); text-align:center; box-shadow:0 2px 5px rgba(0,0,0,.4); }
 .letter-text{ white-space:pre-wrap; overflow-wrap:anywhere; font-size:19px; line-height:1.5; clear:both; }
@@ -6248,7 +6249,10 @@ function renderCrusades(){
     var c=x.c, n=Object.keys(c.members||{}).length, isM=!!(c.members||{})[ME], btn='';
     if(c.target!==ME && !mine) btn+='<button type="button" data-cr="join" data-id="'+x.id+'">Take the cross</button>';
     if(isM) btn+='<button type="button" data-cr="pay" data-id="'+x.id+'">Pay in</button><button type="button" class="go" data-cr="strike" data-id="'+x.id+'">Strike</button>';
-    return '<div class="cr-row"><span class="cr-cross" aria-hidden="true"></span><span><b>Crusade against '+esc(nameOf(c.target))+(c.target===ME?' (you)':'')+'</b> &middot; '+hoursLeft(c.end)+' left &middot; treasury '+treasury(c)+' &middot; '+n+' crusader'+(n>1?'s':'')+'</span><span class="spacer"></span>'+btn+'</div>';
+    var mem=Object.keys(c.members||{}).sort(function(a,b){ return (a===c.by?-1:0)-(b===c.by?-1:0) || (c.members[a]||0)-(c.members[b]||0); })
+      .map(function(p){ return esc(nameOf(p))+(p===ME?' (you)':'')+(p===c.by?' <i>(proclaimed it)</i>':''); }).join(', ');
+    return '<div class="cr-row"><span class="cr-cross" aria-hidden="true"></span><span><b>Crusade against '+esc(nameOf(c.target))+(c.target===ME?' (you)':'')+'</b> &middot; '+hoursLeft(c.end)+' left &middot; treasury '+treasury(c)+' &middot; '+n+' crusader'+(n>1?'s':'')+'</span><span class="spacer"></span>'+btn
+      +'<div class="cr-members"><b>Crusaders:</b> '+mem+'</div></div>';
   }).join('');
   var can=!mine && castlesOf(ME)>0 && !live.some(function(x){ return x.c.by===ME; });
   el.innerHTML=rows+(can?'<div class="cr-row"><span class="muted">'+(live.length?'':'November is the month of crusades. ')+'Any player with a castle may proclaim one against another player.</span><span class="spacer"></span><button type="button" data-cr="proclaim">Proclaim a crusade</button></div>':'');
