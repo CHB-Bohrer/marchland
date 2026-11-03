@@ -166,7 +166,7 @@ footer a:hover{ color:var(--ink); }
     <dt>Marches earned</dt><dd>5 × √km, where 1,350 steps ≈ 1 km</dd>
     <dt>Claiming</dt><dd>Once a day, for that day&rsquo;s steps from the Health app, up to 30,000; unclaimed days are lost; every claim is posted to the claim log</dd>
     <dt>Disputes</dt><dd>Anyone else can dispute a claim for 24 hours; the other players then vote for up to 24 hours more; nothing is frozen meanwhile</dd>
-    <dt>Voiding</dt><dd>Needs a majority of the other players who have logged in within the last 24 hours; anyone who hasn&rsquo;t doesn&rsquo;t count. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
+    <dt>Voiding</dt><dd>Needs more than half of the votes actually cast (at least 3 votes); players who don&rsquo;t vote don&rsquo;t count. A voided claim&rsquo;s marches come off the claimant&rsquo;s next claim</dd>
     <dt>Empty cell</dt><dd>1 march, if it touches a live road square of yours (a castle, a finished bridge, or a finished road joined to a castle)</dd>
     <dt>Occupied cell</dt><dd>2 marches, win or lose, and a band of yours on a live road square beside it. The band fights the defenders one duel at a time: each wall course (attacker wins 65%), guarding soldier (50%), covering castle gun (60%), tower unit (one per 5 health, 60%) and trebuchet (90%). Each defending tower in reach takes 5, 10 or 15 points off every duel, never below 10%. A scroll shows the exact odds first. Win, and you carry off 1/N of the loser&rsquo;s stores, N being their squares</dd>
     <dt>Moving a band</dt><dd>Free, over your own ground only: 1 hour a step between live road squares, 3 hours any other step, by the fastest way. Men on the march guard nothing until they arrive</dd>
@@ -1649,11 +1649,11 @@ scene({
 /* 10 ── claims and disputes */
 scene({
   tag:'Claims', title:'Every claim can be challenged',
-  body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For a full day anyone else may dispute it, and the other players then vote for up to a day more. Voiding needs a majority of the other players who have logged in within the last 24 hours; anyone who has been away does not count. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
+  body:'Each claim goes up on a public claim log, and its marches can be spent straight away. For a full day anyone else may dispute it, and the other players then vote for up to a day more. Voiding needs more than half of the votes actually cast, with at least three votes; players who do not vote do not count. Nothing is frozen in the meantime: a voided claim’s marches simply come off the claimant’s next claim. Attaching a Health screenshot when you claim settles most arguments before they start.',
   dur:30,
   init:function(){
     M=blank(); M.status=''; M.card=null; M.clock=null; M.dispute=null; M.votes={}; M.pips=[]; M.debt=null; M.next=null;
-    M.hud=[['Dispute window','24 hours'],['Vote','up to 24 hours more'],['To void','a majority of active players']];
+    M.hud=[['Dispute window','24 hours'],['Vote','up to 24 hours more'],['To void','a majority of votes cast']];
   },
   beats:[
     [0.6,function(n){

@@ -636,7 +636,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <div class="panel" id="claims-panel">
       <div class="claims-head">
         <h2>Claim log</h2>
-        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only players who have logged in within the last 24 hours count in that vote. If a majority of them void it, its marches come off the claimant&rsquo;s next claim.</span>
+        <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only the votes actually cast count (at least 3 are needed). If more than half of them say void when the vote closes, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
       <div class="log" id="claims-log"></div>
@@ -1776,12 +1776,12 @@ function untilMidnight(){
 /* ═══ claims ═══════════════════════════════════════════════════════════
    Every collection becomes a public claim. Its marches can be spent at once;
    for CHALLENGE_MS anyone else may dispute it, which opens a vote among the
-   players who were in the game when it was made. A strict majority of them
-   voids it — "them" meaning those who have logged in within the last 24 hours; otherwise it stands when everyone has voted or VOTE_MS runs out.
+   players who were in the game when it was made. When the vote closes (or every active player has voted), a strict
+   majority of the votes actually cast voids it (at least VOTE_MIN votes); non-voters do not count. Otherwise it stands.
    Nothing is frozen while that happens. A voided claim's marches are owed
    instead, and come off the claimant's next claim. The claimant's own tab
    books the debt, because only that tab ever writes its record. */
-var CHALLENGE_MS=24*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5, ACTIVE_MS=24*36e5;
+var CHALLENGE_MS=24*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5, ACTIVE_MS=24*36e5, VOTE_MIN=3;   // VOTE_MIN: fewest votes that can void a claim
 function claimState(c,now){
   now=now||Date.now();
   var votes=c.votes||{}, firstNo=Infinity;
@@ -1807,8 +1807,12 @@ function claimState(c,now){
   if(c.final){ out.s=c.final; return out; }
   if(!n){ out.s='stands'; return out; }
   if(!disputed){ out.s=(ok>=n||now>=close)?'stands':'open'; return out; }
-  if(no*2>n){ out.s='void'; return out; }
-  out.s=(ok*2>=n||no+ok>=n||now>=deadline)?'stands':'disputed';
+  /* the vote is decided when it closes (VOTE_MS after the first dispute), or as soon as every active player has voted:
+     a strict majority of the votes actually cast voids it, provided at least VOTE_MIN were cast. Players who did not vote
+     do not count either way. */
+  var cast=no+ok;
+  if(now<deadline && cast<n){ out.s='disputed'; return out; }
+  out.s=(cast>=VOTE_MIN && no*2>cast)?'void':'stands';
   return out;
 }
 function avail(){ var pl=me(); return pl?pl.squares:0; }
@@ -4230,7 +4234,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov2-b';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov2-c';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
