@@ -3089,7 +3089,6 @@ function cellActions(q,r){
       if(c.k!==CASTLE && !c.rd) A('Build a road',ROAD_MARCH+' march &middot; '+costLine(ROAD_COST)+' &middot; 24 h',function(){ buildRoad(q,r); },!touchesLive(q,r,ME)?'Must touch your ground':(marches(ROAD_MARCH)||lackText(ROAD_COST)));
       if(c.rd) A(roadUp(c)?'Dig up the unfinished road':'Dig up the road',refundLine(halfOf(spentOnRoad(c))),function(){ demolishRoad(q,r); });
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
-      if(c.k===CASTLE) A('Tear down the castle',isRuin(c)?'a ruin: nothing back':refundLine(demolishRefund(c,'castle',q,r)),function(){ tearDown(q,r,'castle'); });
     }
   }
   Object.keys(G.players).forEach(function(pid){
@@ -3344,7 +3343,7 @@ function demolishWhy(c,what){
   if(!c || c.o!==ME) return 'That is no longer yours to tear down.';
   if(what==='wall') return (c.w||0)>0?'':'There is no wall here any more.';
   if(what==='tower') return c.k===TOWER?'':'There is no tower here any more.';
-  if(what==='castle') return c.k===CASTLE?'':'There is no castle here any more.';
+  if(what==='castle') return 'A castle cannot be torn down.';
   if(what==='bridge') return groundAt(c.q,c.r)!==RIVER?'There is no bridge here.':(building(c)?'Wait until the bridge is finished.':'');
   return 'That can&rsquo;t be torn down.';
 }
@@ -4231,7 +4230,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov2-a';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov2-b';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -6324,7 +6323,7 @@ function enterGame(isNew){
 var NOTES=[
   {id:'nov26-scrolls', eyebrow:'New this November', title:'Menus on scrolls, and tearing down',
    html:'<p>Every menu and picker is now written on a scroll, with the price in the margin and the reason beneath anything you can&rsquo;t do yet.</p>'
-     +'<p>You can <b>tear down</b> your own walls, towers, castles and bridges from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
+     +'<p>You can <b>tear down</b> your own walls, towers and bridges (not castles) from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
   {id:'nov26-battles', eyebrow:'New this November', title:'Battles, towers and trebuchets',
    html:'<p>A battle is now a chain of duels, and a scroll shows your odds before you attack. Take a square and you carry off a share of its owner&rsquo;s stores.</p>'
      +'<p>Towers have health instead of garrisons (their men now stand outside), and mend for stone. <b>Trebuchets</b>, built at castles, hurl stones three squares.</p>'},
