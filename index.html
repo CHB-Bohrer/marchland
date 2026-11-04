@@ -2201,12 +2201,12 @@ function attackNow(q,r,band0,shown){
    A siege engine, easy to kill and fired only by hand. Built at a castle square of yours, it eats
    2 grain a tick wherever soldiers' grain is counted, and starves the way a soldier does. It walks
    with your bands over your own ground (or alone), at the same pace. Each one can throw a stone
-   once every 4 hours at an enemy wall, tower or castle within 3 squares: 5 stone a shot, exactly 2
+   once every 4 hours at an enemy wall, tower or castle within 3 squares: 1 stone a shot, exactly 2
    damage, never a miss (a wall course takes two hits to fall; partial damage is kept in wd). It
    never targets soldiers, bands, caravans, roads or bridges. On a square it is the last defender
    in the line and loses 90 per cent of duels, and taking its square destroys it. A square keeps
    the count in tb and, in tr, the moment each one can next fire; shots unused do not stack. */
-var TREB_COST={timber:240,iron:160,stone:120}, TREB_GRAIN=2, TREB_SHOT=5, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
+var TREB_COST={timber:240,iron:160,stone:120}, TREB_GRAIN=2, TREB_SHOT=1, TREB_DMG=2, TREB_RANGE=3, TREB_RELOAD=4*36e5;
 function arr(x){ if(Array.isArray(x)) return x.filter(function(v){ return v!=null; }); if(!x||typeof x!=='object') return []; return Object.keys(x).sort(function(a,b){ return a-b; }).map(function(k){ return x[k]; }); }   // (the database can hand an array back as an object)
 /* Tower upkeep: every finished tower costs its owner grain each tick, equal to its level (1, 2 or 3),
    as its old garrison once did. A tower needs no men, but its keepers still eat. */

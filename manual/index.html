@@ -175,7 +175,7 @@ footer a:hover{ color:var(--ink); }
     <dt>The map</dt><dd>120 × 120 cells, wrapping at every edge</dd>
     <dt>Wall</dt><dd>30 stone a course, three courses, on any of your dry squares, castles and towers included</dd>
     <dt>Tower</dt><dd>40 stone + 30 timber (an upgrade costs that times the new level). Health 10, 20, then 30; no garrison. Weakens attacks within 1, 2, then 3 cells. Mends 1 health a tick for 1 stone</dd>
-    <dt>Trebuchet</dt><dd>60 timber + 40 iron + 30 stone, at a castle; 2 grain a tick. Fired by hand at an enemy wall, tower or castle up to 3 cells away: 5 stone, exactly 2 damage, once every 4 hours. Two hits bring down a wall course. Moves with your bands</dd>
+    <dt>Trebuchet</dt><dd>60 timber + 40 iron + 30 stone, at a castle; 2 grain a tick. Fired by hand at an enemy wall, tower or castle up to 3 cells away: 1 stone, exactly 2 damage, once every 4 hours. Two hits bring down a wall course. Moves with your bands</dd>
     <dt>Road</dt><dd>1 march + 20 timber + 10 stone, a day to build, on your ground beside a live road square. Live only while joined to a standing castle. Break an enemy road for 1 march by beating the soldiers guarding it</dd>
     <dt>Tearing down</dt><dd>Your own works, at once, for no marches: half the cost back (15 stone a wall course; a fallen castle gives nothing)</dd>
     <dt>Joining</dt><dd>A new player needs a sponsor already playing, who writes how they know them (kept for good). Three strikes and a sponsor can sponsor no more</dd>
@@ -2380,7 +2380,7 @@ NARRATION.forEach(function(lines,i){ if(SCENES[i]) SCENES[i].narr=lines; });
       M.h=10; M.shots=[]; M.hud=[['Their tower','health 10 of 10']]; },
     beats:[
       [0.6,function(){ M.note='A level I tower: 10 health, two units in a fight, and nobody inside.'; }],
-      [3.0,function(n){ M.shots.push(n); M.note='A trebuchet at your castle throws a stone three squares away: 5 stone a shot, exactly 2 damage.'; }],
+      [3.0,function(n){ M.shots.push(n); M.note='A trebuchet at your castle throws a stone three squares away: 1 stone a shot, exactly 2 damage.'; }],
       [4.4,function(){ M.h=8; M.hud=[['Their tower','health 8 of 10']]; }],
       [6.0,function(n){ M.shots.push(n); }], [7.4,function(){ M.h=6; M.hud=[['Their tower','health 6 of 10']]; M.note='Each trebuchet throws once every 4 hours. Shots you skip don\'t stack.'; }],
       [9.0,function(n){ M.shots.push(n); }], [10.4,function(){ M.h=4; M.hud=[['Their tower','health 4 of 10']]; }],
