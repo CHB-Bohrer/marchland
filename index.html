@@ -290,6 +290,8 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .letter-text{ white-space:pre-wrap; overflow-wrap:anywhere; font-size:19px; line-height:1.5; clear:both; }
 .cv-letter textarea{ font-family:var(--body); font-size:16px; width:min(420px,80vw); color:var(--ink); background:var(--paper); border:1px solid var(--rule); border-radius:2px; padding:7px 9px; }
 #sp-btn .chat-badge,#lt-btn .chat-badge{ margin-left:4px; }
+#undo-pill{ position:fixed; left:50%; bottom:calc(14px + env(safe-area-inset-bottom,0px)); transform:translateX(-50%); z-index:9000; padding:10px 16px; border-radius:20px; background:var(--ink); color:var(--surface); border-color:var(--ink); box-shadow:0 3px 14px rgba(0,0,0,.35); font-size:14px; }
+#undo-pill .muted{ color:inherit; opacity:.7; font-size:12px; }
 .linkish{ border:0; background:none; padding:0; font:inherit; color:inherit; text-decoration:underline dotted; text-underline-offset:3px; cursor:pointer; min-height:0; }
 .sc-table th{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--parch-ink-2); }
 .caravan.onmap{ position:absolute; z-index:6; left:8px; right:8px; bottom:8px; max-height:80%; overflow:auto; border:1px solid var(--ink); border-radius:3px; background:var(--surface); box-shadow:0 4px 16px rgba(0,0,0,.3); }
@@ -745,6 +747,17 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: the undo button is coming (shown once per player, see showUndoNote) ── -->
+<div id="undonote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="undonote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">News for the realm</p>
+    <h2 id="undonote-h">&#8630; Fumbled a move? Take it back</h2>
+    <p><b>An undo button is coming to Marchland.</b> After a move that spends something, a small <b>Undo</b> button appears at the bottom of the screen for 5 minutes. Press it and the move is taken back and what it cost is given to you again.</p>
+    <p>It works on taking free ground, towers and castles, upgrades, walls, bridges, roads, trebuchets, mustering a soldier, and a caravan that is still on the road. It cannot take back fights, shots, tearing things down, gifts, moving soldiers or claiming steps, and it will not work if anyone else has touched those squares in the meantime. It forgets if you reload the page.</p>
+    <button type="button" class="rulesnote-go" id="undonote-go">Good news</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the hidden names and real names (shown once per player, see showShadowNote) ── -->
 <div id="shadownote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="shadownote-h">
   <div class="rulesnote-card">
@@ -792,6 +805,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </section>
 
+<button type="button" id="undo-pill" class="hide" aria-live="polite"></button>
 <script>
 (function(){
 "use strict";
@@ -1236,6 +1250,111 @@ function settlePurge(){
   purgeChat('The fires have died. The land of the hidden names is gone and the ground is free to take.',now);
   if(mineOut) showEliminated();
   return true;
+}
+/* ── undo the last move ──
+   For a slip of the thumb. The last move that spent something (taking free ground, a tower or castle, an upgrade, a
+   wall, a bridge, a road, a trebuchet, a mustered soldier, or a caravan that has not yet arrived) can be taken back for
+   UNDO_MS. Fights, firing, tearing down, gifts, moving soldiers and claiming steps cannot: they involve dice, other
+   players, or something that cannot be put back. Undo refunds exactly what the move cost (marches and goods), puts the
+   squares back the way they were, and takes the move out of the replay feed. It refuses if anyone has touched
+   those squares since (each is checked against the database), if the wagon has arrived, or if time has run out.
+   It lives in this tab only: reload the page and the chance is gone. */
+var UNDO=null, UNDO_MS=5*60000, lastMoveEv=null, undoTimer=0;
+function undoCanon(v,top){
+  if(v==null) return null;
+  if(Array.isArray(v)){ var a=v.map(function(x){ return undoCanon(x); }); return a.length?a:null; }
+  if(typeof v==='object'){
+    var o={}, ks=Object.keys(v).sort();
+    ks.forEach(function(k){ if(top&&(k==='q'||k==='r'||k==='t')) return; var x=undoCanon(v[k]); if(x!=null) o[k]=x; });
+    return Object.keys(o).length?o:null;
+  }
+  return v;
+}
+function undoStr(c){ var x=undoCanon(c,true); return x==null?null:JSON.stringify(x); }
+/* before a move: my squares, plus any named ones, as they stand now */
+function undoSnap(keys){
+  var pl=me(), cells={}, res={};
+  if(!G||!pl) return null;
+  for(var k in G.cells){ var c=G.cells[k]; if(c && c.o===ME) cells[k]=undoStr(c); }
+  (keys||[]).forEach(function(k){ if(!(k in cells)) cells[k]=undoStr(G.cells[k]); });
+  GOODS.forEach(function(g){ res[g]=pl.res[g]||0; });
+  return {cells:cells,res:res,sq:pl.squares||0,ev:lastMoveEv};
+}
+/* after a move: work out what it changed and cost, and keep it as the one thing that can be undone */
+function undoCommit(label,snap,extra){
+  var pl=me(); if(!snap||!G||!pl) return;
+  var changed={}, cost={}, any=false;
+  var all={}; Object.keys(snap.cells).forEach(function(k){ all[k]=1; });
+  for(var k in G.cells){ if(G.cells[k] && G.cells[k].o===ME) all[k]=1; }
+  Object.keys(all).forEach(function(k){
+    var b=(k in snap.cells)?snap.cells[k]:null, a=undoStr(G.cells[k]);
+    if(a!==b) changed[k]={b:b,a:a};
+  });
+  GOODS.forEach(function(g){ var d=snap.res[g]-(pl.res[g]||0); if(d>0.0001){ cost[g]=d; any=true; } });
+  var sq=snap.sq-(pl.squares||0); if(sq>0) any=true; else sq=0;
+  var ev=(lastMoveEv && lastMoveEv!==snap.ev)?lastMoveEv:null;
+  if(!ev || (!Object.keys(changed).length && !(extra&&extra.cv))) return;   // nothing happened (the move was refused, or only opened a menu)
+  UNDO={me:ME,label:label,t:Date.now(),cells:changed,cost:cost,sq:sq,ev:ev,cv:(extra&&extra.cv)||null,to:(extra&&extra.to)||null,lt:(extra&&extra.lt)||0,busy:false};
+  undoShow();
+}
+function undoWrap(label,q,r,fn){
+  var snap=undoSnap([key(q,r)]), out=fn();
+  undoCommit(label,snap);
+  return out;
+}
+function spendMarch(q,r){ return undoWrap('Cell taken',q,r,function(){ return spendMarch0(q,r); }); }
+function buildTreb(q,r){ return undoWrap('Trebuchet built',q,r,function(){ return buildTreb0(q,r); }); }
+function buildRoad(q,r){ return undoWrap('Road started',q,r,function(){ return buildRoad0(q,r); }); }
+function bridge(q,r){ return undoWrap('Bridge started',q,r,function(){ return bridge0(q,r); }); }
+function build(q,r,kind){ return undoWrap(kind===CASTLE?'Castle founded':'Tower raised',q,r,function(){ return build0(q,r,kind); }); }
+function upgrade(q,r){ return undoWrap('Upgrade',q,r,function(){ return upgrade0(q,r); }); }
+function wall(q,r){ return undoWrap('Wall built',q,r,function(){ return wall0(q,r); }); }
+function muster(q,r){ return undoWrap('Soldier mustered',q,r,function(){ return muster0(q,r); }); }
+function undoClear(){ UNDO=null; undoShow(); }
+function undoShow(){
+  var b=document.getElementById('undo-pill'); if(!b) return;
+  clearTimeout(undoTimer);
+  if(!UNDO || !me() || UNDO.me!==ME || Date.now()-UNDO.t>UNDO_MS){ UNDO=null; b.classList.add('hide'); return; }
+  b.classList.remove('hide'); b.disabled=!!UNDO.busy;
+  b.innerHTML='&#8630; Undo <span class="muted">'+esc(UNDO.label)+'</span>';
+  undoTimer=setTimeout(undoShow,Math.max(500,UNDO_MS-(Date.now()-UNDO.t)+50));
+}
+function doUndo(){
+  var U=UNDO, pl=me(); if(!U||!pl||U.busy||!G) return;
+  if(Date.now()-U.t>UNDO_MS){ undoClear(); return nope('Too late to undo that &mdash; the chance lasts '+Math.round(UNDO_MS/60000)+' minutes.'); }
+  U.busy=true; undoShow();
+  function refuse(why){ if(UNDO===U) UNDO=null; undoShow(); nope(why); }
+  var keys=Object.keys(U.cells);
+  var checks=keys.map(function(k){ var pp=k.split('_'); return cellFresh(parseInt(pp[0],10),parseInt(pp[1],10)).then(function(f){ return {k:k,f:f}; }); });
+  var cvP=!U.cv?Promise.resolve(true):(online
+    ? dbGet('/marchland/'+gameCode+'/caravans/'+U.cv).then(function(c){ return !!(c && !c.got && c.eta>Date.now()); })
+    : Promise.resolve(!!(G.caravans&&G.caravans[U.cv]&&G.caravans[U.cv].eta>Date.now())));
+  Promise.all([Promise.all(checks),cvP]).then(function(res){
+    var bad=res[0].filter(function(x){ return undoStr(x.f.c)!==U.cells[x.k].a; });
+    if(bad.length) return refuse('<span class="bad">Can&rsquo;t undo that now</span> &mdash; the ground has changed since (someone has touched it, or time has moved it on).');
+    if(!res[1]) return refuse('<span class="bad">Can&rsquo;t undo that now</span> &mdash; the wagon has already arrived.');
+    var puts=res[0].map(function(x){
+      var pp=x.k.split('_'), b=U.cells[x.k].b, val=b===null?null:JSON.parse(b), q=parseInt(pp[0],10), r=parseInt(pp[1],10);
+      if(val===null) delete G.cells[x.k]; else G.cells[x.k]=val;
+      return cellPutIf(q,r,val,x.f.tag);
+    });
+    return Promise.all(puts).then(function(oks){
+      cellsGen++;
+      if(oks.some(function(o){ return !o; })) return refuse('<span class="bad">Only part of it could be undone</span> &mdash; someone changed one of the squares at the same moment. Check the map.');
+      GOODS.forEach(function(g){ if(U.cost[g]) pl.res[g]=(pl.res[g]||0)+U.cost[g]; });
+      pl.squares=(pl.squares||0)+(U.sq||0);
+      if(U.ev){ if(G.events) delete G.events[U.ev]; putPath('/events/'+U.ev,null); }
+      if(U.cv){
+        if(G.caravans) delete G.caravans[U.cv];
+        putPath('/caravans/'+U.cv,null);
+        if(U.lt && online && U.to){ dbPut(letterPath(U.to,U.cv),null).catch(function(){}); dbPut('/marchland/'+gameCode+'/players/'+U.to+'/lids/'+U.cv,null).catch(function(){}); }
+      }
+      pushMe();
+      var done=U.label; UNDO=null; undoShow();
+      render(); draw();
+      say('<b>Undone:</b> '+esc(done.toLowerCase())+'. What it cost has been given back.');
+    });
+  }).catch(function(){ if(UNDO===U){ U.busy=false; undoShow(); } nope('Could not reach the board to undo that. Try again in a moment.'); });
 }
 /* ── the plague of Mario's land ──
    The gods send a plague on Mario's land for 2 days: every square he holds gives only half its harvest while it lasts.
@@ -2035,7 +2154,7 @@ function vote(id,v){
   else say('Vote recorded. You can change it until the vote closes.');
 }
 
-function spendMarch(q,r){
+function spendMarch0(q,r){
   var pl=me(); if(!pl) return;
   settleCastles();                                   // bring every castle's health up to date before judging this move
   var c=cellOf(q,r);
@@ -2288,7 +2407,7 @@ function trebsOf(pid){
 }
 function trebReady(c,now){ now=now||Date.now(); var tr=arr(c.tr), n=0; for(var i=0;i<(c.tb||0);i++) if(!(tr[i]>now)) n++; return n; }
 function trebNext(c){ var tr=arr(c.tr).slice(0,c.tb||0).filter(function(t){ return t>Date.now(); }).sort(function(a,b){ return a-b; }); return tr[0]||0; }
-function buildTreb(q,r){
+function buildTreb0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!(c.o===ME && c.k===CASTLE)) return nope('Trebuchets are built at your castles.');
   if(isRuin(c)) return nope('That castle has fallen &mdash; nothing is built at a ruin.');
@@ -2505,7 +2624,7 @@ function roadWhy(q,r){
   var n=hintRoads(q,r);
   return n ? ' A <b>road</b> on one of the squares lit up beside it would do it (tap one and choose <b>Build a road</b>).' : ' Claim ground up to it first, then build a road there.';
 }
-function buildRoad(q,r){
+function buildRoad0(q,r){
   var pl=me(), c=cellOf(q,r), k;
   if(c.o!==ME) return nope('Roads go on ground you hold.');
   if(c.t===RIVER) return nope('A river needs a bridge, not a road &mdash; and a finished bridge already counts as road.');
@@ -2693,7 +2812,7 @@ function roadSeg(x0,y0,x1,y1,lw,alpha,up,thin){
 /* Crossing a river takes a bridge: a march and some materials to start, and a
    full day before anything can cross. Once finished it is ordinary ground —
    borders and supply run over it, and someone else can take it for two. */
-function bridge(q,r){
+function bridge0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.t!==RIVER) return nope('Bridges go on river cells. Pick a river cell touching your ground.');
   if(c.o===ME) return nope(building(c) ? 'Your bridge here is finished in <b>'+hoursLeft(c.f)+'</b>.' : 'You already have a bridge here.');
@@ -2739,7 +2858,7 @@ function castleCost(pid){
   var n=Math.max(1,myCastleCells(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 …
   return {timber:260*n, stone:200*n, iron:60*n};
 }
-function build(q,r,kind){
+function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k) return nope('Something already stands here.');
@@ -2784,7 +2903,7 @@ function lock(id,off){
   if(off) b.setAttribute('aria-disabled','true'); else b.removeAttribute('aria-disabled');
 }
 function locked(b){ return b && b.getAttribute('aria-disabled')==='true'; }
-function upgrade(q,r){
+function upgrade0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME||!c.k) return nope('Click one of your own towers or castles.');
   if(isRuin(c)) return nope('That castle has fallen &mdash; it cannot be upgraded until a connected farm brings its health back.');
@@ -2805,7 +2924,7 @@ function upgrade(q,r){
   say(c.k===TOWER ? 'Upgraded to <b>level '+ROMAN[lvl]+'</b> — health '+towerH(c)+' of '+towerMax(lvl)+', and attacks within '+SPEC[TOWER].range[lvl]+' squares are harder by '+Math.round(TOWER_PENALTY[lvl]*100)+'%.'
     : 'Upgraded to <b>level '+ROMAN[lvl]+'</b> — range '+SPEC[c.k].range[lvl]+', volley '+SPEC[c.k].volley[lvl]+', '+c.g+' men locked inside.');
 }
-function wall(q,r){
+function wall0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Walls go on ground you hold.');
   if(c.t===RIVER) return nope('Walls can&rsquo;t stand on a river, not even on a bridge.');
@@ -2817,7 +2936,7 @@ function wall(q,r){
   render(); pushCell(q,r); pushMe();
   say('Wall at level <b>'+ROMAN[c.w]+'</b>'+(c.k?' around your '+(c.k===CASTLE?'castle':'tower'):'')+' — costs an attacker '+c.w+' soldier'+(c.w>1?'s':'')+' to break.');
 }
-function muster(q,r){
+function muster0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!(c.o===ME&&c.k===CASTLE)) return nope('Soldiers muster at your castles.');
   if(isRuin(c)) return nope('That castle has fallen &mdash; nobody musters at a ruin. Reconnecting a farm will heal it, or muster at another castle.');
@@ -4404,7 +4523,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov5-plague';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov5-undo';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -4481,7 +4600,7 @@ function logMove(k,q,r,from,prev,loss,extra){
   if(prev) ev.prev=prev;
   if(loss) ev.loss=loss;
   if(extra) for(var x in extra) if(extra[x]!=null) ev[x]=extra[x];
-  G.events=G.events||{}; G.events[id]=ev; seenEv[id]=1;
+  G.events=G.events||{}; G.events[id]=ev; seenEv[id]=1; lastMoveEv=id;
   me().evSeen=Math.max(me().evSeen||0,t);
   putPath('/events/'+id,ev);
   play(ev);
@@ -5676,6 +5795,7 @@ document.getElementById('st-strikes').addEventListener('click',function(){ if(is
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
+document.getElementById('undo-pill').addEventListener('click',doUndo);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
 function castleOf(pid){                                // the castle of theirs nearest the view (or their keep if none stands)
   var best=null, bd=Infinity, p=G.players[pid];
@@ -6562,7 +6682,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','plaguenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -6656,7 +6776,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','plaguenote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','undonote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -6685,7 +6805,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -6714,7 +6834,7 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -6744,15 +6864,44 @@ function closePlagueNote(){
 function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
 function showPlagueNote(){
   var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',plagueNoteKey,true);
   var b=document.getElementById('plaguenote-go'); b.onclick=closePlagueNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: the undo button. Shown once per player, never stacked on another notice. */
+var UNDO_NOTE_ID='undo1';
+function undoSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[UNDO_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+UNDO_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markUndoSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[UNDO_NOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+UNDO_NOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeUndoNote(){
+  var n=document.getElementById('undonote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',undoNoteKey,true);
+  markUndoSeen();
+  setTimeout(showNext,250);
+}
+function undoNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeUndoNote(); } }
+function showUndoNote(){
+  var n=document.getElementById('undonote'); if(!n||!G||!me()||undoSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',undoNoteKey,true);
+  var b=document.getElementById('undonote-go'); b.onclick=closeUndoNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showUndoNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
@@ -6973,6 +7122,7 @@ function sendCaravan(){
     },function(e){ nope('<span class="bad">Letters can&rsquo;t be sent yet</span> &mdash; the database refused it while '+step+' ('+esc(String((e&&e.message)||e))+'). The wagon has not left.',btn); });
   }
   if(sendCaravan.letterOk){ id=sendCaravan.letterOk.id; now=sendCaravan.letterOk.t; sendCaravan.letterOk=null; }
+  var uSnap=undoSnap([]);
   GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
   var c={from:ME, to:to, g:g, t:now, eta:now+cvTravel(ME,to), fq:pl.q, fr:pl.r, tq:them.q, tr:them.r};
   if(txt) c.lt=1;
@@ -6981,6 +7131,7 @@ function sendCaravan(){
   GOODS.forEach(function(k){ document.getElementById('cv-'+k).value=''; });
   pushMe().then(function(){ return putPath('/caravans/'+id,c); });
   logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g, lt:txt?1:null});
+  undoCommit('Caravan sent',uSnap,{cv:id,to:to,lt:txt?1:0});
   render();
   say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+(any?goodsLine(g):'')+(any&&txt?' and ':'')+(txt?'a sealed letter':'')+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
