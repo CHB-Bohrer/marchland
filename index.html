@@ -2262,49 +2262,66 @@ function fireMenu(q,r){
     html:'<p>A stone does exactly '+TREB_DMG+' damage and never misses. A wall course falls after two hits. Each shot costs '+TREB_SHOT+' stone.</p>',
     list:list.map(function(t){ return {label:t.label,cost:t.cost,why:why,value:t}; }), cancel:null,
     buttons:[{label:'Not now',value:null}]}).then(function(res){
-    var t=res.value; if(t && t.what) fireNow(q,r,t.q,t.r,t.what);
+    var t=res.value; if(!t || !t.what) return;
+    // several ready on this square: they may all be loosed at once at the same target (or only some of them)
+    var max=Math.min(ready,Math.floor((pl.res.stone||0)/TREB_SHOT));
+    if(max<2){ fireNow(q,r,t.q,t.r,t.what,1); return; }
+    var opts=[{label:'All '+max+' at once',cost:(max*TREB_SHOT)+' stone &middot; '+(max*TREB_DMG)+' damage',why:'',value:max}];
+    for(var i=max-1;i>=1;i--) opts.push({label:i+(i===1?' trebuchet':' trebuchets'),cost:(i*TREB_SHOT)+' stone &middot; '+(i*TREB_DMG)+' damage',why:'',value:i});
+    scrollDialog({eyebrow:'Trebuchets &middot; '+ready+' ready here', title:'How many fire?',
+      html:'<p>Every trebuchet you loose throws one stone at the same target, '+TREB_DMG+' damage each, and then reloads for 4 hours. Any left over once the target falls are kept ready.</p>',
+      list:opts, cancel:null, buttons:[{label:'Not now',value:null}]}).then(function(r2){
+      if(r2.value) fireNow(q,r,t.q,t.r,t.what,r2.value);
+    });
   });
 }
 var firing=false;
-function fireNow(q,r,tq,tr,what){
+function fireNow(q,r,tq,tr,what,n){
   var pl=me(), tk=key(tq,tr), before=G.cells[tk]?JSON.parse(JSON.stringify(G.cells[tk])):null;
   if(firing) return;
-  var sc=cellOf(q,r);
-  if(!(sc.o===ME && trebReady(sc)>0)) return nope('No trebuchet on that square is ready.');
+  var sc=cellOf(q,r), rdy=trebReady(sc);
+  if(!(sc.o===ME && rdy>0)) return nope('No trebuchet on that square is ready.');
   if(hexDist(q,r,tq,tr)>TREB_RANGE) return nope('Too far &mdash; a trebuchet reaches '+TREB_RANGE+' squares.');
   if((pl.res.stone||0)<TREB_SHOT) return nope('A shot costs '+TREB_SHOT+' stone. '+shortBy({stone:TREB_SHOT}));
-  firing=true; say('Loading the sling&hellip;');
+  n=Math.max(1,Math.min(n||1,rdy,Math.floor((pl.res.stone||0)/TREB_SHOT)));   // never more than are ready or than the stone pays for
+  firing=true; say('Loading the sling'+(n>1?'s':'')+'&hellip;');
   cellFresh(tq,tr).then(function(f){
     if(f.c) G.cells[tk]=f.c; else delete G.cells[tk];
-    var c=cellOf(tq,tr), prev=c.o, out='', collapsed=false, fell=false;
+    var c=cellOf(tq,tr), prev=c.o, out='', collapsed=false, fell=false, used=0;      // used: how many of the n stones were needed (the rest stay ready)
     if(!prev||prev===ME) throw {msg:'That square is no longer an enemy&rsquo;s.'};
     if(what==='wall'){
       if(!(c.w>0)) throw {msg:'That wall has already fallen.'};
-      c.wd=(c.wd||0)+1;
-      if(c.wd>=2){ c.w-=1; delete c.wd; out=c.w?'A course falls: wall '+ROMAN[c.w]+' left':'The last course falls'; } else out='The wall cracks: one more hit brings a course down';
+      var courses=0; c.wd=c.wd||0;
+      while(used<n && c.w>0){ used++; c.wd++; if(c.wd>=2){ c.w-=1; c.wd=0; courses++; } }    // two hits bring a course down
+      if(!c.wd) delete c.wd;
+      out=!courses ? 'The wall cracks: one more hit brings a course down'
+        : (c.w ? courses+(courses>1?' courses fall':' course falls')+': wall '+ROMAN[c.w]+' left'+(c.wd?', and the next is cracked':'') : 'The last course falls');
     } else if(what==='tower'){
       if(c.k!==TOWER) throw {msg:'That tower is gone.'};
-      var h=towerH(c)-TREB_DMG;
+      used=Math.min(n,Math.ceil(towerH(c)/TREB_DMG));
+      var h=towerH(c)-used*TREB_DMG;
       if(h<=0){ collapsed=true; c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; if(c.cs) delete c.cs.k; out='The tower collapses'; }
       else { c.h=h; out='Tower health '+h+' of '+towerMax(c.l); }
     } else if(what==='castle'){
       if(c.k!==CASTLE||isRuin(c)) throw {msg:'That castle has already fallen.'};
-      var ch=Math.max(0,castleH(c)-TREB_DMG); c.h=ch; if(c.ht==null) c.ht=Date.now();
+      used=Math.min(n,Math.ceil(castleH(c)/TREB_DMG));
+      var ch=Math.max(0,castleH(c)-used*TREB_DMG); c.h=ch; if(c.ht==null) c.ht=Date.now();
       if(ch<=0){ fell=true; c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; out='The castle falls: it is a ruin now'; }   // the garrison walks out, as when it starves
       else out='Castle health '+ch+' of '+CASTLE_MAX_H;
     } else throw {msg:'A trebuchet only aims at walls, towers and castles.'};
+    used=Math.max(1,used);
     writeCell(tq,tr,c);
     return cellPutIf(tq,tr,G.cells[tk]||null,f.tag).then(function(okw){
       if(!okw){ if(before) G.cells[tk]=before; else delete G.cells[tk]; throw {msg:'The target changed as you loosed. Nothing was thrown &mdash; try again.'}; }
-      var s2=cellOf(q,r), trs=arr(s2.tr).slice(0,s2.tb||0), now=Date.now();
+      var s2=cellOf(q,r), trs=arr(s2.tr).slice(0,s2.tb||0), now=Date.now(), left=used;
       while(trs.length<(s2.tb||0)) trs.push(0);
-      for(var i=0;i<trs.length;i++) if(!(trs[i]>now)){ trs[i]=now+TREB_RELOAD; break; }   // that one reloads for 4 hours
+      for(var i=0;i<trs.length&&left>0;i++) if(!(trs[i]>now)){ trs[i]=now+TREB_RELOAD; left--; }   // each one thrown reloads for 4 hours
       s2.tr=trs; writeCell(q,r,s2); pushCell(q,r);
-      pl.res.stone-=TREB_SHOT;
-      logMove('fire',tq,tr,[q,r],prev,0,{v:2,tg:what,label:collapsed?'Collapsed':fell?'Fallen':'−'+TREB_DMG,out:out});
+      pl.res.stone-=used*TREB_SHOT;
+      logMove('fire',tq,tr,[q,r],prev,0,{v:2,tg:what,label:collapsed?'Collapsed':fell?'Fallen':'−'+(used*TREB_DMG),out:out});
       if(collapsed) logMove('collapse',tq,tr,null,prev,0,{v:2,by:'fire'});
       render(); pushMe();
-      say('<b>Loosed.</b> '+out+'. '+(trebReady(s2)?trebReady(s2)+' more ready here.':'This trebuchet reloads for 4 hours.'));
+      say('<b>Loosed'+(used>1?' '+used+' at once':'')+'.</b> '+out+'. '+(trebReady(s2)?trebReady(s2)+' more ready here.':(used>1?'These trebuchets reload':'This trebuchet reloads')+' for 4 hours.'));
     });
   }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing was thrown.'); })
     .then(function(){ firing=false; });
