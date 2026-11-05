@@ -2636,6 +2636,23 @@ function myCastleCells(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&c.k===CASTLE&&!isRuin(c)){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }   // a fallen castle no longer counts
   return out;
 }
+/* A new castle needs a direct line to another of its owner's castles: from the site, one of the six straight
+   directions runs over unbroken, finished ground of the owner's until it meets one of that owner's standing
+   castles. (A player with no castle standing has nothing to line up with, so is exempt.) */
+function castleLinked(q,r,pid){
+  if(!myCastleCells(pid).length) return true;
+  q=wrapC(q); r=wrapC(r);
+  for(var i=0;i<6;i++){
+    var cq=q, cr=r;
+    for(var s=1;s<WORLD;s++){
+      cq=wrapC(cq+AX[i][0]); cr=wrapC(cr+AX[i][1]);
+      var n=G.cells[key(cq,cr)];
+      if(!n || n.o!==pid || building(n)) break;
+      if(n.k===CASTLE && !isRuin(n)) return true;
+    }
+  }
+  return false;
+}
 function castleCost(pid){
   var n=Math.max(1,myCastleCells(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 …
   return {timber:260*n, stone:200*n, iron:60*n};
@@ -2649,6 +2666,7 @@ function build(q,r,kind){
   if(kind===CASTLE){
     if(isFarmCell(c,wrapC(q),wrapC(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, linked by your own land to a farm (&equiv;) you hold.');
     if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square connected to it.</span> This cell is not joined by unbroken ground of yours to a farm (&equiv;) you hold &mdash; a castle cut off from every farm would starve and fall within 5 days.');
+    if(!castleLinked(q,r,ME)) return nope('<span class="bad">A castle needs a direct line to another castle.</span> From this square, one of the six straight directions must run over unbroken ground of yours to one of your castles.');
     var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
     if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
@@ -3088,7 +3106,7 @@ function cellActions(q,r){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
-        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':''))));
+        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleLinked(q,r,ME)?'Needs a straight line of your ground to another castle':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
       }
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
@@ -6341,6 +6359,9 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov26-castleline', eyebrow:'A new rule', title:'Castles need a straight line',
+   html:'<p>You may now found a new castle only where there is <b>a direct line to another castle of yours</b>: from the site, one of the six straight directions must run over unbroken ground you hold until it meets one of your castles.</p>'
+     +'<p>It still needs a farm joined to it, and it must still stand well clear of your other keeps. Castles already standing are not affected.</p>'},
   {id:'thanks-'+new Date().getFullYear(), eyebrow:'Thanksgiving Day', title:'Happy Thanksgiving', forNew:true, when:function(){ return harvestState()==='day'; },
    html:'<p>A full table to every marcher. May your steps be many and your supplies be dry.</p>', go:'Thank you'},
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return CRUSADE_OK; },
