@@ -2746,6 +2746,60 @@ function muster(q,r){
   say('A soldier joins the band at this castle &mdash; <b>'+c.b+'</b> here now. Use <b>Move soldiers</b> to send them toward a border &mdash; it&rsquo;s free, but they walk 1 cell every 3 hours. Every soldier eats grain.');
 }
 
+/* ── gifting land ──
+   A square of bare ground may be given to another player whose own finished ground touches it, so a gift
+   can only widen someone's border, never drop a lone square inside their land from nowhere. It is free and
+   instant. Nothing stands on a gifted square (no castle, tower, trebuchet, wall, road or soldiers), so
+   nothing the giver paid for changes hands. */
+function giftWhy(c){
+  if(c.t===RIVER) return 'Only dry ground can be given';
+  if(building(c)) return 'Wait for it to finish';
+  if(c.k) return 'Castles and towers can&rsquo;t be given away';
+  if(c.tb>0) return 'Move the trebuchets off first';
+  if(c.b>0) return 'Move your soldiers off first';
+  if((c.w||0)>0) return 'Tear the wall down first';
+  if(c.rd) return 'Dig up the road first';
+  if(burning(c)) return 'It is on fire';
+  return '';
+}
+function giftTargets(q,r){
+  return Object.keys(G.players).filter(function(pid){ return pid!==ME && G.players[pid] && touchesLive(q,r,pid); });
+}
+function giftLand(q,r){
+  var c=cellOf(q,r);
+  if(c.o!==ME) return nope('Give away ground you hold.');
+  var why=giftWhy(c); if(why) return nope('<span class="bad">This square can&rsquo;t be given yet.</span> '+why+'.');
+  var to=giftTargets(q,r);
+  if(!to.length) return nope('<span class="bad">No one to give it to.</span> A gift must touch the border of the player receiving it, and no other player&rsquo;s ground touches this square.');
+  scrollDialog({eyebrow:'A gift of land', title:'Give this square to&hellip;',
+    html:'<p>It is yours to give, free of marches. Only players whose ground touches this square are listed. <b>Once given, it is theirs, and you can&rsquo;t take it back.</b></p>',
+    list:to.map(function(pid){ return {label:esc(nameOf(pid)),cost:'',value:pid}; }), cancel:null,
+    buttons:[{label:'Keep it',value:null}]}).then(function(res){
+    if(res.value) giftNow(q,r,res.value);
+  });
+}
+var gifting=false;
+function giftNow(q,r,to){
+  var k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null;
+  if(gifting) return; gifting=true;
+  cellFresh(q,r).then(function(f){
+    if(f.c) G.cells[k]=f.c; else delete G.cells[k];
+    var c=cellOf(q,r);
+    if(c.o!==ME) throw {msg:'That square is no longer yours to give.'};
+    var why=giftWhy(c); if(why) throw {msg:why+'.'};
+    if(!G.players[to]||!touchesLive(q,r,to)) throw {msg:'Their ground no longer touches this square.'};
+    c.o=to; delete c.cs; c.w=0; delete c.wd; delete c.gv;
+    writeCell(q,r,c);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; throw {msg:'That square changed as you gave it. Nothing was given &mdash; try again.'}; }
+      logMove('gift',q,r,null,ME,0,{to:to});
+      render(); pushMe();
+      say('<b>Given.</b> That square now belongs to <b>'+esc(nameOf(to))+'</b>.');
+    });
+  }).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; nothing was given.'); })
+    .then(function(){ gifting=false; });
+}
+
 /* ── moving a band ── */
 var sel=null, sendN=0, sendT=0, selTrek=null;        // selected square, how many soldiers and trebuchets to send (0 = all, -1 = none), and a walking band picked for new orders
 function sendCount(want,have){ return !have||want<0?0:(want&&want<have?want:have); }
@@ -3112,6 +3166,7 @@ function cellActions(q,r){
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
       if(c.k!==CASTLE && !c.rd) A('Build a road',ROAD_MARCH+' march &middot; '+costLine(ROAD_COST)+' &middot; 24 h',function(){ buildRoad(q,r); },!touchesLive(q,r,ME)?'Must touch your ground':(marches(ROAD_MARCH)||lackText(ROAD_COST)));
       if(c.rd) A(roadUp(c)?'Dig up the unfinished road':'Dig up the road',refundLine(halfOf(spentOnRoad(c))),function(){ demolishRoad(q,r); });
+      if(!c.k) A('Give this square away','free &middot; to a neighbour',function(){ giftLand(q,r); },giftWhy(c)||(giftTargets(q,r).length?'':'No other player&rsquo;s ground touches it'));
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
     }
   }
@@ -4356,6 +4411,7 @@ function describe(e){
   if(e.k==='mv') return who+' sent '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' marching.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
   if(e.k==='cv'){ var gl=hasGoods(e.g)?goodsLine(e.g):''; return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+(gl||'')+(gl&&e.lt?' and ':'')+(e.lt?'a sealed letter':'')+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan'+(e.lt?' with a sealed letter':'')+'.'; }
+  if(e.k==='gift') return e.to===ME ? who+' <span class="good">gave you a square of land</span>.' : who+' gave a square of land to '+esc(nameOf(e.to))+'.';
   if(e.k==='m') return who+' marched into new ground.';
   if(e.k==='tbk') return who+' built a trebuchet.';
   if(e.k==='road') return who+' started a road.';
@@ -6362,6 +6418,12 @@ var NOTES=[
   {id:'nov26-castleline', eyebrow:'A new rule', title:'Castles need a straight line',
    html:'<p>You may now found a new castle only where there is <b>a direct line to another castle of yours</b>: from the site, one of the six straight directions must run over unbroken ground you hold until it meets one of your castles.</p>'
      +'<p>It still needs a farm joined to it, and it must still stand well clear of your other keeps. Castles already standing are not affected.</p>'},
+  {id:'nov26-gift', eyebrow:'A new rule', title:'Land can be given',
+   html:'<p>You may now <b>give a square of your ground to another player</b>. Tap a bare square of yours and choose <b>Give this square away</b>.</p>'
+     +'<ul><li>It is <b>free</b> and happens at once.</li>'
+     +'<li>The square must <b>touch the ground of the player receiving it</b>, so a gift can widen a border but never drop a lone square inside someone&rsquo;s land.</li>'
+     +'<li>Nothing may stand on it: no castle, tower, trebuchet, wall, road or soldiers.</li>'
+     +'<li>A gift is final. You can&rsquo;t take it back.</li></ul>'},
   {id:'thanks-'+new Date().getFullYear(), eyebrow:'Thanksgiving Day', title:'Happy Thanksgiving', forNew:true, when:function(){ return harvestState()==='day'; },
    html:'<p>A full table to every marcher. May your steps be many and your supplies be dry.</p>', go:'Thank you'},
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return CRUSADE_OK; },
