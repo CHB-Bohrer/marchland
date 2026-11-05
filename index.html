@@ -733,6 +733,18 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: the plague on Mario's land, a warning about nonsense in the chats, and Mario's punishment (shown once per player, see showPlagueNote) ── -->
+<div id="plaguenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="plaguenote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the gods</p>
+    <h2 id="plaguenote-h">&#9763; A plague on Mario&rsquo;s land</h2>
+    <p><b>A plague has fallen on Mario&rsquo;s land.</b> For the next 2 days every square he holds gives only half its harvest. When the two days are done, the sickness passes and his fields give in full again.</p>
+    <p><b>Mario has also been punished.</b> He cursed in the chats in the foulest way, and the gods have set eight of his grain fields ablaze for 4 days. Burning ground gives nothing until the fire dies.</p>
+    <p><b>A warning to all.</b> The gods will not hear nonsense in the chats. Keep to the game, keep your tongues clean, and speak with respect, or the same wrath will find you.</p>
+    <button type="button" class="rulesnote-go" id="plaguenote-go">The gods have spoken</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the hidden names and real names (shown once per player, see showShadowNote) ── -->
 <div id="shadownote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="shadownote-h">
   <div class="rulesnote-card">
@@ -1225,6 +1237,57 @@ function settlePurge(){
   if(mineOut) showEliminated();
   return true;
 }
+/* ── the plague of Mario's land ──
+   The gods send a plague on Mario's land for 2 days: every square he holds gives only half its harvest while it lasts.
+   They also punish him for foul language in the chats: eight of his grain squares are set ablaze for 4 days (burning ground
+   gives nothing; his land and castles are otherwise untouched). Whichever up-to-date screen sees the board first starts it
+   once (G.plague records who, when, and which squares burn), and one later screen marks it finished. It is announced in the
+   chat and on a one-time scroll (see showPlagueNote). */
+var PLAGUE_ID='plague1', PLAGUE_MS=2*86400000, PLAGUE_BURN_MS=4*86400000, PLAGUE_BURN_N=8;
+function plaguePids(){
+  var all=[], exact=[];
+  Object.keys(G.players).forEach(function(pid){
+    var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
+    if(n==='mario') exact.push(pid); else if(n.indexOf('mario')===0) all.push(pid);
+  });
+  return exact.length?exact:all;
+}
+/* 1 normally, .5 while the plague is on the player's land (at = the moment that harvest is for) */
+function plagueMul(pid,at){
+  var P=G&&G.plague; if(!P||!P.pids||P.pids.indexOf(pid)<0) return 1;
+  at=at||Date.now(); return (at>=P.start && at<P.end)?0.5:1;
+}
+function plagueChat(m,now,tag){
+  if(!online) return;
+  var t=Math.floor(now/60000)*60000, id=q36(t)+'-plague-'+tag;
+  chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+function settlePlague(){
+  if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  var now=Date.now(), P=G.plague, k, c, patch={};
+  if(!P){
+    var ids=plaguePids(); if(!ids.length) return false;
+    var end=now+PLAGUE_MS, burnEnd=now+PLAGUE_BURN_MS, nm=ids.map(function(p){ return G.players[p].name; }).join(', ');
+    var farms=Object.keys(G.cells).filter(function(ck){
+      var cc=G.cells[ck]; if(ids.indexOf(cc.o)<0||building(cc)||cc.k||burning(cc,now)) return false;
+      var pp=ck.split('_'); return isFarmCell(cc,parseInt(pp[0],10),parseInt(pp[1],10));
+    }).sort().slice(0,PLAGUE_BURN_N);
+    farms.forEach(function(fk){ c=G.cells[fk]; c.bn=burnEnd; patch['cells/'+fk]=c; });
+    P=G.plague={id:PLAGUE_ID,start:now,end:end,pids:ids,names:nm,burn:farms,burnEnd:burnEnd,done:0};
+    patch['plague']=P; patch['rev']=now; myRev=now;
+    if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+    plagueChat('A plague has fallen on the land of '+nm+'. For 2 days his fields give only half their harvest.',now,'start');
+    plagueChat('The gods will not hear nonsense in the chats. Mind your tongues, all of you.',now,'warn');
+    plagueChat(nm+' cursed in the foulest way, and the gods have set eight of his grain fields ablaze for 4 days.',now,'punish');
+    return true;
+  }
+  if(P.done||now<P.end) return false;
+  P.done=now; patch['plague']=P; patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+  plagueChat('The plague has passed from the land of '+(P.names||'Mario')+'. His fields give a full harvest again.',now,'end');
+  return true;
+}
 /* ── removal on request ──
    Chris asked for the players Lily and Trevor to be deleted: their accounts go, every square they hold is wiped and
    the ground is free. Done once (G.removed records it); whichever up-to-date screen sees them first does it. */
@@ -1412,8 +1475,9 @@ function ratesFor(pid,at){
     // ground held from before rivers ran through it keeps the yield of the land it was;
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
-    if(y) out[y.r]+=y.n;
-    if(c.k===CASTLE && !isRuin(c)) out.grain+=2;
+    var pm=plagueMul(pid,at);                           // a plague on the land halves every harvest
+    if(y) out[y.r]+=y.n*pm;
+    if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
   var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
@@ -1670,7 +1734,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(boardVersion(G)>DATA_V){ halt(); return true; }
   G.fallen=remote.fallen||{};
@@ -4138,6 +4202,18 @@ function drawGraves(x,y,s,n,q,r){
   ctx.restore();
 }
 /* land on fire: a few flickering flames and a haze of smoke over the square */
+/* the plague: a sickly green haze and a few drifting spores over the plagued land */
+function drawPlague(x,y,s,q,r,t){
+  if(s<9) return;
+  ctx.save();
+  ctx.globalAlpha=.26; ctx.fillStyle='#7FA83A'; ctx.beginPath(); ctx.ellipse(x,y+s*0.05,s*0.5,s*0.38,0,0,6.284); ctx.fill();
+  var n=s>=18?4:2;
+  for(var i=0;i<n;i++){
+    var a=(t||0)*0.9+i*1.7+artHash(wrapC(q),wrapC(r),250+i)*6.28, rad=s*(0.12+0.12*artHash(wrapC(q),wrapC(r),270+i));
+    ctx.globalAlpha=.55; ctx.fillStyle='#4E6B1F'; ctx.beginPath(); ctx.arc(x+Math.cos(a)*rad*1.6,y+Math.sin(a*1.3)*rad,Math.max(1,s*0.045),0,6.284); ctx.fill();
+  }
+  ctx.restore();
+}
 function drawBlaze(x,y,s,q,r,t,big){
   if(s<9) return;
   var n=big?(s>=18?7:4):(s>=18?3:2), gs=big?1.9:1;
@@ -4252,6 +4328,7 @@ function draw(){
     else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
+    if(c.o && plagueMul(c.o)<1) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
     if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!G.cells[key(q,r)].bx);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
@@ -4327,7 +4404,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov2-h';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov5-plague';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5104,6 +5181,7 @@ function render(){
     settleCrusadeDues();
     settleCastles();
     settlePurge();
+    settlePlague();
     settleRemovals();
     settleProbation();
     settleEliminations();
@@ -6484,7 +6562,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -6578,7 +6656,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -6607,7 +6685,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -6636,15 +6714,45 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
   var b=document.getElementById('novnote-go'); b.onclick=closeNovNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: the plague on Mario's land, the warning about nonsense in the chats, and Mario's punishment.
+   Shown once per player, and only once the plague has actually begun, never stacked on another notice. */
+var PLAGUE_NOTE_ID='plague1';
+function plagueSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[PLAGUE_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+PLAGUE_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markPlagueSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[PLAGUE_NOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+PLAGUE_NOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closePlagueNote(){
+  var n=document.getElementById('plaguenote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',plagueNoteKey,true);
+  markPlagueSeen();
+  setTimeout(showNext,250);
+}
+function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
+function showPlagueNote(){
+  var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',plagueNoteKey,true);
+  var b=document.getElementById('plaguenote-go'); b.onclick=closePlagueNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
