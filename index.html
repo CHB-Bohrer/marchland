@@ -585,6 +585,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <button id="m-troop" aria-pressed="false">Muster <span class="cost">25 ir · 40 gr</span></button>
         <button id="m-move" aria-pressed="false">Move soldiers <span class="cost">free · 3 h / cell</span></button>
         <button id="m-break" aria-pressed="false">Break bridge <span class="cost">2 marches</span></button>
+        <button id="m-treb" class="hide" title="Jump to the next trebuchet that has not fired yet">Next ready trebuchet <span class="cost" id="m-treb-n"></span></button>
         <button id="m-caravan" class="cvbtn" aria-expanded="false" aria-controls="caravan">Caravan <span class="cost">gift goods · no marches</span></button>
       </div>
 
@@ -5142,6 +5143,13 @@ function render(){
   lock('m-move',!(fieldOf(ME)||transitOf(ME)));       // bands on the road can still be given new orders
   lock('m-break',!fieldOf(ME));
   lock('m-troop',!(pl.res.iron>=25&&pl.res.grain>=40));
+  var trb=document.getElementById('m-treb'), trAll=myTrebCells();       // the scan button: only there while some trebuchet of mine stands
+  if(trb){
+    var trReady=trAll.filter(function(x){ return x.ready>0; }).reduce(function(s,x){ return s+x.ready; },0);
+    trb.classList.toggle('hide',!trAll.length);
+    document.getElementById('m-treb-n').textContent=trReady?trReady+' ready':'none ready';
+    lock('m-treb',!trReady);
+  }
   document.getElementById('mydot').style.background=pColor(ME);
   renderClaims();
   renderCoach();
@@ -6937,6 +6945,26 @@ function artCaravan(g,x,y,s,col,t,face){
   g.restore();
   if(s>=18) artPerson(g,x+face*(-z*0.95),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});   // the carter walking alongside
 }
+/* Scanning my trebuchets: every square of mine that holds one, in a fixed order (row by row), with how many
+   of its trebuchets have not thrown this reload. The button steps through the squares that still have one ready. */
+function myTrebCells(){
+  var out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===ME && c.tb>0){ var p=k.split('_'); out.push({q:parseInt(p[0],10), r:parseInt(p[1],10), ready:trebReady(c)}); } }
+  out.sort(function(a,b){ return a.r-b.r || a.q-b.q; });
+  return out;
+}
+var trebScan=-1;
+document.getElementById('m-treb').addEventListener('click',function(){
+  if(!G||!me()) return;
+  var list=myTrebCells().filter(function(x){ return x.ready>0; });
+  if(!list.length) return nope('Every trebuchet of yours has thrown this reload. The next is ready in <b>'+(function(){ var n=0; for(var k in G.cells){ var c=G.cells[k]; if(c.o===ME&&c.tb>0){ var t=trebNext(c); if(t&&(!n||t<n)) n=t; } } return n?hoursLeft(n):'a while'; })()+'</b>.');
+  trebScan=(trebScan+1)%list.length;
+  var at=list[trebScan], nc=nearCopy(at.q,at.r,viewQ,viewR);
+  centreOn(nc[0],nc[1]); draw();
+  openCellMenu({q:at.q,r:at.r});
+  try{ document.querySelector('.canvas-pad').scrollIntoView({behavior:'smooth',block:'center'}); }catch(x){}
+  say('Trebuchets ready to fire: square <b>'+(trebScan+1)+' of '+list.length+'</b> &mdash; '+at.ready+' ready here. Press the button again for the next one.');
+});
 document.getElementById('m-caravan').addEventListener('click',function(){
   var box=document.getElementById('caravan'), open=box.classList.contains('hide');
   if(box.classList.contains('onmap')){ closeCaravanMap(); return; }
