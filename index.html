@@ -4401,6 +4401,115 @@ function span(c,cx,cy,s,col,detail){
     ctx.fillText(hoursLeft(c.f),cx,cy); ctx.restore();
   }
 }
+/* ═══ river names ══════════════════════════════════════════════════════
+   Every stretch of river is named after whoever has settled beside it, and the
+   name changes as the settlers do. The rivers are cut into stretches of about
+   22 cells (this never changes); every so often each stretch looks at the ground
+   held within four cells of it and, if one player (or two) clearly live there,
+   takes a silly name from them. Unsettled stretches stay nameless. The name is
+   chosen by a hash of where the stretch is, so it doesn't flicker between frames. */
+var RIVER_NAMES=true, RN_MIN_S=7, RN_REFRESH_MS=15000, rnChunks=null, rnNames=[], rnAt=0;
+function rnPoss(n){ return /s$/i.test(n)?n+'’':n+'’s'; }
+var RN_ONE=[
+  function(n){ return 'River '+n; },
+  function(n){ return rnPoss(n)+' Bathwater'; },
+  function(n){ return 'Mighty '+n+'-sippi'; },
+  function(n){ return 'Old Man '+n; },
+  function(n){ return rnPoss(n)+' Unreliable Moat'; },
+  function(n){ return 'Soggy '+n+' Creek'; },
+  function(n){ return 'Lake '+n+'-ish'; },
+  function(n){ return 'The '+n+' Drip'; },
+  function(n){ return rnPoss(n)+' Wet Wall'; },
+  function(n){ return 'Splash Zone of '+n; },
+  function(n){ return rnPoss(n)+' Puddle of Doom'; },
+  function(n){ return 'Lower '+n+' Dampness'; }
+];
+var RN_TWO=[
+  function(a,b){ return a+' & '+b+' Squabble Creek'; },
+  function(a,b){ return a+'–'+b+' Gulch of Regret'; },
+  function(a,b){ return 'The '+a+'–'+b+' Border Dispute'; },
+  function(a,b){ return 'Lake '+a+' (disputed by '+b+')'; },
+  function(a,b){ return 'Rapids of '+a+' and '+b; },
+  function(a,b){ return rnPoss(a)+' Moat, '+rnPoss(b)+' Problem'; }
+];
+function rnBuildChunks(){                           // the stretches themselves: slices of each connected river, with a middle cell and a direction
+  var seen={}, out=[], CH=22;
+  for(var q0=-HALF;q0<HALF;q0++) for(var r0=-HALF;r0<HALF;r0++){
+    if(seen[q0+'_'+r0] || !riverAt(q0,r0)) continue;
+    var order=[], qu=[[q0,r0]]; seen[q0+'_'+r0]=1;
+    for(var h=0;h<qu.length;h++){
+      var cur=qu[h]; order.push(cur);
+      for(var i=0;i<6;i++){
+        var nq=wrapC(cur[0]+AX[i][0]), nr=wrapC(cur[1]+AX[i][1]), nk=nq+'_'+nr;
+        if(!seen[nk] && riverAt(nq,nr)){ seen[nk]=1; qu.push([nq,nr]); }
+      }
+    }
+    var groups=[];
+    for(var s=0;s<order.length;s+=CH) groups.push(order.slice(s,s+CH));
+    if(groups.length>1 && groups[groups.length-1].length<8){ var tail=groups.pop(); groups[groups.length-1]=groups[groups.length-1].concat(tail); }
+    groups.forEach(function(cells){
+      if(cells.length<6) return;
+      var a=cells[0], mq=0, mr=0, offs=cells.map(function(c){ return [wrapC(c[0]-a[0]),wrapC(c[1]-a[1])]; });
+      offs.forEach(function(o){ mq+=o[0]; mr+=o[1]; }); mq/=cells.length; mr/=cells.length;
+      var best=0, bd=1e9, sxx=0, syy=0, sxy=0;
+      offs.forEach(function(o,idx){
+        var d=(o[0]-mq)*(o[0]-mq)+(o[1]-mr)*(o[1]-mr); if(d<bd){ bd=d; best=idx; }
+        var px=Math.sqrt(3)*(o[0]+o[1]/2)-Math.sqrt(3)*(mq+mr/2), py=1.5*(o[1]-mr);     // flat pixel offsets from the middle
+        sxx+=px*px; syy+=py*py; sxy+=px*py;
+      });
+      var ang=0.5*Math.atan2(2*sxy,sxx-syy);        // the stretch's long axis: the way the label lies
+      out.push({cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang});
+    });
+  }
+  return out;
+}
+function rnRefresh(){
+  if(!G) return;
+  if(!rnChunks) rnChunks=rnBuildChunks();
+  rnAt=Date.now(); rnNames=[];
+  var used={};
+  rnChunks.forEach(function(ch){
+    var tally={};
+    ch.cells.forEach(function(c){
+      for(var dq=-4;dq<=4;dq++) for(var dr=-4;dr<=4;dr++){
+        var d=(Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2; if(d>4) continue;
+        var cc=G.cells[key(c[0]+dq,c[1]+dr)];
+        if(cc && cc.o && G.players[cc.o]) tally[cc.o]=(tally[cc.o]||0)+(5-d);
+      }
+    });
+    var ids=Object.keys(tally).sort(function(x,y){ return tally[y]-tally[x]; });
+    if(!ids.length || tally[ids[0]]<14) return;     // nobody has really settled here
+    var h=hash2(ch.aq+301,ch.ar+517), text;
+    var nm=function(pid){ var n=String(G.players[pid].name||'').trim(); if(n.length>14){ var cut=n.slice(0,14), sp=cut.lastIndexOf(' '); n=sp>3?cut.slice(0,sp):cut; } return n; };
+    var two=ids.length>1 && tally[ids[1]]>=14 && tally[ids[1]]>=0.45*tally[ids[0]], set=two?RN_TWO:RN_ONE, ix=Math.floor(h*set.length);
+    var tag=two?ids[0]+'|'+ids[1]:ids[0];
+    for(var tries=0;tries<set.length && used[tag+'#'+ix];tries++) ix=(ix+1)%set.length;   // the same settler's rivers don't all share one joke
+    used[tag+'#'+ix]=1;
+    text=two?set[ix](nm(ids[0]),nm(ids[1])):set[ix](nm(ids[0]));
+    rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:text, w:tally[ids[0]]});
+  });
+}
+function drawRiverNames(){
+  if(!RIVER_NAMES || S<RN_MIN_S || !G) return;
+  if(Date.now()-rnAt>RN_REFRESH_MS) rnRefresh();
+  var fs=Math.max(9,Math.min(17,S*0.55)), placed=[];
+  ctx.save();
+  ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  rnNames.forEach(function(n){
+    var P=toNear(n.aq,n.ar);
+    if(P[0]<-80||P[0]>W+80||P[1]<-40||P[1]>H+40) return;
+    var tw=ctx.measureText(n.text).width, rad=Math.min(tw*0.5,tw*0.35+fs);
+    for(var i=0;i<placed.length;i++){ var o=placed[i]; if(Math.hypot(o[0]-P[0],o[1]-P[1])<rad+o[2]) return; }   // never print two names on top of each other
+    placed.push([P[0],P[1],rad]);
+    var a=n.ang; if(a>Math.PI/2) a-=Math.PI; if(a<-Math.PI/2) a+=Math.PI;
+    ctx.save(); ctx.translate(P[0],P[1]); ctx.rotate(a);
+    ctx.globalAlpha=.8; ctx.strokeStyle=T['--surface']; ctx.lineWidth=Math.max(3,fs*0.28); ctx.strokeText(n.text,0,0);
+    ctx.globalAlpha=.95; ctx.fillStyle=T['--ink']; ctx.fillText(n.text,0,0);
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
 function draw(){
   if(!G) return;
   readTokens();
@@ -4507,6 +4616,7 @@ function draw(){
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawTreks(now,amb);
+  drawRiverNames();                                 // the rivers' names, lying along the water
   if(amb) ambClouds(ctx,now);
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
@@ -4523,7 +4633,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov5-undo';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov6-rivers';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
