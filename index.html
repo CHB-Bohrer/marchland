@@ -507,6 +507,19 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   <!-- ── the game ──────────────────────────────────────────────────── -->
   <div id="game" class="hide">
 
+    <!-- today's steps and the Claim button, at the very top of the page -->
+    <div class="panel" id="claimtop">
+      <div class="bar">
+        <div class="field"><label for="stepsin">Today&rsquo;s steps</label>
+          <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="from the Health app" style="width:180px">
+        </div>
+        <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label><span class="gods">let the pagen gods decide!</span>
+        <button id="collect" class="go">Claim</button>
+        <span class="muted mono" id="bankinfo">—</span>
+      </div>
+      <input type="file" accept="image/*" id="shotlate" class="hide">
+    </div>
+
     <div class="panel">
       <div class="pad" style="padding-bottom:12px">
         <div class="row">
@@ -541,15 +554,6 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
       <div class="notice hide" id="claimnote"></div>
 
-      <div class="bar">
-        <div class="field"><label for="stepsin">Today&rsquo;s steps</label>
-          <input id="stepsin" type="number" min="0" step="100" inputmode="numeric" placeholder="from the Health app" style="width:180px">
-        </div>
-        <label class="pick" id="shotpick" title="Optional: a screenshot of the Health app, so anyone checking your claim can see it"><input type="file" accept="image/*" id="shotin" class="hide"><span id="shotlbl">+ Health screenshot</span></label><span class="gods">let the pagen gods decide!</span>
-        <button id="collect" class="go">Claim</button>
-        <span class="muted mono" id="bankinfo">—</span>
-      </div>
-      <input type="file" accept="image/*" id="shotlate" class="hide">
 
       <div class="coach hide" id="coach" role="status" aria-live="polite">
         <span class="coach-tag">Need an idea?</span>
@@ -4751,7 +4755,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-nodaily';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-claimtop';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
