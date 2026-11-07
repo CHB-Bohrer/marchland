@@ -4433,7 +4433,7 @@ var RN_ONE=[
   function(n){ return rnPoss(n)+' Unreliable Moat'; },
   function(n){ return 'Soggy '+n+' Creek'; },
   function(n){ return 'Lake '+n+'-ish'; },
-  function(n){ return 'The '+n+' Drip'; },
+  function(n){ return (/^the /i.test(n)?'':'The ')+n+' Drip'; },
   function(n){ return rnPoss(n)+' Wet Wall'; },
   function(n){ return 'Splash Zone of '+n; },
   function(n){ return rnPoss(n)+' Puddle of Doom'; },
@@ -4442,55 +4442,54 @@ var RN_ONE=[
 var RN_TWO=[
   function(a,b){ return a+' & '+b+' Squabble Creek'; },
   function(a,b){ return a+'–'+b+' Gulch of Regret'; },
-  function(a,b){ return 'The '+a+'–'+b+' Border Dispute'; },
+  function(a,b){ return (/^the /i.test(a)?'':'The ')+a+'–'+b+' Border Dispute'; },
   function(a,b){ return 'Lake '+a+'–'+b+'-ish'; },
   function(a,b){ return 'Rapids of '+a+' and '+b; },
   function(a,b){ return rnPoss(a)+' Moat, '+rnPoss(b)+' Problem'; }
 ];
-function rnBuildChunks(){                           // the stretches themselves: slices of each connected river, with a middle cell and a direction
-  var seen={}, out=[], CH=22;
+function rnBuildChunks(){                           // the stretches themselves: each river is walked cell by cell from one end and cut into stretches of about 22 cells
+  var seen={}, out=[], CH=22, dist=function(a,b){ var dq=wrapC(b[0]-a[0]), dr=wrapC(b[1]-a[1]); return (Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2; };
   for(var q0=-HALF;q0<HALF;q0++) for(var r0=-HALF;r0<HALF;r0++){
     if(seen[q0+'_'+r0] || !riverAt(q0,r0)) continue;
-    var order=[], qu=[[q0,r0]]; seen[q0+'_'+r0]=1;
+    var comp=[], qu=[[q0,r0]]; seen[q0+'_'+r0]=1;                         // every cell of this connected river
     for(var h=0;h<qu.length;h++){
-      var cur=qu[h]; order.push(cur);
+      var c0=qu[h]; comp.push(c0);
       for(var i=0;i<6;i++){
-        var nq=wrapC(cur[0]+AX[i][0]), nr=wrapC(cur[1]+AX[i][1]), nk=nq+'_'+nr;
+        var nq=wrapC(c0[0]+AX[i][0]), nr=wrapC(c0[1]+AX[i][1]), nk=nq+'_'+nr;
         if(!seen[nk] && riverAt(nq,nr)){ seen[nk]=1; qu.push([nq,nr]); }
       }
     }
-    var groups=[];
-    for(var s=0;s<order.length;s+=CH) groups.push(order.slice(s,s+CH));
-    if(groups.length>1 && groups[groups.length-1].length<8){ var tail=groups.pop(); groups[groups.length-1]=groups[groups.length-1].concat(tail); }
-    groups.forEach(function(cells){
-      if(cells.length<6) return;
-      var a=cells[0], mq=0, mr=0, offs=cells.map(function(c){ return [wrapC(c[0]-a[0]),wrapC(c[1]-a[1])]; });
-      offs.forEach(function(o){ mq+=o[0]; mr+=o[1]; }); mq/=cells.length; mr/=cells.length;
-      var best=0, bd=1e9, sxx=0, syy=0, sxy=0;
-      offs.forEach(function(o,idx){
-        var d=(o[0]-mq)*(o[0]-mq)+(o[1]-mr)*(o[1]-mr); if(d<bd){ bd=d; best=idx; }
-        var px=Math.sqrt(3)*(o[0]+o[1]/2)-Math.sqrt(3)*(mq+mr/2), py=1.5*(o[1]-mr);     // flat pixel offsets from the middle
-        sxx+=px*px; syy+=py*py; sxy+=px*py;
-      });
-      var ang=0.5*Math.atan2(2*sxy,sxx-syy);        // the stretch's long axis: the way the label lies
-      var ca=Math.cos(ang), sa=Math.sin(ang), aoq=offs[best][0], aor=offs[best][1];
-      var pts=offs.map(function(o){ var dq=o[0]-aoq, dr=o[1]-aor, px=Math.sqrt(3)*(dq+dr/2), py=1.5*dr; return {q:dq, r:dr, t:px*ca+py*sa}; });
-      var byT=pts.slice().sort(function(x,y){ return x.t-y.t; }), walk=[], left=pts.slice();
-      var cur=byT[0]; left.splice(left.indexOf(cur),1); walk.push(cur);          // follow the river from one end, a cell at a time, so a bend never folds the line back on itself
-      while(left.length){
-        var bi=-1, bd2=1e9;
-        for(var li=0;li<left.length;li++){ var ddq=left[li].q-cur.q, ddr=left[li].r-cur.r, hd=(Math.abs(ddq)+Math.abs(ddr)+Math.abs(ddq+ddr))/2; if(hd<=2 && hd<bd2){ bd2=hd; bi=li; } }
-        if(bi<0) break;
-        cur=left.splice(bi,1)[0]; walk.push(cur);
+    var left={}; comp.forEach(function(c){ left[c[0]+'_'+c[1]]=c; });
+    var nLeft=comp.length;
+    var degOf=function(c){ var d=0; for(var i=0;i<6;i++){ if(left[wrapC(c[0]+AX[i][0])+'_'+wrapC(c[1]+AX[i][1])]) d++; } return d; };
+    while(nLeft>0){
+      var start=null, sd=9; comp.forEach(function(c){ if(!left[c[0]+'_'+c[1]]) return; var d=degOf(c); if(d<sd){ sd=d; start=c; } });   // begin at an end of what remains
+      var walk=[start], prev=null, cur=start; delete left[start[0]+'_'+start[1]]; nLeft--;
+      for(;;){
+        var best=null, bs=1e9;
+        for(var k in left){
+          var c=left[k], d=dist(cur,c); if(d>2) continue;
+          var score=d*10;
+          if(prev){ var v1=[wrapC(cur[0]-prev[0]),wrapC(cur[1]-prev[1])], v2=[wrapC(c[0]-cur[0]),wrapC(c[1]-cur[1])], dot=(v1[0]*v2[0]+v1[1]*v2[1]+(v1[0]*v2[1]+v1[1]*v2[0])/2)/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1); score-=dot; }   // among equals, keep going the way we were going
+          if(score<bs){ bs=score; best=c; }
+        }
+        if(!best) break;
+        prev=cur; cur=best; delete left[cur[0]+'_'+cur[1]]; nLeft--; walk.push(cur);
       }
-      if(walk.length>=pts.length*0.6) pts=walk; else pts=byT;                    // a forked stretch falls back to the straight line along its length
-      var path=pts.map(function(pt,i){                                    // average neighbours so the line is smooth
-        var a0=Math.max(0,i-2), a1=Math.min(pts.length-1,i+2), sq=0, sr=0, n=0;
-        for(var j=a0;j<=a1;j++){ sq+=pts[j].q; sr+=pts[j].r; n++; }
-        return [sq/n, sr/n];
+      var groups=[];
+      for(var s0=0;s0<walk.length;s0+=CH) groups.push(walk.slice(s0,s0+CH));
+      if(groups.length>1 && groups[groups.length-1].length<8){ var tail=groups.pop(); groups[groups.length-1]=groups[groups.length-1].concat(tail); }
+      groups.forEach(function(cells){
+        if(cells.length<6) return;
+        var mid=cells[Math.floor(cells.length/2)], offs=cells.map(function(c){ return [wrapC(c[0]-mid[0]),wrapC(c[1]-mid[1])]; });   // offsets from the middle cell, in order along the river
+        var path=offs.map(function(o,i){
+          var a0=Math.max(0,i-1), a1=Math.min(offs.length-1,i+1), sq=0, sr=0, n=0;
+          for(var j=a0;j<=a1;j++){ sq+=offs[j][0]; sr+=offs[j][1]; n++; }
+          return [sq/n, sr/n];
+        });
+        out.push({id:mid[0]+'_'+mid[1], cells:cells, aq:mid[0], ar:mid[1], ang:0, path:path});
       });
-      out.push({id:cells[best][0]+'_'+cells[best][1], cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang, path:path});
-    });
+    }
   }
   return out;
 }
@@ -4752,7 +4751,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-bend2';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-bend3';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
