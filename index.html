@@ -334,6 +334,13 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .crow .who{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .crow svg{ width:100%; height:30px; display:block; overflow:visible; }
 .crow .tot{ font-family:var(--mono); font-size:11px; color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums; }
+.crow .tot .cst{ display:block; font-size:10px; margin-top:1px; white-space:nowrap; }
+.crow .tot .cst.disputed{ color:#B3402A; font-weight:600; }
+.crow .tot .cst.open{ color:#8a6a1c; }
+.crow .tot .cst.checked{ color:#2f6b3c; }
+.crow rect.mk-disputed{ stroke:#B3402A; stroke-width:1.6; fill-opacity:.55; }
+.crow rect.mk-open{ stroke:var(--ink-2); stroke-width:1; stroke-dasharray:2 2; fill-opacity:.7; }
+.axisnote .key{ white-space:nowrap; }
 .crow rect.hit{ fill:transparent; }
 .crow rect.hit:hover{ fill:var(--rule); fill-opacity:.35; }
 .log{ border-top:1px solid var(--rule); }
@@ -647,6 +654,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only the votes actually cast count (at least 3 are needed). If more than half of them say void when the vote closes, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
+      <div class="pad" id="claims-detail-wrap" style="padding-top:8px;padding-bottom:6px"><button id="claims-detail" type="button" aria-expanded="false"></button></div>
       <div class="log" id="claims-log"></div>
       <div class="pad hide" id="claims-more-wrap" style="padding-top:10px;padding-bottom:12px"><button id="claims-more">Show older claims</button></div>
     </div>
@@ -4756,7 +4764,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-ledger';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-chartclaims';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5610,7 +5618,7 @@ function render(){
 }
 
 /* ═══ claim log ════════════════════════════════════════════════════════ */
-var showAllClaims=false, LOG_SHORT=12; var claimAlertsOpen=false;
+var showAllClaims=false, LOG_SHORT=12; var claimAlertsOpen=false, claimDetailOpen=false;
 var CHIP={open:'◷ open', disputed:'⚑ disputed', stands:'✓ stands', void:'✕ voided', verified:'✓ verified', rejected:'✕ rejected'};
 function dayStart(t){ var d=new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
 function fmtK(n){ return n>=10000 ? Math.round(n/1000)+'k' : n>=1000 ? (n/1000).toFixed(1).replace(/\.0$/,'')+'k' : String(n); }
@@ -5621,7 +5629,12 @@ function renderClaims(){
   renderNotice(list);
   renderChart(list);
 
-  var log=document.getElementById('claims-log');
+  var log=document.getElementById('claims-log'), dbtn=document.getElementById('claims-detail');
+  var nDisp=list.filter(function(e){ return e.st.s==='disputed'; }).length;
+  dbtn.textContent=claimDetailOpen?'Hide claim details':'Claim details \u00b7 '+list.length+' recent'+(nDisp?' \u00b7 '+nDisp+' disputed':'');
+  dbtn.setAttribute('aria-expanded',claimDetailOpen?'true':'false');
+  log.classList.toggle('hide',!claimDetailOpen);
+  if(!claimDetailOpen){ document.getElementById('claims-more-wrap').classList.add('hide'); return; }
   if(!list.length){
     log.innerHTML='<p class="muted empty">No claims yet. Every collection from now on shows up here.</p>';
     document.getElementById('claims-more-wrap').classList.add('hide');
@@ -5687,7 +5700,7 @@ function renderNotice(list){
   /* the others' claims, folded: one line each for "can be disputed" and "needs your vote", with the full list a tap away */
   function nameList(arr){ var nm=arr.map(function(e){ return esc(nameOf(e.c.pid)); }); return nm.length>3?nm.slice(0,3).join(', ')+' and '+(nm.length-3)+' more':nm.join(nm.length===2?' and ':', '); }
   if(voteOnes.length){
-    lines.push('<span><b>'+voteOnes.length+'</b> disputed claim'+(voteOnes.length>1?'s need':' needs')+' your vote ('+nameList(voteOnes)+') &mdash; '+(voteOnes.length>1?'they are':'it is')+' in the claim log below.</span>');
+    lines.push('<span><b>'+voteOnes.length+'</b> disputed claim'+(voteOnes.length>1?'s need':' needs')+' your vote ('+nameList(voteOnes)+') &mdash; '+(voteOnes.length>1?'they are':'it is')+' in the claim log below. <button data-act="details">Open claim details</button></span>');
   }
   if(openOnes.length){
     lines.push('<span class="claimalert"><b>'+openOnes.length+'</b> claim'+(openOnes.length>1?'s':'')+' from the last day can still be disputed ('+nameList(openOnes)+'). <button data-act="alerts">'+(claimAlertsOpen?'Hide':'Show')+'</button></span>');
@@ -5708,35 +5721,52 @@ function renderNotice(list){
 }
 
 /* one row per player, same scale for everyone, last 14 days, today at the right */
+function chipFor(e){                                   // a few words on a player's newest claim, if it is recent
+  if(!e || Date.now()-e.c.t>36*36e5) return '';
+  var st=e.st;
+  if(st.s==='disputed') return '<span class="cst disputed">disputed &middot; '+hoursLeft(st.until)+'</span>';
+  if(st.s==='void') return '';
+  if(st.ver==='ok') return '<span class="cst checked">checked &#10003;</span>';
+  if(st.s==='open') return '<span class="cst open">open &middot; '+hoursLeft(st.until)+'</span>';
+  return '';
+}
 function renderChart(list){
   var DAYS=14, today=dayStart(Date.now()), first=today-(DAYS-1)*864e5;
   var pids=Object.keys(G.players).sort(function(a,b){ return G.players[a].seat-G.players[b].seat; });
   var sums={}; pids.forEach(function(p){ sums[p]=new Array(DAYS).fill(0); });
+  var mark={}, latest={};                              // per player and day: 2 = a claim under dispute, 1 = still open to dispute; and each player's newest claim
   list.forEach(function(e){
     if(e.st.s==='void'||!sums[e.c.pid]) return;
     var i=Math.round((dayStart(e.c.t)-first)/864e5);
-    if(i>=0&&i<DAYS) sums[e.c.pid][i]+=e.c.steps||0;
+    if(i>=0&&i<DAYS){
+      sums[e.c.pid][i]+=e.c.steps||0;
+      var rank=e.st.s==='disputed'?2:(e.st.s==='open'&&e.st.ver!=='ok'?1:0), mk=e.c.pid+'|'+i;
+      if(rank>(mark[mk]||0)) mark[mk]=rank;
+    }
+    if(!latest[e.c.pid] || e.c.t>latest[e.c.pid].c.t) latest[e.c.pid]=e;
   });
   var max=0; pids.forEach(function(p){ sums[p].forEach(function(v){ if(v>max) max=v; }); });
   var el=document.getElementById('claims-chart');
   if(!max){ el.innerHTML=''; return; }
   var BW=10, GAP=2, VH=28, VW=DAYS*(BW+GAP)-GAP;
   var dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  el.innerHTML='<div class="axisnote">Steps claimed per day · last 14 days, today at the right · one scale for everyone (tallest bar '+max.toLocaleString()+') · voided claims left out</div>'
+  el.innerHTML='<div class="axisnote">Steps claimed per day · last 14 days, today at the right · one scale for everyone (tallest bar '+max.toLocaleString()+') · voided claims left out · <span class="key">dashed bar = open to dispute</span> · <span class="key" style="color:#B3402A">red outline = disputed</span></div>'
     +pids.map(function(pid){
       var p=G.players[pid], col=pColor(pid), tot=0, bars='';
       sums[pid].forEach(function(v,i){
         tot+=v;
         var x=i*(BW+GAP), h=v?Math.max(2,Math.round(v/max*VH)):0, d=new Date(first+i*864e5);
         var label=dayName[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1)+' · '+v.toLocaleString()+' steps';
-        if(h) bars+='<rect x="'+x+'" y="'+(VH-h)+'" width="'+BW+'" height="'+h+'" style="fill:'+col+'" pointer-events="none"/>';
+        var mk=mark[pid+'|'+i]||0;
+        if(mk===2) label+=' · disputed'; else if(mk===1) label+=' · open to dispute';
+        if(h) bars+='<rect class="'+(mk===2?'mk-disputed':mk===1?'mk-open':'')+'" x="'+x+'" y="'+(VH-h)+'" width="'+BW+'" height="'+h+'" style="fill:'+col+'" pointer-events="none"/>';
         bars+='<rect class="hit" x="'+(x-1)+'" y="0" width="'+(BW+GAP)+'" height="'+VH+'"><title>'+esc(p.name)+' · '+label+'</title></rect>';
       });
       return '<div class="crow"><div class="who"><span class="dot" style="background:'+col+'"></span>'+esc(full(p))+'</div>'
         +'<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none" role="img" aria-label="'+esc(p.name)+': '+tot.toLocaleString()+' steps claimed in the last 14 days">'
         +'<line x1="0" y1="'+(VH-.5)+'" x2="'+VW+'" y2="'+(VH-.5)+'" style="stroke:var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/>'
         +bars+'</svg>'
-        +'<div class="tot">'+fmtK(tot)+' / 14d</div></div>';
+        +'<div class="tot">'+fmtK(tot)+' / 14d'+chipFor(latest[pid])+'</div></div>';
     }).join('');
 }
 
@@ -5880,6 +5910,7 @@ document.getElementById('shotlate').addEventListener('change',function(){
 function onClaimClick(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
   var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+  if(act==='details'){ claimDetailOpen=true; renderClaims(); var cd=document.getElementById('claims-detail'); if(cd&&cd.scrollIntoView) cd.scrollIntoView({block:'center'}); return; }
   if(act==='alerts'){ claimAlertsOpen=!claimAlertsOpen; return renderClaims(); }
   if(act==='no'||act==='ok') return vote(id,act);
   if(act==='addshot'){ lateFor=id; document.getElementById('shotlate').click(); return; }
@@ -5896,6 +5927,7 @@ function onClaimClick(ev){
 }
 document.getElementById('claims-log').addEventListener('click',onClaimClick);
 document.getElementById('claimnote').addEventListener('click',onClaimClick);
+document.getElementById('claims-detail').addEventListener('click',function(){ claimDetailOpen=!claimDetailOpen; renderClaims(); });
 document.getElementById('claims-more').addEventListener('click',function(){ showAllClaims=!showAllClaims; renderClaims(); });
 
 /* ═══ the steward, the data version and the one-time board update ═══════
