@@ -524,7 +524,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
     </div>
 
-    <div class="banner" id="daily" style="margin-bottom:14px;border-color:var(--rule);color:var(--ink)"></div>
+    <div class="banner hide" id="daily" style="margin-bottom:14px;border-color:var(--rule);color:var(--ink)"></div><!-- the 24-hour steps banner is switched off on the main page; the claim log below still shows every claim -->
     <div class="crusade-strip hide" id="crusade-strip" aria-live="polite"></div>
     <div class="banner thanks hide" id="thanksbanner">Happy Thanksgiving</div><!-- HARVEST LAYER -->
 
@@ -4751,7 +4751,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-claims';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-nodaily';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5501,6 +5501,7 @@ function harvestPaint(){                                // the page: glow, moon,
 
 /* ═══ render ═══════════════════════════════════════════════════════════ */
 function renderDaily(){
+  return;                                            // banner removed from the main page (the per-day chart in the claim log stays)
   var now=Date.now(), tot={};
   Object.keys(G.claims||{}).forEach(function(id){
     var c=G.claims[id]; if(!c||c.t<now-864e5) return;
