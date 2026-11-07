@@ -332,6 +332,14 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .dispute-alert .da-time{ font-family:var(--mono); font-weight:700; background:rgba(0,0,0,.28); padding:2px 8px; border-radius:2px; white-space:nowrap; }
 .dispute-alert button{ font-size:15px; font-weight:700; padding:8px 14px; background:#fff; color:#6d1f12; border:2px solid #6d1f12; border-radius:2px; cursor:pointer; }
 .dispute-alert.void{ background:#4a1410; }
+.caravan-alert{ margin:0 0 14px; padding:14px 18px; background:#1f6b45; color:#fff; border:3px solid #0f3d27; border-radius:3px; font-size:17px; line-height:1.4; box-shadow:0 2px 0 rgba(0,0,0,.25); display:flex; flex-direction:column; gap:10px; }
+.caravan-alert .ca-row{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; }
+.caravan-alert .ca-head{ font-size:21px; font-weight:800; text-transform:uppercase; letter-spacing:.01em; }
+.caravan-alert .ca-time{ font-family:var(--mono); font-weight:700; background:rgba(0,0,0,.28); padding:2px 8px; border-radius:2px; white-space:nowrap; }
+.caravan-alert.arrived{ background:#8a5a12; border-color:#4a2f06; }
+.caravan-alert button{ font-size:15px; font-weight:700; padding:8px 14px; background:#fff; color:#0f3d27; border:2px solid #0f3d27; border-radius:2px; cursor:pointer; }
+.caravan-alert.arrived button{ color:#4a2f06; border-color:#4a2f06; }
+.caravan-alert hr{ border:0; border-top:1px solid rgba(255,255,255,.35); width:100%; margin:0; }
 @media (prefers-reduced-motion:no-preference){ .dispute-alert:not(.void){ animation:daPulse 2.4s ease-in-out infinite; } }
 @keyframes daPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(179,64,42,.55); } 50%{ box-shadow:0 0 0 8px rgba(179,64,42,0); } }
 .claims-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; padding:14px 18px 4px; }
@@ -523,6 +531,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   <div id="game" class="hide">
 
     <div class="dispute-alert hide" id="disputealert" role="alert" aria-live="assertive"></div>
+    <div class="caravan-alert hide" id="caravanalert" role="alert" aria-live="assertive"></div>
 
     <!-- today's steps and the Claim button, at the very top of the page -->
     <div class="panel" id="claimtop">
@@ -4774,7 +4783,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-bigalert';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-cvalert';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5725,6 +5734,7 @@ function renderNotice(list){
         +'</span>');
     });
   }
+  renderCaravanAlert();
   var da=document.getElementById('disputealert');
   if(da){ da.innerHTML=big.concat(bigVoid).join('<hr style="border:0;border-top:1px solid rgba(255,255,255,.35);width:100%;margin:0">'); da.classList.toggle('hide',!big.length&&!bigVoid.length); da.classList.toggle('void',!big.length&&!!bigVoid.length); }
   caravanNotices(lines);
@@ -5923,6 +5933,7 @@ document.getElementById('shotlate').addEventListener('change',function(){
 function onClaimClick(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
   var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+  if(act==='cvseen'){ try{ localStorage.setItem(cvSeenKey(id),'1'); }catch(e){} return renderCaravanAlert(); }
   if(act==='details'){ claimDetailOpen=true; renderClaims(); var cd=document.getElementById('claims-detail'); if(cd&&cd.scrollIntoView) cd.scrollIntoView({block:'center'}); return; }
   if(act==='alerts'){ claimAlertsOpen=!claimAlertsOpen; return renderClaims(); }
   if(act==='no'||act==='ok') return vote(id,act);
@@ -5941,6 +5952,7 @@ function onClaimClick(ev){
 document.getElementById('claims-log').addEventListener('click',onClaimClick);
 document.getElementById('claimnote').addEventListener('click',onClaimClick);
 document.getElementById('disputealert').addEventListener('click',onClaimClick);
+document.getElementById('caravanalert').addEventListener('click',onClaimClick);
 document.getElementById('claims-detail').addEventListener('click',function(){ claimDetailOpen=!claimDetailOpen; renderClaims(); });
 document.getElementById('claims-more').addEventListener('click',function(){ showAllClaims=!showAllClaims; renderClaims(); });
 
@@ -7475,8 +7487,23 @@ function settleCaravans(){
 function caravanNotices(lines){
   Object.keys(G.caravans||{}).forEach(function(id){
     var c=G.caravans[id]; if(!c||c.to!==ME||c.got||c.eta<=Date.now()) return;
-    lines.push('<span>A caravan from <b>'+esc(nameOf(c.from))+'</b> is on its way to you with '+goodsLine(c.g||{})+'. It arrives in '+fmtDur(c.eta-Date.now())+'.</span>');
+    /* shown in the big alert at the top of the page instead (see renderCaravanAlert) */
   });
+}
+function cvSeenKey(id){ return 'marchland.cvseen.'+ME+'.'+id; }
+function cvSeen(id){ try{ return localStorage.getItem(cvSeenKey(id))==='1'; }catch(e){ return false; } }
+function renderCaravanAlert(){
+  var el=document.getElementById('caravanalert'); if(!el||!G||!me()) return;
+  var pl=me(), now=Date.now(), coming=[], here=[];
+  Object.keys(G.caravans||{}).forEach(function(id){
+    var c=G.caravans[id]; if(!c||c.to!==ME) return;
+    var what=(hasGoods(c.g)?goodsLine(c.g||{}):'')+(c.lt?(hasGoods(c.g)?' and ':'')+'a sealed letter':'');
+    if(!c.got && c.eta>now) coming.push('<div class="ca-row"><span class="ca-head">A caravan is coming</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, carrying '+what+'.</span></div>');
+    else if(c.got && now-c.got<2*864e5 && !cvSeen(id)) here.push('<div class="ca-row"><span class="ca-head">A caravan has arrived</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>: <b>'+what+'</b>. It is already in your stores'+(c.lt?' &mdash; the letter is in your Letters.':'.')+'</span> <button data-act="cvseen" data-id="'+id+'">Got it</button></div>');
+  });
+  el.innerHTML=here.concat(coming).join('<hr>');
+  el.classList.toggle('hide',!here.length&&!coming.length);
+  el.classList.toggle('arrived',!!here.length);
 }
 /* the wagon on the road: drawn even with animations off, since it shows where your goods are */
 function drawCaravans(now,amb){
