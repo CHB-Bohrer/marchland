@@ -4751,7 +4751,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-bend3';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-claims';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5604,7 +5604,7 @@ function render(){
 }
 
 /* ═══ claim log ════════════════════════════════════════════════════════ */
-var showAllClaims=false, LOG_SHORT=12;
+var showAllClaims=false, LOG_SHORT=12; var claimAlertsOpen=false;
 var CHIP={open:'◷ open', disputed:'⚑ disputed', stands:'✓ stands', void:'✕ voided', verified:'✓ verified', rejected:'✕ rejected'};
 function dayStart(t){ var d=new Date(t); d.setHours(0,0,0,0); return d.getTime(); }
 function fmtK(n){ return n>=10000 ? Math.round(n/1000)+'k' : n>=1000 ? (n/1000).toFixed(1).replace(/\.0$/,'')+'k' : String(n); }
@@ -5664,7 +5664,7 @@ function renderClaims(){
 }
 
 function renderNotice(list){
-  var lines=[], pl=me();
+  var lines=[], pl=me(), openOnes=[], voteOnes=[];
   list.forEach(function(e){
     var c=e.c, st=e.st;
     if(c.pid===ME && st.s==='disputed'){
@@ -5674,22 +5674,27 @@ function renderNotice(list){
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
       lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was '+(st.ver?'checked by Bohrer against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' — '+c.got+' marches will come off your next claim.</span>');
     }
-    /* every login: others' claims from the last 24 hours that can still be disputed */
-    if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS){
-      var canV=c.voters&&c.voters[ME], my=c.votes&&c.votes[ME]&&c.votes[ME].v;
-      var hot=armed&&armed.id===e.id;
-      lines.push('<span class="claimalert"><b>'+esc(nameOf(c.pid))+'</b> claimed <b>'+(c.steps||0).toLocaleString()+' steps</b> ('+c.got+' marches) '+since(c.t)+'. '
-        +(canV
-          ? (my==='ok' ? 'You said it looks fine. ' : '')+'You have '+hoursLeft(st.until)+' left to dispute it. '
-            +(my==='ok'?'':'<button data-act="ok" data-id="'+e.id+'">Looks fine</button> ')
-            +'<button data-act="no" data-id="'+e.id+'"'+(hot?' aria-pressed="true"':'')+'>'+(hot?'Tap again to dispute':'Dispute')+'</button>'
-          : 'It can be disputed for another '+hoursLeft(st.until)+'.')
-        +'</span>');
-    }
-    if(c.pid!==ME && st.s==='disputed' && c.voters && c.voters[ME] && !(c.votes&&c.votes[ME])){
-      lines.push('<span><b>'+esc(nameOf(c.pid))+'</b>&rsquo;s claim of '+c.steps.toLocaleString()+' steps is disputed and needs your vote — it&rsquo;s in the claim log below.</span>');
-    }
+    /* every login: others' claims from the last 24 hours that can still be disputed (folded into one line below) */
+    if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS) openOnes.push(e);
+    if(c.pid!==ME && st.s==='disputed' && c.voters && c.voters[ME] && !(c.votes&&c.votes[ME])) voteOnes.push(e);
   });
+  /* the others' claims, folded: one line each for "can be disputed" and "needs your vote", with the full list a tap away */
+  function nameList(arr){ var nm=arr.map(function(e){ return esc(nameOf(e.c.pid)); }); return nm.length>3?nm.slice(0,3).join(', ')+' and '+(nm.length-3)+' more':nm.join(nm.length===2?' and ':', '); }
+  if(voteOnes.length){
+    lines.push('<span><b>'+voteOnes.length+'</b> disputed claim'+(voteOnes.length>1?'s need':' needs')+' your vote ('+nameList(voteOnes)+') &mdash; '+(voteOnes.length>1?'they are':'it is')+' in the claim log below.</span>');
+  }
+  if(openOnes.length){
+    lines.push('<span class="claimalert"><b>'+openOnes.length+'</b> claim'+(openOnes.length>1?'s':'')+' from the last day can still be disputed ('+nameList(openOnes)+'). <button data-act="alerts">'+(claimAlertsOpen?'Hide':'Show')+'</button></span>');
+    if(claimAlertsOpen) openOnes.forEach(function(e){
+      var c=e.c, st=e.st, canV=c.voters&&c.voters[ME], my=c.votes&&c.votes[ME]&&c.votes[ME].v, hot=armed&&armed.id===e.id;
+      lines.push('<span class="claimalert compact"><b>'+esc(nameOf(c.pid))+'</b> '+(c.steps||0).toLocaleString()+' steps ('+c.got+' marches), '+hoursLeft(st.until)+' left '
+        +(canV
+          ? (my==='ok'?'<i>(you said fine)</i> ':'<button data-act="ok" data-id="'+e.id+'">Looks fine</button> ')
+            +'<button data-act="no" data-id="'+e.id+'"'+(hot?' aria-pressed="true"':'')+'>'+(hot?'Tap again to dispute':'Dispute')+'</button>'
+          : '')
+        +'</span>');
+    });
+  }
   caravanNotices(lines);
   var n=document.getElementById('claimnote');
   n.innerHTML=lines.join('');
@@ -5869,6 +5874,7 @@ document.getElementById('shotlate').addEventListener('change',function(){
 function onClaimClick(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
   var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+  if(act==='alerts'){ claimAlertsOpen=!claimAlertsOpen; return renderClaims(); }
   if(act==='no'||act==='ok') return vote(id,act);
   if(act==='addshot'){ lateFor=id; document.getElementById('shotlate').click(); return; }
   if(act==='photo'){
