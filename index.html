@@ -326,6 +326,14 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .pick.on{ border-style:solid; border-color:var(--ink-2); color:var(--ink); }
 .notice{ padding:10px 12px; border-bottom:1px solid var(--rule); font-size:13.5px; background:var(--surface); display:flex; flex-direction:column; gap:6px; }
 .notice button{ padding:4px 9px; font-size:12px; vertical-align:1px; }
+.dispute-alert{ margin:0 0 14px; padding:16px 18px; background:#B3402A; color:#fff; border:3px solid #6d1f12; border-radius:3px; font-size:17px; line-height:1.4; box-shadow:0 2px 0 rgba(0,0,0,.25); display:flex; flex-direction:column; gap:12px; }
+.dispute-alert .da-row{ display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; }
+.dispute-alert .da-head{ font-size:21px; font-weight:800; letter-spacing:.01em; text-transform:uppercase; }
+.dispute-alert .da-time{ font-family:var(--mono); font-weight:700; background:rgba(0,0,0,.28); padding:2px 8px; border-radius:2px; white-space:nowrap; }
+.dispute-alert button{ font-size:15px; font-weight:700; padding:8px 14px; background:#fff; color:#6d1f12; border:2px solid #6d1f12; border-radius:2px; cursor:pointer; }
+.dispute-alert.void{ background:#4a1410; }
+@media (prefers-reduced-motion:no-preference){ .dispute-alert:not(.void){ animation:daPulse 2.4s ease-in-out infinite; } }
+@keyframes daPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(179,64,42,.55); } 50%{ box-shadow:0 0 0 8px rgba(179,64,42,0); } }
 .claims-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; padding:14px 18px 4px; }
 .claims-head h2{ margin:0; }
 .chart{ padding:6px 18px 12px; }
@@ -513,6 +521,8 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
   <!-- ── the game ──────────────────────────────────────────────────── -->
   <div id="game" class="hide">
+
+    <div class="dispute-alert hide" id="disputealert" role="alert" aria-live="assertive"></div>
 
     <!-- today's steps and the Claim button, at the very top of the page -->
     <div class="panel" id="claimtop">
@@ -4764,7 +4774,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-chartclaims';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-bigalert';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5683,15 +5693,16 @@ function renderClaims(){
 }
 
 function renderNotice(list){
-  var lines=[], pl=me(), openOnes=[], voteOnes=[];
+  var lines=[], pl=me(), openOnes=[], voteOnes=[], big=[], bigVoid=[];
   list.forEach(function(e){
     var c=e.c, st=e.st;
     if(c.pid===ME && st.s==='disputed'){
-      lines.push('<span><b>'+namesOf(st.noBy)+'</b> disputed your claim of '+c.steps.toLocaleString()+' steps. The others vote on it for the next '+hoursLeft(st.until)+'; if it is voided, '+c.got+' marches come off your next claim.'
-        +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">+ Add a Health screenshot</button>')+'</span>');
+      big.push('<div class="da-row"><span class="da-head">Your steps are disputed</span><span class="da-time">'+hoursLeft(st.until)+' left to vote</span></div>'
+        +'<div class="da-row"><span><b>'+namesOf(st.noBy)+'</b> disputed your claim of <b>'+c.steps.toLocaleString()+' steps</b>. The others vote on it; if it is voided, <b>'+c.got+' marches</b> come off your next claim.</span>'
+        +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">Add a Health screenshot to defend it</button>')+'</div>');
     }
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
-      lines.push('<span>Your claim of '+c.steps.toLocaleString()+' steps was '+(st.ver?'checked by Bohrer against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' — '+c.got+' marches will come off your next claim.</span>');
+      bigVoid.push('<div class="da-row"><span class="da-head">Your claim was voided</span></div><div class="da-row"><span>Your claim of <b>'+c.steps.toLocaleString()+' steps</b> was '+(st.ver?'checked by Bohrer against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' &mdash; <b>'+c.got+' marches</b> will come off your next claim.</span></div>');
     }
     /* every login: others' claims from the last 24 hours that can still be disputed (folded into one line below) */
     if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS) openOnes.push(e);
@@ -5714,6 +5725,8 @@ function renderNotice(list){
         +'</span>');
     });
   }
+  var da=document.getElementById('disputealert');
+  if(da){ da.innerHTML=big.concat(bigVoid).join('<hr style="border:0;border-top:1px solid rgba(255,255,255,.35);width:100%;margin:0">'); da.classList.toggle('hide',!big.length&&!bigVoid.length); da.classList.toggle('void',!big.length&&!!bigVoid.length); }
   caravanNotices(lines);
   var n=document.getElementById('claimnote');
   n.innerHTML=lines.join('');
@@ -5927,6 +5940,7 @@ function onClaimClick(ev){
 }
 document.getElementById('claims-log').addEventListener('click',onClaimClick);
 document.getElementById('claimnote').addEventListener('click',onClaimClick);
+document.getElementById('disputealert').addEventListener('click',onClaimClick);
 document.getElementById('claims-detail').addEventListener('click',function(){ claimDetailOpen=!claimDetailOpen; renderClaims(); });
 document.getElementById('claims-more').addEventListener('click',function(){ showAllClaims=!showAllClaims; renderClaims(); });
 
