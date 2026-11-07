@@ -4473,7 +4473,14 @@ function rnBuildChunks(){                           // the stretches themselves:
         sxx+=px*px; syy+=py*py; sxy+=px*py;
       });
       var ang=0.5*Math.atan2(2*sxy,sxx-syy);        // the stretch's long axis: the way the label lies
-      out.push({id:cells[best][0]+'_'+cells[best][1], cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang});
+      var ca=Math.cos(ang), sa=Math.sin(ang), aoq=offs[best][0], aor=offs[best][1];
+      var pts=offs.map(function(o){ var dq=o[0]-aoq, dr=o[1]-aor, px=Math.sqrt(3)*(dq+dr/2), py=1.5*dr; return {q:dq, r:dr, t:px*ca+py*sa}; }).sort(function(x,y){ return x.t-y.t; });
+      var path=pts.map(function(pt,i){                                    // walk along the river's long axis; average neighbours so the line is smooth
+        var a0=Math.max(0,i-2), a1=Math.min(pts.length-1,i+2), sq=0, sr=0, n=0;
+        for(var j=a0;j<=a1;j++){ sq+=pts[j].q; sr+=pts[j].r; n++; }
+        return [sq/n, sr/n];
+      });
+      out.push({id:cells[best][0]+'_'+cells[best][1], cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang, path:path});
     });
   }
   return out;
@@ -4490,7 +4497,7 @@ function rnRefresh(){
   var used={}, given=G.rivnames||{};
   rnChunks.forEach(function(ch){
     var gv=given[ch.id];
-    if(gv && gv.n){ rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:gv.n, w:99, custom:true}); rnById[ch.id]=gv.n; return; }   // a name somebody paid a march for
+    if(gv && gv.n){ rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, path:ch.path, text:gv.n, w:99, custom:true}); rnById[ch.id]=gv.n; return; }   // a name somebody paid a march for
     var tally={};
     ch.cells.forEach(function(c){
       for(var dq=-4;dq<=4;dq++) for(var dr=-4;dr<=4;dr++){
@@ -4508,7 +4515,7 @@ function rnRefresh(){
     for(var tries=0;tries<set.length && used[tag+'#'+ix];tries++) ix=(ix+1)%set.length;   // the same settler's rivers don't all share one joke
     used[tag+'#'+ix]=1;
     text=two?set[ix](nm(ids[0]),nm(ids[1])):set[ix](nm(ids[0]));
-    rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:text, w:tally[ids[0]]}); rnById[ch.id]=text;
+    rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, path:ch.path, text:text, w:tally[ids[0]]}); rnById[ch.id]=text;
   });
 }
 /* ── renaming a river ── 1 march. You need more than half of the claimed land within 3 squares of that stretch
@@ -4570,20 +4577,44 @@ function renameRiver(q,r){
 function drawRiverNames(){
   if(!RIVER_NAMES || S<RN_MIN_S || !G) return;
   if(Date.now()-rnAt>RN_REFRESH_MS) rnRefresh();
-  var fs=Math.max(9,Math.min(17,S*0.55)), placed=[];
+  var fs0=Math.max(7,Math.min(12,S*0.4)), placed=[];
   ctx.save();
-  ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
   rnNames.slice().sort(function(a,b){ return (b.custom?1:0)-(a.custom?1:0); }).forEach(function(n){
-    var P=toNear(n.aq,n.ar);
-    if(P[0]<-80||P[0]>W+80||P[1]<-40||P[1]>H+40) return;
-    var tw=ctx.measureText(n.text).width, rad=Math.min(tw*0.5,tw*0.35+fs);
-    for(var i=0;i<placed.length;i++){ var o=placed[i]; if(Math.hypot(o[0]-P[0],o[1]-P[1])<rad+o[2]) return; }   // never print two names on top of each other
-    placed.push([P[0],P[1],rad]);
-    var a=n.ang; if(a>Math.PI/2) a-=Math.PI; if(a<-Math.PI/2) a+=Math.PI;
-    ctx.save(); ctx.translate(P[0],P[1]); ctx.rotate(a);
-    ctx.globalAlpha=.8; ctx.strokeStyle=T['--surface']; ctx.lineWidth=Math.max(3,fs*0.28); ctx.strokeText(n.text,0,0);
-    ctx.globalAlpha=.95; ctx.fillStyle=T['--ink']; ctx.fillText(n.text,0,0);
-    ctx.restore();
+    var P0=toNear(n.aq,n.ar);
+    if(P0[0]<-120||P0[0]>W+120||P0[1]<-60||P0[1]>H+60) return;
+    var P1=toNear(n.aq+1,n.ar), P2=toNear(n.aq,n.ar+1), ux=[P1[0]-P0[0],P1[1]-P0[1]], uy=[P2[0]-P0[0],P2[1]-P0[1]];
+    var pts=n.path.map(function(o){ return [P0[0]+o[0]*ux[0]+o[1]*uy[0], P0[1]+o[0]*ux[1]+o[1]*uy[1]]; });
+    if(pts.length<2) return;
+    if(pts[pts.length-1][0]<pts[0][0]) pts.reverse();                  // always read left to right
+    var cum=[0]; for(var i=1;i<pts.length;i++) cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));
+    var L=cum[cum.length-1]; if(L<12) return;
+    var fs=fs0; ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif';
+    var tw=ctx.measureText(n.text).width;
+    if(tw>L*0.95){ fs=Math.max(6,fs*L*0.95/tw); ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; tw=ctx.measureText(n.text).width; }   // shrink to fit the stretch rather than hang off it
+    var mid=P0, rad=Math.min(tw,L)*0.45;
+    for(var k=0;k<placed.length;k++){ var o=placed[k]; if(Math.hypot(o[0]-mid[0],o[1]-mid[1])<rad+o[2]) return; }
+    placed.push([mid[0],mid[1],rad]);
+    function at(d){                                                      // point and heading at distance d along the river
+      d=Math.max(0,Math.min(L,d)); var j=1; while(j<cum.length-1 && cum[j]<d) j++;
+      var seg=cum[j]-cum[j-1]||1, f=(d-cum[j-1])/seg;
+      return [pts[j-1][0]+(pts[j][0]-pts[j-1][0])*f, pts[j-1][1]+(pts[j][1]-pts[j-1][1])*f];
+    }
+    var mi=0, md=1e9; for(var m=0;m<pts.length;m++){ var dd=Math.hypot(pts[m][0]-P0[0],pts[m][1]-P0[1]); if(dd<md){ md=dd; mi=m; } }
+    var start=Math.max(0,Math.min(L-tw,cum[mi]-tw/2)), d=start, chars=[];   // centred on the middle of the stretch, kept inside it
+    for(var c=0;c<n.text.length;c++){
+      var ch=n.text.charAt(c), w=ctx.measureText(ch).width, ctr=d+w/2;
+      var A=at(ctr-fs*0.6), B=at(ctr+fs*0.6), pos=at(ctr);
+      chars.push([ch,pos[0],pos[1],Math.atan2(B[1]-A[1],B[0]-A[0])]); d+=w;
+    }
+    ctx.lineWidth=Math.max(2.5,fs*0.3); ctx.strokeStyle=T['--surface']; ctx.fillStyle=T['--ink'];
+    [0,1].forEach(function(pass){
+      chars.forEach(function(c){
+        ctx.save(); ctx.translate(c[1],c[2]); ctx.rotate(c[3]);
+        if(pass===0){ ctx.globalAlpha=.75; ctx.strokeText(c[0],0,0); } else { ctx.globalAlpha=.95; ctx.fillText(c[0],0,0); }
+        ctx.restore();
+      });
+    });
   });
   ctx.restore();
 }
@@ -4711,7 +4742,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov6-rename';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-bend';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
