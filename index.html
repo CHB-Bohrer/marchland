@@ -4474,8 +4474,17 @@ function rnBuildChunks(){                           // the stretches themselves:
       });
       var ang=0.5*Math.atan2(2*sxy,sxx-syy);        // the stretch's long axis: the way the label lies
       var ca=Math.cos(ang), sa=Math.sin(ang), aoq=offs[best][0], aor=offs[best][1];
-      var pts=offs.map(function(o){ var dq=o[0]-aoq, dr=o[1]-aor, px=Math.sqrt(3)*(dq+dr/2), py=1.5*dr; return {q:dq, r:dr, t:px*ca+py*sa}; }).sort(function(x,y){ return x.t-y.t; });
-      var path=pts.map(function(pt,i){                                    // walk along the river's long axis; average neighbours so the line is smooth
+      var pts=offs.map(function(o){ var dq=o[0]-aoq, dr=o[1]-aor, px=Math.sqrt(3)*(dq+dr/2), py=1.5*dr; return {q:dq, r:dr, t:px*ca+py*sa}; });
+      var byT=pts.slice().sort(function(x,y){ return x.t-y.t; }), walk=[], left=pts.slice();
+      var cur=byT[0]; left.splice(left.indexOf(cur),1); walk.push(cur);          // follow the river from one end, a cell at a time, so a bend never folds the line back on itself
+      while(left.length){
+        var bi=-1, bd2=1e9;
+        for(var li=0;li<left.length;li++){ var ddq=left[li].q-cur.q, ddr=left[li].r-cur.r, hd=(Math.abs(ddq)+Math.abs(ddr)+Math.abs(ddq+ddr))/2; if(hd<=2 && hd<bd2){ bd2=hd; bi=li; } }
+        if(bi<0) break;
+        cur=left.splice(bi,1)[0]; walk.push(cur);
+      }
+      if(walk.length>=pts.length*0.6) pts=walk; else pts=byT;                    // a forked stretch falls back to the straight line along its length
+      var path=pts.map(function(pt,i){                                    // average neighbours so the line is smooth
         var a0=Math.max(0,i-2), a1=Math.min(pts.length-1,i+2), sq=0, sr=0, n=0;
         for(var j=a0;j<=a1;j++){ sq+=pts[j].q; sr+=pts[j].r; n++; }
         return [sq/n, sr/n];
@@ -4577,7 +4586,7 @@ function renameRiver(q,r){
 function drawRiverNames(){
   if(!RIVER_NAMES || S<RN_MIN_S || !G) return;
   if(Date.now()-rnAt>RN_REFRESH_MS) rnRefresh();
-  var fs0=Math.max(7,Math.min(12,S*0.4)), placed=[];
+  var fs0=Math.max(8,Math.min(12,S*0.4)), placed=[];
   ctx.save();
   ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
   rnNames.slice().sort(function(a,b){ return (b.custom?1:0)-(a.custom?1:0); }).forEach(function(n){
@@ -4591,10 +4600,9 @@ function drawRiverNames(){
     var L=cum[cum.length-1]; if(L<12) return;
     var fs=fs0; ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif';
     var tw=ctx.measureText(n.text).width;
-    if(tw>L*0.95){ fs=Math.max(6,fs*L*0.95/tw); ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; tw=ctx.measureText(n.text).width; }   // shrink to fit the stretch rather than hang off it
+    if(tw>L*0.95){ fs=fs*L*0.95/tw; if(fs<7.5) return; ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; tw=ctx.measureText(n.text).width; }   // shrink to fit the stretch; if that would be unreadable, leave it off until zoomed in
     var mid=P0, rad=Math.min(tw,L)*0.45;
     for(var k=0;k<placed.length;k++){ var o=placed[k]; if(Math.hypot(o[0]-mid[0],o[1]-mid[1])<rad+o[2]) return; }
-    placed.push([mid[0],mid[1],rad]);
     function at(d){                                                      // point and heading at distance d along the river
       d=Math.max(0,Math.min(L,d)); var j=1; while(j<cum.length-1 && cum[j]<d) j++;
       var seg=cum[j]-cum[j-1]||1, f=(d-cum[j-1])/seg;
@@ -4604,14 +4612,16 @@ function drawRiverNames(){
     var start=Math.max(0,Math.min(L-tw,cum[mi]-tw/2)), d=start, chars=[];   // centred on the middle of the stretch, kept inside it
     for(var c=0;c<n.text.length;c++){
       var ch=n.text.charAt(c), w=ctx.measureText(ch).width, ctr=d+w/2;
-      var A=at(ctr-fs*0.6), B=at(ctr+fs*0.6), pos=at(ctr);
+      var A=at(ctr-fs*1.6), B=at(ctr+fs*1.6), pos=at(ctr);
       chars.push([ch,pos[0],pos[1],Math.atan2(B[1]-A[1],B[0]-A[0])]); d+=w;
     }
-    ctx.lineWidth=Math.max(2.5,fs*0.3); ctx.strokeStyle=T['--surface']; ctx.fillStyle=T['--ink'];
+    for(var z=1;z<chars.length;z++){ var dA=Math.abs(chars[z][3]-chars[z-1][3]); if(dA>Math.PI) dA=2*Math.PI-dA; if(dA>0.7) return; }   // too sharp a bend to read: skip it
+    placed.push([mid[0],mid[1],rad]);
+    ctx.lineWidth=Math.max(3,fs*0.38); ctx.strokeStyle=T['--surface']; ctx.fillStyle=T['--ink'];
     [0,1].forEach(function(pass){
       chars.forEach(function(c){
         ctx.save(); ctx.translate(c[1],c[2]); ctx.rotate(c[3]);
-        if(pass===0){ ctx.globalAlpha=.75; ctx.strokeText(c[0],0,0); } else { ctx.globalAlpha=.95; ctx.fillText(c[0],0,0); }
+        if(pass===0){ ctx.globalAlpha=.9; ctx.strokeText(c[0],0,0); } else { ctx.globalAlpha=.95; ctx.fillText(c[0],0,0); }
         ctx.restore();
       });
     });
@@ -4742,7 +4752,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-bend';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-bend2';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
