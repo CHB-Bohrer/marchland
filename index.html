@@ -747,6 +747,18 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: naming the rivers (shown once per player, see showRiverNote) ── -->
+<div id="rivernote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="rivernote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">News for the realm</p>
+    <h2 id="rivernote-h">&#127754; The rivers have names &mdash; and you can change them</h2>
+    <p><b>Every river now carries the name of the people settled beside it.</b> Zoom in and you will find the names written along the water. They change as the settlers do.</p>
+    <p><b>Not happy with yours? Rename it.</b> Tap any square of the river and choose <b>Name this river</b>. It costs <b>1 march</b>, and you must hold <b>more than half of the claimed squares near that stretch of river</b> (and at least 12 of them). Type the name you want and everyone sees it. Keep it clean, warriors &mdash; the gods are still listening.</p>
+    <p>A name you give is yours to keep until someone who holds the majority beside that river gives it a new one.</p>
+    <button type="button" class="rulesnote-go" id="rivernote-go">Name them all</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the undo button is coming (shown once per player, see showUndoNote) ── -->
 <div id="undonote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="undonote-h">
   <div class="rulesnote-card">
@@ -1855,6 +1867,7 @@ function applyRemote(remote){
   G.treks=remote.treks||{};
   G.purge=remote.purge||null; G.plague=remote.plague||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
+  if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
   G.fallen=remote.fallen||{};
   if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
@@ -3312,6 +3325,7 @@ function cellTitle(c){
   if(c.o&&c.rd) sub.push(roadUp(c)?'road ready in '+hoursLeft(c.rf):(liveRoads(c.o)[key(c.q,c.r)]?'live road':'dead road, cut off from every castle'));
   else if(c.o===ME&&c.k===CASTLE&&!isRuin(c)) sub.push('counts as road');
   if(c.k===CASTLE&&c.h!=null&&!isRuin(c)) sub.push('health '+castleH(c)+' of '+CASTLE_MAX_H);
+  if(wet){ var rn=riverName(c.q,c.r); if(rn) sub.push('called '+esc(rn)); }
   return t+(sub.length?'<span class="sc-sub">'+sub.join(' &middot; ')+'</span>':'');
 }
 function refundLine(r){ var p=[]; GOODS.forEach(function(k){ if(r[k]>0) p.push(r[k]+' '+k); }); return p.length?'+'+p.join(', ')+' back':'nothing back'; }
@@ -3371,6 +3385,7 @@ function cellActions(q,r){
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
     }
   }
+  if(wet) A('Name this river','1 march',function(){ renameRiver(q,r); },riverWhy(q,r));
   Object.keys(G.players).forEach(function(pid){
     var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
     A('Send goods to '+esc(full(o)),'no marches',function(){ openCaravanOnMap(pid); });
@@ -4408,7 +4423,7 @@ function span(c,cx,cy,s,col,detail){
    held within four cells of it and, if one player (or two) clearly live there,
    takes a silly name from them. Unsettled stretches stay nameless. The name is
    chosen by a hash of where the stretch is, so it doesn't flicker between frames. */
-var RIVER_NAMES=true, RN_MIN_S=7, RN_REFRESH_MS=15000, rnChunks=null, rnNames=[], rnAt=0;
+var RIVER_NAMES=true, RN_MIN_S=7, RN_REFRESH_MS=15000, rnChunks=null, rnNames=[], rnAt=0, rnIndex={}, rnById={};
 function rnPoss(n){ return /s$/i.test(n)?n+'’':n+'’s'; }
 var RN_ONE=[
   function(n){ return 'River '+n; },
@@ -4458,17 +4473,24 @@ function rnBuildChunks(){                           // the stretches themselves:
         sxx+=px*px; syy+=py*py; sxy+=px*py;
       });
       var ang=0.5*Math.atan2(2*sxy,sxx-syy);        // the stretch's long axis: the way the label lies
-      out.push({cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang});
+      out.push({id:cells[best][0]+'_'+cells[best][1], cells:cells, aq:cells[best][0], ar:cells[best][1], ang:ang});
     });
   }
   return out;
 }
+function rnInit(){
+  if(rnChunks) return;
+  rnChunks=rnBuildChunks(); rnIndex={};
+  rnChunks.forEach(function(ch,i){ ch.cells.forEach(function(c){ rnIndex[c[0]+'_'+c[1]]=i; }); });
+}
 function rnRefresh(){
   if(!G) return;
-  if(!rnChunks) rnChunks=rnBuildChunks();
-  rnAt=Date.now(); rnNames=[];
-  var used={};
+  rnInit();
+  rnAt=Date.now(); rnNames=[]; rnById={};
+  var used={}, given=G.rivnames||{};
   rnChunks.forEach(function(ch){
+    var gv=given[ch.id];
+    if(gv && gv.n){ rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:gv.n, w:99, custom:true}); rnById[ch.id]=gv.n; return; }   // a name somebody paid a march for
     var tally={};
     ch.cells.forEach(function(c){
       for(var dq=-4;dq<=4;dq++) for(var dr=-4;dr<=4;dr++){
@@ -4486,16 +4508,72 @@ function rnRefresh(){
     for(var tries=0;tries<set.length && used[tag+'#'+ix];tries++) ix=(ix+1)%set.length;   // the same settler's rivers don't all share one joke
     used[tag+'#'+ix]=1;
     text=two?set[ix](nm(ids[0]),nm(ids[1])):set[ix](nm(ids[0]));
-    rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:text, w:tally[ids[0]]});
+    rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, text:text, w:tally[ids[0]]}); rnById[ch.id]=text;
   });
 }
+/* ── renaming a river ── 1 march. You need more than half of the claimed land within 3 squares of that stretch
+   of river (and at least RIVER_MIN of those squares). The name is stored on the board under rivnames/<stretch id>. */
+var RIVER_MIN=12, RIVER_NAME_MAX=28, RIVER_BAD=['fuck','shit','cunt','bitch','dick','cock','piss','nigg','fag','whore','slut','twat','wank','rape','nazi','hitler'];
+function riverStretch(q,r){ rnInit(); var i=rnIndex[key(q,r)]; return i==null?null:rnChunks[i]; }
+function riverName(q,r){ var ch=riverStretch(q,r); if(!ch) return ''; if(!rnNames.length && G) rnRefresh(); return rnById[ch.id]||''; }
+function riverHold(ch){                              // {mine, claimed}: squares of land near the stretch, held by me and held by anyone
+  var seen={}, mine=0, claimed=0;
+  ch.cells.forEach(function(c){
+    for(var dq=-3;dq<=3;dq++) for(var dr=-3;dr<=3;dr++){
+      if((Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2>3) continue;
+      var nq=wrapC(c[0]+dq), nr=wrapC(c[1]+dr), k=nq+'_'+nr;
+      if(seen[k]) continue; seen[k]=1;
+      var cc=G.cells[k]; if(!cc || !cc.o || !G.players[cc.o] || riverAt(nq,nr)) continue;
+      claimed++; if(cc.o===ME) mine++;
+    }
+  });
+  return {mine:mine, claimed:claimed};
+}
+function riverWhy(q,r){                              // '' when I may rename this river, else the reason
+  var ch=riverStretch(q,r), pl=me(); if(!ch||!pl) return 'No river here';
+  var h=riverHold(ch);
+  if(h.mine<RIVER_MIN || h.mine*2<=h.claimed) return 'Needs more than half of the claimed land near it (you hold '+h.mine+' of '+h.claimed+', at least '+RIVER_MIN+')';
+  if(pl.squares<1) return 'Needs 1 march (you have '+pl.squares+')';
+  return '';
+}
+function cleanRiverName(v){
+  v=String(v||'').replace(/[<>&"\u0000-\u001f]/g,'').replace(/\s+/g,' ').trim().slice(0,RIVER_NAME_MAX);
+  return v;
+}
+function riverNameOk(v){
+  if(v.replace(/[^A-Za-z0-9]/g,'').length<3) return 'Give it a name of at least three letters.';
+  var flat=v.toLowerCase().replace(/[^a-z]/g,'');
+  for(var i=0;i<RIVER_BAD.length;i++) if(flat.indexOf(RIVER_BAD[i])>=0) return 'The gods do not like that word. Pick another name.';
+  return '';
+}
+function renameRiver(q,r){
+  var ch=riverStretch(q,r), pl=me(); if(!ch||!pl) return;
+  var why=riverWhy(q,r); if(why) return nope(why);
+  var cur=riverName(q,r);
+  scrollDialog({eyebrow:'A river by your lands', title:'Name this river',
+    html:'<p>'+(cur?'It is now called <b>'+esc(cur)+'</b>. ':'')+'Naming it costs <b>1 march</b>.</p><p><input id="rvin" type="text" maxlength="'+RIVER_NAME_MAX+'" autocomplete="off" autofocus placeholder="River of Mild Regret" value="" style="width:100%;box-sizing:border-box;font:inherit;padding:8px"></p><p class="sc-note"></p>',
+    cancel:null, buttons:[{label:'Not now',value:null},{label:'Name it',value:'ok',primary:true}],
+    check:function(v,wrap){ var inp=wrap.querySelector('#rvin'), nm=cleanRiverName(inp&&inp.value); return riverNameOk(nm); }
+  }).then(function(res){
+    if(res.value!=='ok') return;
+    var inp=res.box.querySelector('#rvin'), nm=cleanRiverName(inp&&inp.value);
+    if(riverNameOk(nm)) return;
+    var again=riverWhy(q,r); if(again) return nope(again);       // things may have changed while the scroll was open
+    pl.squares-=1;
+    G.rivnames=G.rivnames||{}; var rec={n:nm, by:ME, t:Date.now()}; G.rivnames[ch.id]=rec;
+    rnAt=0; rnRefresh();
+    putPath('/rivnames/'+ch.id,rec); pushMe(); render(); draw();
+    say('<b>'+esc(nm)+'</b> &mdash; the river is renamed for <b>1</b> march. <b>'+avail()+'</b> left.');
+  });
+}
+
 function drawRiverNames(){
   if(!RIVER_NAMES || S<RN_MIN_S || !G) return;
   if(Date.now()-rnAt>RN_REFRESH_MS) rnRefresh();
   var fs=Math.max(9,Math.min(17,S*0.55)), placed=[];
   ctx.save();
   ctx.font='italic 600 '+fs+'px Georgia, "Times New Roman", serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
-  rnNames.forEach(function(n){
+  rnNames.slice().sort(function(a,b){ return (b.custom?1:0)-(a.custom?1:0); }).forEach(function(n){
     var P=toNear(n.aq,n.ar);
     if(P[0]<-80||P[0]>W+80||P[1]<-40||P[1]>H+40) return;
     var tw=ctx.measureText(n.text).width, rad=Math.min(tw*0.5,tw*0.35+fs);
@@ -4633,7 +4711,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov6-rivers2';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov6-rename';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -6792,7 +6870,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -6886,7 +6964,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','plaguenote','undonote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -6915,7 +6993,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -6944,7 +7022,7 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -6974,7 +7052,7 @@ function closePlagueNote(){
 function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
 function showPlagueNote(){
   var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',plagueNoteKey,true);
@@ -7010,8 +7088,31 @@ function showUndoNote(){
   var b=document.getElementById('undonote-go'); b.onclick=closeUndoNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: naming the rivers. Shown once per player, never stacked on another notice. */
+var RIVER_NOTE_ID='river1';
+function riverNoteSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[RIVER_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+RIVER_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function closeRiverNote(){
+  var n=document.getElementById('rivernote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',riverNoteKey,true);
+  var pl=me(); if(pl){ pl.notes=pl.notes||{}; pl.notes[RIVER_NOTE_ID]=Date.now(); try{ localStorage.setItem('marchland.notice.'+RIVER_NOTE_ID+'.'+ME,'1'); }catch(e){} pushMe(); }
+  setTimeout(showNext,250);
+}
+function riverNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeRiverNote(); } }
+function showRiverNote(){
+  var n=document.getElementById('rivernote'); if(!n||!G||!me()||riverNoteSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',riverNoteKey,true);
+  var b=document.getElementById('rivernote-go'); b.onclick=closeRiverNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showUndoNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
