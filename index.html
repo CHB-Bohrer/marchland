@@ -1172,20 +1172,38 @@ function settleCastles(){
   }
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||!c.o) continue;
-    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), fed=castleFed(q,r,c.o);
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    if(G.players && Object.keys(G.players).length && !G.players[c.o]){   // a castle whose owner has left the game: it goes, and the ground with it
+      castleSave(q,r,c.o,null); changed++; continue;
+    }
+    var fed=castleFed(q,r,c.o);
     if(c.ht==null){
       if(fed && castleH(c)>=CASTLE_MAX_H){ delete c.h; continue; }
       c.ht=now; if(c.h==null) c.h=CASTLE_MAX_H;
-      pushCell(q,r); changed++; continue;
+      castleSave(q,r,c.o,c); changed++; continue;
     }
     var n=Math.floor((now-c.ht)/TICK_MS); if(n<1) continue;
     var h=castleH(c), nh=fed?Math.min(CASTLE_MAX_H,h+n):Math.max(0,h-n);
+    if(h<=0 && nh<=0) continue;                       // a ruin that stays a ruin: nothing to write (rewriting it is how seized ruins came back)
     if(nh>=CASTLE_MAX_H){ delete c.h; delete c.ht; }
     else { c.h=nh; c.ht+=n*TICK_MS; }
     if(h>0 && nh<=0){ c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; }   // it falls: the garrison walks out into the open
-    pushCell(q,r); changed++;
+    castleSave(q,r,c.o,c); changed++;
   }
   return changed;
+}
+/* Castle upkeep is written by everyone's screen, so it must never write over a newer square: re-read the
+   square, and only write if it is still the same owner's castle (and only if nobody wrote it in between).
+   val null wipes the square (keeping any crosses). */
+function castleSave(q,r,owner,val){
+  var k=key(q,r);
+  if(!val){ var gc=G.cells[k]; if(gc && gc.gv && gc.gv.length) G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:gc.gv}; else delete G.cells[k]; }
+  if(!online){ pushAll(); return Promise.resolve(); }
+  return cellFresh(q,r).then(function(f){
+    var fc=f.c; if(!fc || fc.k!==CASTLE || fc.o!==owner) return;   // taken, razed or moved since this screen last looked
+    var out=val?val:(fc.gv?{o:null,w:0,k:null,l:0,g:0,d:0,gv:fc.gv}:null);
+    return cellPutIf(q,r,out,f.tag);
+  }).catch(function(){});
 }
 /* ── elimination ──
    A player with no castle standing and no soldier anywhere (in a band, in a tower's garrison, or
@@ -4782,7 +4800,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD = 'nov7-leadnames';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD = 'nov8-ruins';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
