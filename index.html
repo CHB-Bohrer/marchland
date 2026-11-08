@@ -4783,7 +4783,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-cvalert';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-idle';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -7372,6 +7372,24 @@ document.getElementById('leave').addEventListener('click',function(){
   // forget the name on this device so the next person can type theirs
   push().then(function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); });
 });
+
+/* ═══ idle sign-out ═══ Five minutes without a click, tap or key press signs you out, so a game left open on a shared
+   computer does not stay signed in. Time is counted by the clock, so a laptop that slept counts too. After the reload
+   the sign-in screen says why. */
+var IDLE_MS=5*60000, lastActive=Date.now(), idling=false;
+['pointerdown','mousedown','touchstart','keydown'].forEach(function(ev){ document.addEventListener(ev,function(){ lastActive=Date.now(); },true); });
+function idleCheck(){
+  if(idling||!G||!me()) return;
+  if(Date.now()-lastActive<IDLE_MS) return;
+  idling=true;
+  try{ localStorage.setItem('marchland.idleout','1'); }catch(e){}
+  var done=function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); };
+  try{ push().then(done,done); }catch(e){ done(); }
+}
+setInterval(idleCheck,10000);
+document.addEventListener('visibilitychange',idleCheck);
+window.addEventListener('focus',idleCheck);
+try{ if(localStorage.getItem('marchland.idleout')==='1'){ localStorage.removeItem('marchland.idleout'); var jh=document.getElementById('join-hint'); if(jh) jh.textContent='You were signed out after 5 minutes without a click. Sign back in to carry on.'; } }catch(e){}
 
 /* ═══ caravans ═════════════════════════════════════════════════════════
    A caravan is a gift: any of your stone, timber, iron or grain, sent to
