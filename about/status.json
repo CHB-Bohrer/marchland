@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "title": "Marchland",
+  "tagline": "A conquest game powered by your daily steps, played on one shared map.",
+  "kind": "Side project",
+  "stage": "Live, with players",
+  "as_of": "2026-11-07",
+  "repo": "CHB-Bohrer/marchland",
+  "live": {
+    "label": "Play Marchland",
+    "href": "/marchland/"
+  },
+  "links": [
+    {
+      "label": "Read the manual",
+      "href": "/marchland/manual/"
+    },
+    {
+      "label": "Watch the Marchland Saga",
+      "href": "/marchland/saga/"
+    },
+    {
+      "label": "Code on GitHub",
+      "href": "https://github.com/CHB-Bohrer/marchland"
+    }
+  ],
+  "tags": [
+    "game",
+    "browser",
+    "steps",
+    "multiplayer"
+  ],
+  "about": [
+    "Your daily step count is the only currency. Each day you claim your steps and spend them to take ground, build castles, towers and walls, and march soldiers across a map shared by every player.",
+    "It started as an idea for a land-claiming running game and turned into a small, living strategy game that runs in any browser. The map is relative to each player's castle, so friends who live far apart can still be neighbours."
+  ],
+  "facts": [
+    {
+      "value": "14 Sep 2026",
+      "label": "first playable version went live"
+    },
+    {
+      "value": "1 map",
+      "label": "shared by everyone, drawn around each player's castle rather than real geography"
+    },
+    {
+      "value": "Any browser",
+      "label": "no install; a realtime database keeps every player on the same board"
+    }
+  ],
+  "board": {
+    "title": "Where it stands",
+    "intro": "Rules and balance change often while the game is being tuned, usually in response to how the players actually play.",
+    "phases": [
+      {
+        "title": "Playable now",
+        "blurb": "In the live game.",
+        "nodes": [
+          {
+            "name": "Shared map with rivers and bridges",
+            "state": "built",
+            "note": "Rivers are hard to cross; a bridge takes a day to build. Rivers get names, and players who hold most of the land around one can rename it."
+          },
+          {
+            "name": "Daily step claims",
+            "state": "built",
+            "note": "Steps are claimed once a day and posted publicly, so other players can dispute a claim."
+          },
+          {
+            "name": "Castles, towers, walls and roads",
+            "state": "built",
+            "note": "Ground only produces when it has a supply path back to a castle. Unmanned structures decay."
+          },
+          {
+            "name": "Four resources",
+            "state": "built",
+            "note": "Stone for walls, timber for castles, iron for soldiers and grain as upkeep."
+          },
+          {
+            "name": "Soldiers and battles",
+            "state": "built",
+            "note": "Battles are probabilistic, and the attack screen shows how many soldiers it takes to reach a 70% chance of winning."
+          },
+          {
+            "name": "Trebuchets",
+            "state": "built",
+            "note": "Siege engines that fire at range, so towers are not unbeatable."
+          },
+          {
+            "name": "Caravans and letters",
+            "state": "built",
+            "note": "Send goods, or a private letter, to another player. Caravans take time to arrive and cost upkeep while they travel."
+          },
+          {
+            "name": "Crusades",
+            "state": "built",
+            "note": "Players can combine their armies."
+          },
+          {
+            "name": "Tutorial, manual and the Saga",
+            "state": "built",
+            "note": "A narrated tutorial, a written manual, and a short cartoon about the realm."
+          }
+        ]
+      },
+      {
+        "title": "Next",
+        "blurb": "Not built yet.",
+        "nodes": [
+          {
+            "name": "Stronger step verification",
+            "state": "partial",
+            "note": "Screenshots and public disputes keep claims honest today. A more thorough verification program is planned."
+          },
+          {
+            "name": "History-themed seasonal events",
+            "state": "planned",
+            "note": "Ideas under discussion, building on a short October event."
+          }
+        ]
+      }
+    ]
+  },
+  "works": [
+    "Open the game, pick a name and play in any browser.",
+    "Watch the manual or the tutorial first if the rules look like a lot; both live on the same site.",
+    "Rules changes are announced inside the game."
+  ],
+  "limits": [
+    "Steps are self-reported and checked by screenshots and by other players, so the game relies on honest play.",
+    "New players join through an existing player who vouches for them.",
+    "It is a hobby project, and the rules can change from one week to the next."
+  ],
+  "source_note": "Written from the project's own notes and commit history (latest commit 7 Nov 2026). When the status changes, edit status.json in this folder."
+}
