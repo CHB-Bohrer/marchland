@@ -352,8 +352,9 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .crow .who small{ display:block; font-size:10px; color:var(--ink-2); font-family:var(--mono); }
 .crow.head{ font-family:var(--mono); font-size:10px; color:var(--ink-2); align-items:end; border-bottom:1px solid var(--rule); margin-bottom:2px; padding-bottom:3px; }
 .crow.me .who{ font-weight:700; }
-@media (max-width:640px){ .crow{ grid-template-columns:18px 104px 34px minmax(0,1fr) 70px; gap:6px; } }
-.crow .who{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:640px){ .crow{ grid-template-columns:16px 90px 26px minmax(0,1fr) 80px; gap:4px; } }
+.crow .who{ font-size:13px; line-height:1.25; min-width:0; overflow-wrap:anywhere; }
+.crow .who .linkish{ text-align:left; }
 .crow svg{ width:100%; height:30px; display:block; overflow:visible; }
 .crow .tot{ font-family:var(--mono); font-size:11px; color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums; }
 .crow .tot .cst{ display:block; font-size:10px; margin-top:1px; white-space:nowrap; }
@@ -383,7 +384,6 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
   .claim{ grid-template-columns:minmax(0,1fr); gap:3px; padding:10px 16px; }
   .claim .acts{ justify-content:flex-start; }
   .claim .acts:empty{ display:none; }
-  .crow{ grid-template-columns:78px minmax(0,1fr) 62px; gap:8px; }
   .chart, .claims-head{ padding-left:16px; padding-right:16px; }
 }
 
@@ -4782,7 +4782,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-leadchart';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD = 'nov7-leadnames';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
