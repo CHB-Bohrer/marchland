@@ -346,7 +346,13 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .claims-head h2{ margin:0; }
 .chart{ padding:6px 18px 12px; }
 .axisnote{ font-family:var(--mono); font-size:10px; color:var(--ink-2); margin-bottom:6px; }
-.crow{ display:grid; grid-template-columns:110px minmax(0,440px) 92px; gap:12px; align-items:end; padding:4px 0; }
+.crow{ display:grid; grid-template-columns:22px 150px 44px minmax(0,320px) 96px; gap:10px; align-items:end; padding:4px 0; }
+.crow .rk{ font-family:var(--mono); font-size:12px; color:var(--ink-2); text-align:right; }
+.crow .cl{ font-family:var(--mono); font-size:13px; text-align:right; font-variant-numeric:tabular-nums; }
+.crow .who small{ display:block; font-size:10px; color:var(--ink-2); font-family:var(--mono); }
+.crow.head{ font-family:var(--mono); font-size:10px; color:var(--ink-2); align-items:end; border-bottom:1px solid var(--rule); margin-bottom:2px; padding-bottom:3px; }
+.crow.me .who{ font-weight:700; }
+@media (max-width:640px){ .crow{ grid-template-columns:18px 104px 34px minmax(0,1fr) 70px; gap:6px; } }
 .crow .who{ font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .crow svg{ width:100%; height:30px; display:block; overflow:visible; }
 .crow .tot{ font-family:var(--mono); font-size:11px; color:var(--ink-2); text-align:right; font-variant-numeric:tabular-nums; }
@@ -652,13 +658,6 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       </div>
     </div>
 
-    <div class="panel">
-      <table>
-        <thead><tr><th>#</th><th>Player</th><th>Cells</th><th>Steps banked</th><th>Last seen</th></tr></thead>
-        <tbody id="standings"></tbody>
-      </table>
-    </div>
-
     <div class="panel hide" id="steward-panel">
       <div class="pad">
         <h2>Steward</h2>
@@ -669,7 +668,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
     <div class="panel" id="claims-panel">
       <div class="claims-head">
-        <h2>Claim log</h2>
+        <h2>Leaderboard &amp; claim log</h2>
         <span class="muted">One claim a day, for that day&rsquo;s steps. Anyone can dispute a claim for 24 hours, and the other players then vote for up to 24 hours more. Only the votes actually cast count (at least 3 are needed). If more than half of them say void when the vote closes, its marches come off the claimant&rsquo;s next claim.</span>
       </div>
       <div class="chart" id="claims-chart"></div>
@@ -4783,7 +4782,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD='nov7-idle';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD='nov7-leadchart';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5598,16 +5597,6 @@ function render(){
     ? ' · '+ups.length+' bridges building, first ready in '+hoursLeft(ups[0])
     : ' · bridge ready in '+hoursLeft(ups[0]);
   lock('collect',done);
-  var rows=Object.keys(G.players).map(function(pid){
-    var p=G.players[pid];
-    return {pid:pid,name:full(p),cells:cellsOf(pid),steps:Math.round(p.collected||0),seen:p.seen,seat:p.seat};
-  }).sort(function(a,b){ return b.cells-a.cells; });
-  document.getElementById('standings').innerHTML=rows.map(function(r,i){
-    return '<tr><td class="n">'+(i+1)+'</td>'
-      +'<td><span class="dot" style="background:'+pColor(r.pid)+'"></span><button type="button" class="linkish" data-pid="'+r.pid+'">'+esc(r.name)+'</button>'+(r.pid===ME?' — you':'')+' <button type="button" class="linkish" data-prof="'+r.pid+'" aria-label="Profile of '+esc(r.name)+'" title="Who vouched for them" style="opacity:.6">&#9432;</button></td>'
-      +'<td class="n">'+r.cells+'</td><td class="n">'+r.steps.toLocaleString()+'</td>'
-      +'<td class="n">'+(r.pid===ME?'now':since(r.seen))+'</td></tr>';
-  }).join('');
   lock('m-wall',pl.res.stone<30);
   lock('m-bridge',!(pl.res.timber>=BRIDGE_COST.timber&&pl.res.stone>=BRIDGE_COST.stone));
   lock('m-tower',!(pl.res.stone>=40&&pl.res.timber>=30));
@@ -5755,7 +5744,8 @@ function chipFor(e){                                   // a few words on a playe
 }
 function renderChart(list){
   var DAYS=14, today=dayStart(Date.now()), first=today-(DAYS-1)*864e5;
-  var pids=Object.keys(G.players).sort(function(a,b){ return G.players[a].seat-G.players[b].seat; });
+  var cellsBy={}; Object.keys(G.players).forEach(function(q){ cellsBy[q]=cellsOf(q); });
+  var pids=Object.keys(G.players).sort(function(a,b){ return cellsBy[b]-cellsBy[a] || G.players[a].seat-G.players[b].seat; });      // ranked by ground held
   var sums={}; pids.forEach(function(p){ sums[p]=new Array(DAYS).fill(0); });
   var mark={}, latest={};                              // per player and day: 2 = a claim under dispute, 1 = still open to dispute; and each player's newest claim
   list.forEach(function(e){
@@ -5769,11 +5759,11 @@ function renderChart(list){
     if(!latest[e.c.pid] || e.c.t>latest[e.c.pid].c.t) latest[e.c.pid]=e;
   });
   var max=0; pids.forEach(function(p){ sums[p].forEach(function(v){ if(v>max) max=v; }); });
-  var el=document.getElementById('claims-chart');
-  if(!max){ el.innerHTML=''; return; }
+  var el=document.getElementById('claims-chart'), realMax=max; if(!max) max=1;   // with no steps claimed yet the rows still show, just without bars
   var BW=10, GAP=2, VH=28, VW=DAYS*(BW+GAP)-GAP;
   var dayName=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  el.innerHTML='<div class="axisnote">Steps claimed per day · last 14 days, today at the right · one scale for everyone (tallest bar '+max.toLocaleString()+') · voided claims left out · <span class="key">dashed bar = open to dispute</span> · <span class="key" style="color:#B3402A">red outline = disputed</span></div>'
+  el.innerHTML='<div class="crow head"><div class="rk">#</div><div>Player</div><div class="cl" style="font-size:10px">Cells</div><div>Steps claimed per day, today at the right</div><div style="text-align:right">14 days</div></div>'
+    +'<div class="axisnote">Ranked by ground held · last 14 days of steps · one scale for everyone (tallest bar '+realMax.toLocaleString()+') · voided claims left out · <span class="key">dashed bar = open to dispute</span> · <span class="key" style="color:#B3402A">red outline = disputed</span></div>'
     +pids.map(function(pid){
       var p=G.players[pid], col=pColor(pid), tot=0, bars='';
       sums[pid].forEach(function(v,i){
@@ -5785,7 +5775,9 @@ function renderChart(list){
         if(h) bars+='<rect class="'+(mk===2?'mk-disputed':mk===1?'mk-open':'')+'" x="'+x+'" y="'+(VH-h)+'" width="'+BW+'" height="'+h+'" style="fill:'+col+'" pointer-events="none"/>';
         bars+='<rect class="hit" x="'+(x-1)+'" y="0" width="'+(BW+GAP)+'" height="'+VH+'"><title>'+esc(p.name)+' · '+label+'</title></rect>';
       });
-      return '<div class="crow"><div class="who"><span class="dot" style="background:'+col+'"></span>'+esc(full(p))+'</div>'
+      return '<div class="crow'+(pid===ME?' me':'')+'"><div class="rk">'+(pids.indexOf(pid)+1)+'</div>'
+        +'<div class="who"><span class="dot" style="background:'+col+'"></span><button type="button" class="linkish" data-pid="'+pid+'">'+esc(full(p))+'</button>'+(pid===ME?' &mdash; you':'')+' <button type="button" class="linkish" data-prof="'+pid+'" aria-label="Profile of '+esc(p.name)+'" title="Who vouched for them" style="opacity:.6">&#9432;</button><small>'+(pid===ME?'here now':'seen '+since(p.seen))+'</small></div>'
+        +'<div class="cl">'+cellsBy[pid]+'</div>'
         +'<svg viewBox="0 0 '+VW+' '+VH+'" preserveAspectRatio="none" role="img" aria-label="'+esc(p.name)+': '+tot.toLocaleString()+' steps claimed in the last 14 days">'
         +'<line x1="0" y1="'+(VH-.5)+'" x2="'+VW+'" y2="'+(VH-.5)+'" style="stroke:var(--rule)" stroke-width="1" vector-effect="non-scaling-stroke"/>'
         +bars+'</svg>'
@@ -6103,7 +6095,7 @@ function castleOf(pid){                                // the castle of theirs n
   if(!best && p) best=nearCopy(p.q,p.r,viewQ,viewR);
   return best;
 }
-document.getElementById('standings').addEventListener('click',function(e){
+document.getElementById('claims-chart').addEventListener('click',function(e){
   if(!G||!me()) return;
   var pf=e.target.closest('[data-prof]'); if(pf){ openProfile(pf.getAttribute('data-prof')); return; }
   var b=e.target.closest('[data-pid]'); if(!b) return;
