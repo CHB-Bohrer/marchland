@@ -552,6 +552,19 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <input type="file" accept="image/*" id="shotlate" class="hide">
     </div>
 
+    <!-- the turkey photo bounty: a photo beside a LIVING turkey earns 10 marches until Thanksgiving -->
+    <div class="panel hide" id="turkeypanel">
+      <div class="pad" style="padding:12px 16px">
+        <b>&#129411; The turkey hunt &mdash; <u>living</u> turkeys only</b>
+        <p class="muted" style="margin:6px 0 10px">Send a photo of yourself next to a <b>living</b> turkey and earn <b>10 extra marches</b>. Wild turkeys wander <b>Cromwell Park</b> and <b>Oregon Ridge</b>. One photo each, until Thanksgiving (Thursday 26 November). Only Bohrer sees the photos. <i>Davide: no killing other people&rsquo;s turkeys without their permission.</i></p>
+        <div class="bar" id="turkeyform">
+          <label class="pick" id="turkeypick"><input type="file" accept="image/*" id="turkeyin" class="hide"><span id="turkeylbl">+ Photo with a live turkey</span></label>
+          <button id="turkeygo" class="go" type="button">Send photo</button>
+        </div>
+        <div class="muted" id="turkeystat" style="margin-top:6px"></div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="pad" style="padding-bottom:12px">
         <div class="row">
@@ -662,7 +675,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="pad">
         <h2>Steward</h2>
         <p class="muted" id="steward-status"></p>
-        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button><button type="button" id="st-turkey">Turkey photos</button></div>
       </div>
     </div>
 
@@ -763,6 +776,18 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
     <h2 id="godsnote-h">&#9889; The gods are listening</h2>
     <p><b>The gods do not like foul language in the chats.</b> Keep your tongue clean, warriors &mdash; the heavens are watching every word, and their patience is not endless.</p>
     <button type="button" class="rulesnote-go" id="godsnote-go">So it shall be</button>
+  </div>
+</div>
+
+<!-- ── one-time announcement: the turkey hunt (shown once per player, see showTurkeyNote) ── -->
+<div id="turkeynote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="turkeynote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the gods</p>
+    <h2 id="turkeynote-h">&#129411; The great turkey hunt</h2>
+    <p><b>Be photographed beside a <u>living</u> turkey and the gods will grant you 10 extra marches.</b> Alive, mind you &mdash; a live turkey, standing there, gobbling at you.</p>
+    <p>Wild turkeys wander <b>Cromwell Park</b> and <b>Oregon Ridge</b>. Send your photo from the new box near the top of the page. One photo each, and you have until Thanksgiving (Thursday 26 November). Only Bohrer sees the photos.</p>
+    <p><b>A word for Davide:</b> no killing other people&rsquo;s turkeys without their permission.</p>
+    <button type="button" class="rulesnote-go" id="turkeynote-go">To the turkeys!</button>
   </div>
 </div>
 
@@ -1548,6 +1573,99 @@ function settleJudge(){
   }).catch(function(){}).then(function(){ judging=false; });
   return true;
 }
+/* ── the turkey hunt ──
+   A photo of yourself beside a LIVING turkey earns 10 marches, once per player, until Thanksgiving. The photo is kept
+   outside the board (/marchland_shots/<code>/turkey-<player>) and only the steward can open it, from the steward panel,
+   where he can void one (the 10 marches come back off). The marches are paid at once; the claim slot
+   (/turkeys/<player>) is taken with a conditional write so it can only ever happen once. The hunt itself is announced once
+   (G.turkeyhunt, claimed the same way) in the chat and on a scroll (see showTurkeyNote). */
+var TURKEY_ID='turkey1', TURKEY_END=Date.parse('2026-11-27T05:00:00Z'), TURKEY_MARCHES=10, turkeying=false, turkeyFile=null, turkeyBusy=false;
+function turkeyOpen(){ return Date.now()<TURKEY_END; }
+function turkeyChat(m,now,tag){
+  if(!online) return;
+  var t=Math.floor(now/60000)*60000, id=q36(t)+'-turkey-'+tag;
+  chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+function settleTurkey(){
+  if(!online||turkeying||!G||!G.players||dirty||ELIM||!boardFresh()||G.turkeyhunt||!turkeyOpen()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var now=Date.now(), H={id:TURKEY_ID,start:now,end:TURKEY_END,n:TURKEY_MARCHES};
+  turkeying=true;
+  dbPutIf('/marchland/'+gameCode+'/turkeyhunt',H).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.turkeyhunt=x.v; return; }
+    G.turkeyhunt=H; bumpRev().then(ok,fail);
+    turkeyChat('A turkey hunt is proclaimed! Be photographed beside a LIVING turkey and the gods will grant you 10 extra marches. Wild turkeys wander Cromwell Park and Oregon Ridge. You have until Thanksgiving.',now,'a');
+    turkeyChat('Living turkeys only. Davide: no killing other people’s turkeys without their permission.',now,'b');
+  }).catch(function(){}).then(function(){ turkeying=false; });
+  return true;
+}
+function renderTurkey(){
+  var el=document.getElementById('turkeypanel'); if(!el) return;
+  var on=!!(G&&me()&&G.turkeyhunt); el.classList.toggle('hide',!on); if(!on) return;
+  var mine=(G.turkeys||{})[ME], form=document.getElementById('turkeyform'), st=document.getElementById('turkeystat');
+  var txt='', show=true;
+  if(mine&&mine.void){ txt='Bohrer turned your photo down, so the 10 marches were taken back. It has to be a <b>living</b> turkey!'; show=false; }
+  else if(mine){ txt='<span class="good">Photo sent &mdash; 10 marches earned.</span> Thank you, turkey hunter!'; show=false; }
+  else if(!turkeyOpen()){ txt='The hunt is over &mdash; Thanksgiving has come.'; show=false; }
+  form.classList.toggle('hide',!show);
+  if(st.innerHTML!==txt) st.innerHTML=txt;
+}
+document.getElementById('turkeyin').addEventListener('change',function(){
+  var f=this.files&&this.files[0]; turkeyFile=f||null;
+  document.getElementById('turkeylbl').textContent=f?'Photo chosen ✓':'+ Photo with a live turkey';
+  document.getElementById('turkeypick').classList.toggle('on',!!f);
+});
+document.getElementById('turkeygo').addEventListener('click',function(){
+  if(!G||!me()||turkeyBusy) return;
+  if(!online) return nope('The turkey photo needs the shared database.');
+  if(!turkeyOpen()) return nope('The hunt is over &mdash; Thanksgiving has come.');
+  if((G.turkeys||{})[ME]) return nope('You have already sent your turkey photo.');
+  if(!turkeyFile) return nope('Choose a photo of yourself beside a <b>living</b> turkey first.');
+  turkeyBusy=true; say('Sending your turkey photo&hellip;');
+  var base='/marchland/'+gameCode, now=Date.now(), rec={t:now,n:TURKEY_MARCHES}, file=turkeyFile;
+  shrink(file).then(function(data){
+    return dbPutIf(base+'/turkeys/'+ME,rec).then(function(x){
+      if(x.halted) throw new Error('not saved');
+      if(!x.ok){ G.turkeys=G.turkeys||{}; G.turkeys[ME]=x.v||rec; throw new Error('You have already sent your turkey photo.'); }
+      return dbPut('/marchland_shots/'+gameCode+'/turkey-'+ME,data).catch(function(e){ dbPut(base+'/turkeys/'+ME,null).catch(function(){}); throw e; });
+    });
+  }).then(function(){
+    G.turkeys=G.turkeys||{}; G.turkeys[ME]=rec;
+    me().squares=(me().squares||0)+TURKEY_MARCHES;
+    var gid=q36(now)+'-'+ME; dbPut(base+'/grants/'+gid,{pid:ME,n:TURKEY_MARCHES,why:'turkey photo',by:'gods',t:now}).catch(function(){});
+    turkeyFile=null; document.getElementById('turkeyin').value=''; document.getElementById('turkeylbl').textContent='+ Photo with a live turkey'; document.getElementById('turkeypick').classList.remove('on');
+    render(); pushMe(); bumpRev().then(ok,fail);
+    say('<span class="good">Turkey photo sent &mdash; '+TURKEY_MARCHES+' marches added.</span> You now have <b>'+me().squares+'</b>.');
+    notifyStewardMsg('Marchland: turkey photo',nameOf(ME)+' sent a turkey photo. Check it is a living turkey.');
+  }).catch(function(e){ nope('Could not send the photo ('+esc(e.message||'try again')+').'); }).then(function(){ turkeyBusy=false; });
+});
+/* steward: look at the turkey photos, and void one that is not a living turkey */
+function openTurkeys(){
+  var T=G.turkeys||{}, ids=Object.keys(T).filter(function(p){ return G.players[p]; });
+  if(!ids.length) return scrollDialog({eyebrow:'Steward',title:'Turkey photos',html:'<p>None yet.</p>',cancel:null,buttons:[{label:'Close',value:null,primary:true}]});
+  scrollDialog({eyebrow:'Steward',title:'Turkey photos',html:'<p>Tap a name to see the photo.</p>',cancel:null,
+    list:ids.map(function(pid){ return {label:esc(full(G.players[pid])),cost:T[pid].void?'voided':'counted',value:pid}; }),
+    buttons:[{label:'Close',value:null,primary:true}]}).then(function(res){
+    var pid=res.value; if(!pid||!G.players[pid]) return;
+    dbGet('/marchland_shots/'+gameCode+'/turkey-'+pid).then(function(d){
+      scrollDialog({eyebrow:'Steward',title:esc(full(G.players[pid])),
+        html:d?'<img src="'+d+'" alt="turkey photo" style="max-width:100%;height:auto">':'<p>No photo found.</p>',cancel:null,
+        buttons:[{label:'Back',value:'back'},{label:'Void (take back '+TURKEY_MARCHES+')',value:'void'},{label:'Looks alive',value:null,primary:true}]}).then(function(r2){
+        if(r2.value==='back') openTurkeys(); else if(r2.value==='void') voidTurkey(pid);
+      });
+    }).catch(function(){ nope('Could not load the photo.'); });
+  });
+}
+function voidTurkey(pid){
+  var T=(G.turkeys||{})[pid]; if(!T||T.void||!G.players[pid]) return;
+  var base='/marchland/'+gameCode, now=Date.now(), patch={};
+  patch['turkeys/'+pid+'/void']=now; patch['rev']=now; myRev=now;
+  var finish=function(){ return dbPatch(base,patch).then(function(){ T.void=now; render(); say('Voided: '+esc(nameOf(pid))+'&rsquo;s turkey photo, and the '+TURKEY_MARCHES+' marches are taken back.'); }); };
+  if(pid===ME){ me().squares=Math.max(0,(me().squares||0)-TURKEY_MARCHES); pushMe(); finish().catch(function(){ nope('Could not reach the database.'); }); return; }
+  dbGet(base+'/players/'+pid+'/squares').then(function(cur){ var next=Math.max(0,(cur||0)-TURKEY_MARCHES); patch['players/'+pid+'/squares']=next; G.players[pid].squares=next; return finish(); }).catch(function(){ nope('Could not reach the database, so nothing was changed.'); });
+}
+document.getElementById('st-turkey').addEventListener('click',function(){ if(isSteward()) openTurkeys(); });
 /* ── removal on request ──
    Chris asked for the players Lily and Trevor to be deleted: their accounts go, every square they hold is wiped and
    the ground is free. Done once (G.removed records it); whichever up-to-date screen sees them first does it. */
@@ -1994,7 +2112,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -5664,6 +5782,7 @@ function render(){
     settlePurge();
     settlePlague();
     settleJudge();
+    settleTurkey();
     settleRemovals();
     settleProbation();
     settleEliminations();
@@ -5721,6 +5840,7 @@ function render(){
   renderClaims();
   renderCoach();
   renderSteward();
+  renderTurkey();
   renderSponsorBtn();
   renderLetterBtn();
   renderCrusades();
@@ -7075,7 +7195,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -7169,7 +7289,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','plaguenote','judgenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','judgenote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -7198,7 +7318,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -7227,7 +7347,7 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -7257,7 +7377,7 @@ function closePlagueNote(){
 function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
 function showPlagueNote(){
   var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote','judgenote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote','judgenote','turkeynote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',plagueNoteKey,true);
@@ -7286,11 +7406,40 @@ function closeJudgeNote(){
 function judgeNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeJudgeNote(); } }
 function showJudgeNote(){
   var n=document.getElementById('judgenote'); if(!n||!G||!me()||!G.judge||judgeSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',judgeNoteKey,true);
   var b=document.getElementById('judgenote-go'); b.onclick=closeJudgeNote; try{ b.focus(); }catch(e){}
+  return true;
+}
+/* One-time announcement: the turkey hunt. Shown once per player, only once the hunt has been proclaimed, never stacked. */
+var TURKEY_NOTE_ID='turkey1';
+function turkeySeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[TURKEY_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+TURKEY_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markTurkeySeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[TURKEY_NOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+TURKEY_NOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeTurkeyNote(){
+  var n=document.getElementById('turkeynote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',turkeyNoteKey,true);
+  markTurkeySeen();
+  setTimeout(showNext,250);
+}
+function turkeyNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeTurkeyNote(); } }
+function showTurkeyNote(){
+  var n=document.getElementById('turkeynote'); if(!n||!G||!me()||!G.turkeyhunt||turkeySeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','judgenote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',turkeyNoteKey,true);
+  var b=document.getElementById('turkeynote-go'); b.onclick=closeTurkeyNote; try{ b.focus(); }catch(e){}
   return true;
 }
 /* One-time announcement: the undo button. Shown once per player, never stacked on another notice. */
@@ -7315,7 +7464,7 @@ function closeUndoNote(){
 function undoNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeUndoNote(); } }
 function showUndoNote(){
   var n=document.getElementById('undonote'); if(!n||!G||!me()||undoSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',undoNoteKey,true);
@@ -7338,7 +7487,7 @@ function closeRiverNote(){
 function riverNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeRiverNote(); } }
 function showRiverNote(){
   var n=document.getElementById('rivernote'); if(!n||!G||!me()||riverNoteSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',riverNoteKey,true);
@@ -7346,7 +7495,7 @@ function showRiverNote(){
   return true;
 }
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
