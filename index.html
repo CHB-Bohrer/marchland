@@ -1207,6 +1207,32 @@ function settleCastles(){
     if(!(pc.bn && pc.bn>now)){ pc.bn=(G.purge&&G.purge.end>now)?G.purge.end:now+PURGE_MS; pc.bx=1; }   // and the land under it burns with the rest of PT's land
     pushCell(parseInt(pp[0],10),parseInt(pp[1],10)); changed++;
   }
+  /* Castles going up (see castleSurrounded). Any up-to-date screen stops one whose site or any of its six squares has left
+     its owner's hands, since nothing was paid. Only the owner's own screen finishes it, when the day is up, charging the
+     cost then and sending a man to garrison it; if they can't pay or have no one to send it waits. */
+  for(var sk in G.cells){
+    var sc=G.cells[sk]; if(!sc.cb) continue;
+    var sp=sk.split('_'), sq=parseInt(sp[0],10), sr=parseInt(sp[1],10), so=sc.cbo;
+    var live=so && sc.o===so && !sc.k && G.players && G.players[so];
+    if(live){ for(var si=0;si<6;si++){
+      var nq=wrapC(sq+AX[si][0]), nr=wrapC(sr+AX[si][1]);
+      if(groundAt(nq,nr)===RIVER) continue;
+      var sn=G.cells[key(nq,nr)]; if(!sn || sn.o!==so || building(sn)){ live=false; break; }
+    } }
+    if(!live){ delete sc.cb; delete sc.cbo; pushCell(sq,sr); changed++; if(so===ME) say('<span class="bad">Your castle at that site stopped</span> &mdash; one of the six squares around it was lost. Nothing was paid.'); continue; }
+    if(so===ME && sc.cb<=now){
+      var scost=castleCost(ME), spl=me(), can=fieldOf(ME)>=SPEC[CASTLE].gar[1];
+      for(var sg in scost){ if((spl.res[sg]||0)<scost[sg]) can=false; }
+      if(!can) continue;
+      for(var sg2 in scost) spl.res[sg2]-=scost[sg2];
+      var sent=drawSoldiers(ME,sq,sr,1);
+      sc=cellOf(sq,sr); delete sc.cb; delete sc.cbo; sc.k=CASTLE; sc.l=1; sc.g=1; delete sc.h; delete sc.ht;
+      if(sc.cs) delete sc.cs.n; spendAdd(sc,'k',scost,{});
+      writeCell(sq,sr,sc); logMove('cs',sq,sr,fromFor(sq,sr,ME),null,0,null);
+      sent.forEach(function(x){ if(key(x[0],x[1])!==key(sq,sr)) pushCell(x[0],x[1]); }); pushCell(sq,sr); pushMe(); changed++;
+      say('<b>Castle founded.</b> Your new keep has risen. Keep it joined to a farm by unbroken ground, or it will fall in 5 days.');
+    }
+  }
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||!c.o) continue;
     var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
@@ -1585,6 +1611,29 @@ function turkeyChat(m,now,tag){
   if(!online) return;
   var t=Math.floor(now/60000)*60000, id=q36(t)+'-turkey-'+tag;
   chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+/* ── Pudding's 15 marches ──  an apology gift for the castle straight-line rule, paid once (G.puddinggift records it, claimed
+   with a conditional write so it can only happen once). Needs exactly one player named Pudding. */
+var PUDDING_ID='pudding1', PUDDING_N=15, puddinging=false;
+function settlePudding(){
+  if(!online||puddinging||!G||!G.players||dirty||ELIM||!boardFresh()||G.puddinggift) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pu=judgePids(['pudding']); if(pu.length!==1) return false;
+  var pid=pu[0], now=Date.now(), base='/marchland/'+gameCode, rec0={id:PUDDING_ID,pid:pid,n:PUDDING_N,t:now};
+  puddinging=true;
+  dbPutIf(base+'/puddinggift',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.puddinggift=x.v; return; }
+    G.puddinggift=rec0;
+    var gid=q36(now)+'-'+pid, rec={pid:pid,n:PUDDING_N,why:'sorry: the castle straight-line rule was harsher than intended',by:'gods',t:now}, patch={};
+    G.grants=G.grants||{}; G.grants[gid]=rec; patch['grants/'+gid]=rec; patch['puddinggift']=rec0;
+    var done=function(){ patch['rev']=now; myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ me().squares=(me().squares||0)+PUDDING_N; render(); pushMe(); done(); }
+    else dbGet(base+'/players/'+pid+'/squares').then(function(cur){
+      var next=(cur||0)+PUDDING_N; patch['players/'+pid+'/squares']=next; G.players[pid].squares=next; return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ puddinging=false; });
+  return true;
 }
 function settleTurkey(){
   if(!online||turkeying||!G||!G.players||dirty||ELIM||!boardFresh()||G.turkeyhunt||!turkeyOpen()) return false;
@@ -2112,7 +2161,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -3099,42 +3148,53 @@ function myCastleCells(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&c.k===CASTLE&&!isRuin(c)){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }   // a fallen castle no longer counts
   return out;
 }
-/* A new castle needs a direct line to another of its owner's castles: from the site, one of the six straight
-   directions runs over unbroken, finished ground of the owner's until it meets one of that owner's standing
-   castles. (A player with no castle standing has nothing to line up with, so is exempt.) */
-function castleLinked(q,r,pid){
+/* A new castle needs the ground all round it: each of the six squares beside the site must be finished ground of the
+   owner's (a river square counts as held, since water can't be owned), and then it takes a day to raise, like a bridge.
+   If any of the six is taken, burnt out of the owner's hands or otherwise lost while it goes up, the building stops and
+   nothing is paid (see settleCastles). A player with no castle standing has nothing to be linked to, so is exempt and
+   founds one at once. (This replaced the straight-line rule of 4 Nov.) */
+var CASTLE_BUILD_MS=BRIDGE_MS;
+function castleSurrounded(q,r,pid){
   if(!myCastleCells(pid).length) return true;
   q=wrapC(q); r=wrapC(r);
   for(var i=0;i<6;i++){
-    var cq=q, cr=r;
-    for(var s=1;s<WORLD;s++){
-      cq=wrapC(cq+AX[i][0]); cr=wrapC(cr+AX[i][1]);
-      var n=G.cells[key(cq,cr)];
-      if(!n || n.o!==pid || building(n)) break;
-      if(n.k===CASTLE && !isRuin(n)) return true;
-    }
+    var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]);
+    if(groundAt(nq,nr)===RIVER) continue;
+    var n=G.cells[key(nq,nr)];
+    if(!n || n.o!==pid || building(n)) return false;
   }
-  return false;
+  return true;
+}
+function pendingCastles(pid){                          // keeps still going up for this player: [[q,r],...]
+  var out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.cb && c.cbo===pid && c.o===pid){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }
+  return out;
 }
 function castleCost(pid){
-  var n=Math.max(1,myCastleCells(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 …
+  var n=Math.max(1,myCastleCells(pid).length+pendingCastles(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 … (one still going up counts)
   return {timber:260*n, stone:200*n, iron:60*n};
 }
 function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k) return nope('Something already stands here.');
+  if(c.cb) return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
     if(isFarmCell(c,wrapC(q),wrapC(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, linked by your own land to a farm (&equiv;) you hold.');
     if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square connected to it.</span> This cell is not joined by unbroken ground of yours to a farm (&equiv;) you hold &mdash; a castle cut off from every farm would starve and fall within 5 days.');
-    if(!castleLinked(q,r,ME)) return nope('<span class="bad">A castle needs a direct line to another castle.</span> From this square, one of the six straight directions must run over unbroken ground of yours to one of your castles.');
-    var near=myCastleCells(ME).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
+    if(!castleSurrounded(q,r,ME)) return nope('<span class="bad">A castle needs all six squares around it to be yours.</span> Every square touching this one must be finished ground you hold (a river square is fine). Claim the missing squares first.');
+    var near=myCastleCells(ME).concat(pendingCastles(ME)).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
     if(near.length) return nope('<span class="bad">Too close to one of your keeps.</span> Castles must stand at least '+CASTLE_SPACING+' cells apart — push the border out first.');
   }
   for(var k in cost){ if(pl.res[k]<cost[k]) return nope('Not enough materials — '+(kind===CASTLE?'a castle':'a tower')+' needs '+costLine(cost)+'. '+shortBy(cost)); }
   if(kind===CASTLE && fieldOf(ME)<SPEC[CASTLE].gar[1]) return nope('No one to man it. Muster a soldier first.');
+  if(kind===CASTLE && myCastleCells(ME).length){          // a day to raise it; nothing is paid or lost until it stands
+    c.cb=Date.now()+CASTLE_BUILD_MS; c.cbo=ME;
+    writeCell(q,r,c); render(); pushCell(q,r);
+    return say('<b>Castle begun.</b> It will stand in <b>'+hoursLeft(c.cb)+'</b>, and the '+costLine(cost)+' is paid only when it is finished. If any of the six squares around it falls out of your hands before then, the building stops.');
+  }
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   var from=fromFor(q,r,ME), pw=c.w||0;
   var sent=kind===CASTLE?drawSoldiers(ME,q,r,1):[];   // the nearest band sends a man to a castle; a tower needs nobody
@@ -3568,6 +3628,7 @@ function cellTitle(c){
   if(c.k===CASTLE) what=isRuin(c)?'fallen castle':'castle'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
   else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l);
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
+  else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
   if(c.o&&c.b>0) sub.push('band of '+c.b);
@@ -3622,11 +3683,13 @@ function cellActions(q,r){
         A('Upgrade to level '+ROMAN[Math.min(3,lvl)],costLine(uc),function(){ upgrade(q,r); },c.l>=3?'Already level III':(isRuin(c)?'A fallen castle can&rsquo;t be upgraded':lackText(uc)));
       }
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
-      if(!c.k){
+      if(!c.k && c.cb){
+        A('Castle going up','ready in '+hoursLeft(c.cb),function(){},'It stands in '+hoursLeft(c.cb)+', provided all six squares around it stay yours');
+      } else if(!c.k){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
-        var cc=castleCost(ME), tooClose=myCastleCells(ME).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
-        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleLinked(q,r,ME)?'Needs a straight line of your ground to another castle':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
+        var cc=castleCost(ME), tooClose=myCastleCells(ME).concat(pendingCastles(ME)).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
+        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleSurrounded(q,r,ME)?'Needs all six squares around it to be yours':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
       }
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
@@ -4514,6 +4577,7 @@ function mark(t,cx,cy,s,col){
   else if(t===FARM){ ctx.beginPath(); for(var i=-1;i<=1;i++){ ctx.moveTo(cx-m*.8,cy+i*m*.55); ctx.lineTo(cx+m*.8,cy+i*m*.55); } ctx.stroke(); }
 }
 function drawBuilding(c,cx,cy,r,col,detail){
+  if(c.site){ ctx.save(); ctx.globalAlpha=.38; try{ drawBuilding(Object.assign({},c,{site:false}),cx,cy,r,col,detail); } finally { ctx.restore(); } return; }
   var rs=(c.w>0)?r*0.84:r;                            // a walled castle or tower stands a little smaller, inside its ring of walls
   if(detail){ (c.k===CASTLE?artCastle:artTower)(ctx,cx,cy-r*0.06,rs,col,clock()); }
   else {
@@ -4931,6 +4995,7 @@ function draw(){
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.k===TOWER||(c.g>0&&!isRuin(c))) guns.push([c,p,col]); }
+    else if(c.cb && c.o){ builds.push([{k:CASTLE,l:1,w:0,g:0,site:true},p,col]); }   // a castle going up: drawn faint
     if(c.tb>0 && c.o && !vl) trebs.push([c,p,col]);
     if(c.b>0 && c.o) bands.push([c,p,col]);
     if(amb){
@@ -5782,6 +5847,7 @@ function render(){
     settlePurge();
     settlePlague();
     settleJudge();
+    settlePudding();
     settleTurkey();
     settleRemovals();
     settleProbation();
@@ -7151,9 +7217,10 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
-  {id:'nov26-castleline', eyebrow:'A new rule', title:'Castles need a straight line',
-   html:'<p>You may now found a new castle only where there is <b>a direct line to another castle of yours</b>: from the site, one of the six straight directions must run over unbroken ground you hold until it meets one of your castles.</p>'
-     +'<p>It still needs a farm joined to it, and it must still stand well clear of your other keeps. Castles already standing are not affected.</p>'},
+  {id:'nov26-castlesurround', eyebrow:'A rule changed', title:'Castles: the straight line is gone',
+   html:'<p><b>My apologies.</b> I thought the castle rule was only that a new castle had to be <i>connected</i> to your others. I had actually made it a <b>literal straight line</b> of your ground to another castle, and a playtester pointed out how brutal that is for new players, especially anyone squeezed between two kingdoms, who could end up building two to four castles just to place one where they wanted.</p>'
+     +'<p><b>The new rule.</b> You may found a castle wherever <b>all six squares touching it are finished ground of yours</b> (a river square is fine). It then takes <b>a day to raise, like a bridge</b>, and nothing is paid until it stands. If an enemy takes any of those six squares, or the site itself, before it is done, <b>the building stops</b>. It still needs a farm joined to it and must stand seven cells clear of your other keeps.</p>'
+     +'<p>This keeps castles from being dropped just anywhere, but lets you choose your spot. <b>Pudding</b>, who was caught out by the old rule, has been given 15 marches for the trouble.</p>', go:'Understood'},
   {id:'nov26-gift', eyebrow:'A new rule', title:'Land can be given',
    html:'<p>You may now <b>give a square of your ground to another player</b>. Tap a bare square of yours and choose <b>Give this square away</b>.</p>'
      +'<ul><li>It is <b>free</b> and happens at once.</li>'
