@@ -766,6 +766,18 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: the gods' judgment on Davide for voting from other players' accounts (shown once per player, see showJudgeNote) ── -->
+<div id="judgenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="judgenote-h">
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the gods</p>
+    <h2 id="judgenote-h">&#9878; The gods pass judgment</h2>
+    <p><b>Davide logged into the accounts of Elisa and Cuwucca and voted against Ant&rsquo;s step claims from inside them, without their consent.</b> That is cheating, and it will not be tolerated.</p>
+    <p><b>The punishment.</b> Eight of Davide&rsquo;s grain fields have been set ablaze for 4 days, and his army may not march, move or attack for one full day. <b>Ant</b> has been given 15 marches for the wrong done to him.</p>
+    <p><b>A warning to all.</b> Vote only from your own account, with your own hands. Anyone caught using another player&rsquo;s account will be dealt with the same way.</p>
+    <button type="button" class="rulesnote-go" id="judgenote-go">The gods have spoken</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the plague on Mario's land, a warning about nonsense in the chats, and Mario's punishment (shown once per player, see showPlagueNote) ── -->
 <div id="plaguenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="plaguenote-h">
   <div class="rulesnote-card">
@@ -1468,6 +1480,74 @@ function settlePlague(){
   plagueChat('The plague has passed from the land of '+(P.names||'Mario')+'. His fields give a full harvest again.',now,'end');
   return true;
 }
+/* ── the gods' judgment on Davide ──
+   Davide logged into other players' accounts (Elisa and Cuwucca) and voted against Ant's step claims from inside them.
+   The judgment, done once (G.judge records it): Davide's army cannot march, move or attack for one full day, eight of his
+   grain squares burn for 4 days, and Ant is given 15 marches. The first up-to-date screen to see both players claims the
+   slot with a conditional write (so it can only ever happen once, however many screens race), then applies it. It is
+   announced in the chat and on a one-time scroll (see showJudgeNote). */
+var JUDGE_ID='judge1', JUDGE_FREEZE_MS=86400000, JUDGE_BURN_MS=4*86400000, JUDGE_BURN_N=8, JUDGE_GRANT=15, judging=false;
+function judgePids(names){
+  var out=[];
+  Object.keys(G.players).forEach(function(pid){
+    var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
+    if(names.indexOf(n)>=0) out.push(pid);
+  });
+  return out;
+}
+/* ms left on a player's freeze (0 = free to move) */
+function frozenLeft(pid){
+  var J=G&&G.judge, t=J&&J.freeze&&J.freeze[pid]; if(!t) return 0;
+  var left=t-Date.now(); return left>0?left:0;
+}
+function frozenText(ms){ var m=Math.ceil(ms/60000), h=Math.floor(m/60); return h>0?(h+' h '+(m%60)+' min'):(m+' min'); }
+function frozenNope(){
+  var ms=frozenLeft(ME); if(!ms) return false;
+  nope('<span class="bad">Your army is held by the gods.</span> You may not march, move or attack for another <b>'+frozenText(ms)+'</b>.');
+  return true;
+}
+function judgeChat(m,now,tag){
+  if(!online) return;
+  var t=Math.floor(now/60000)*60000, id=q36(t)+'-judge-'+tag;
+  chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+function settleJudge(){
+  if(!online||judging||!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  if(G.judge) return false;
+  var dv=judgePids(['davide']), an=judgePids(['ant','antonio']);
+  if(!dv.length||!an.length) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, antId=an[0], freeze={}, patch={};
+  dv.forEach(function(p){ freeze[p]=now+JUDGE_FREEZE_MS; });
+  var burnEnd=now+JUDGE_BURN_MS;
+  var farms=Object.keys(G.cells).filter(function(ck){
+    var cc=G.cells[ck]; if(dv.indexOf(cc.o)<0||building(cc)||cc.k||burning(cc,now)) return false;
+    var pp=ck.split('_'); return isFarmCell(cc,parseInt(pp[0],10),parseInt(pp[1],10));
+  }).sort().slice(0,JUDGE_BURN_N);
+  var nm=dv.map(function(p){ return G.players[p].name; }).join(', '), antNm=G.players[antId].name;
+  var J={id:JUDGE_ID,start:now,pids:dv,names:nm,freeze:freeze,burn:farms,burnEnd:burnEnd,ant:antId,antName:antNm,grant:JUDGE_GRANT};
+  judging=true;
+  dbPutIf(base+'/judge',J).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.judge=x.v; return; }          // another screen got there first
+    G.judge=J;
+    farms.forEach(function(fk){ var c=G.cells[fk]; if(!c) return; c.bn=burnEnd; patch['cells/'+fk]=c; });
+    var gid=q36(now)+'-'+antId, rec={pid:antId,n:JUDGE_GRANT,why:'judgment: wronged by votes cast from other accounts',by:'gods',t:now};
+    G.grants=G.grants||{}; G.grants[gid]=rec; patch['grants/'+gid]=rec;
+    var done=function(){
+      patch['rev']=now; myRev=now; cellsGen++;
+      return dbPatch(base,patch).then(ok,fail);
+    };
+    if(antId===ME){ me().squares=(me().squares||0)+JUDGE_GRANT; render(); pushMe(); done(); }
+    else dbGet('/marchland/'+gameCode+'/players/'+antId+'/squares').then(function(cur){
+      var next=(cur||0)+JUDGE_GRANT; patch['players/'+antId+'/squares']=next; G.players[antId].squares=next; return done();
+    }).catch(fail);
+    judgeChat(nm+' logged into the accounts of Elisa and Cuwucca and voted against Ant’s step claims from inside them, without their consent. The gods will not tolerate cheating.',now,'a');
+    judgeChat('Eight of '+nm+'’s grain fields are set ablaze for 4 days, and his army may not march, move or attack for one full day. '+antNm+' is given 15 marches for the wrong done to him.',now,'b');
+    judgeChat('Vote only from your own account. Anyone caught using another player’s account will be dealt with the same way.',now,'c');
+  }).catch(function(){}).then(function(){ judging=false; });
+  return true;
+}
 /* ── removal on request ──
    Chris asked for the players Lily and Trevor to be deleted: their accounts go, every square they hold is wiped and
    the ground is free. Done once (G.removed records it); whichever up-to-date screen sees them first does it. */
@@ -1914,7 +1994,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -2364,6 +2444,7 @@ function goodsText(g){ var p=[]; GOODS.forEach(function(k){ if(g&&g[k]>0) p.push
 /* ── the attack: a preview on a scroll, then the fight ── */
 var fighting=false;
 function attackPrompt(q,r,note){
+  if(frozenNope()) return;
   var pl=me(), c=cellOf(q,r), band=attackBand(q,r), L=defenderLine(q,r);
   if(!band){ var n70=soldiersFor70(L.p);
     return nope('<span class="bad">No band of yours stands beside it.</span> Taking someone else&rsquo;s ground needs one of your bands on a square that touches it. Use <b>Move soldiers</b> to bring a band up.'
@@ -2385,6 +2466,7 @@ function attackPrompt(q,r,note){
   });
 }
 function attackNow(q,r,band0,shown){
+  if(frozenNope()) return;
   var pl=me(), k=key(q,r), before=G.cells[k]?JSON.parse(JSON.stringify(G.cells[k])):null;
   if(fighting) return; fighting=true; say('The bands close&hellip;');
   cellFresh(q,r).then(function(f){
@@ -3118,6 +3200,7 @@ function placeSendMenu(){
   if(pos!==sendMenuPos){ box.style.transform='translate('+pos+')'; sendMenuPos=pos; }
 }
 function moveClick(q,r){
+  if(frozenNope()) { sel=null; selTrek=null; draw(); return; }
   var pl=me(), c=cellOf(q,r);
   if(selTrek) return redirectTrek(q,r);              // a walking band is selected: this click is its new destination
   if(!sel){
@@ -3176,6 +3259,7 @@ function trekTap(x,y){
   return true;
 }
 function redirectTrek(q,r){
+  if(frozenNope()) return;
   var tk=G.treks&&G.treks[selTrek], id=selTrek, now=Date.now();
   if(!tk||tk.o!==ME||now>=tk.eta){ selTrek=null; draw(); return nope('That band has already arrived.'); }
   var c=cellOf(q,r);
@@ -5579,6 +5663,7 @@ function render(){
     settleCastles();
     settlePurge();
     settlePlague();
+    settleJudge();
     settleRemovals();
     settleProbation();
     settleEliminations();
@@ -6990,7 +7075,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -7084,7 +7169,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','plaguenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','judgenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -7113,7 +7198,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -7142,7 +7227,7 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -7172,11 +7257,40 @@ function closePlagueNote(){
 function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
 function showPlagueNote(){
   var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote','judgenote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',plagueNoteKey,true);
   var b=document.getElementById('plaguenote-go'); b.onclick=closePlagueNote; try{ b.focus(); }catch(e){}
+  return true;
+}
+/* One-time announcement: the gods' judgment on Davide. Shown once per player, only once it has been passed, never stacked. */
+var JUDGE_NOTE_ID='judge1';
+function judgeSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[JUDGE_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+JUDGE_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markJudgeSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[JUDGE_NOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+JUDGE_NOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeJudgeNote(){
+  var n=document.getElementById('judgenote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',judgeNoteKey,true);
+  markJudgeSeen();
+  setTimeout(showNext,250);
+}
+function judgeNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeJudgeNote(); } }
+function showJudgeNote(){
+  var n=document.getElementById('judgenote'); if(!n||!G||!me()||!G.judge||judgeSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',judgeNoteKey,true);
+  var b=document.getElementById('judgenote-go'); b.onclick=closeJudgeNote; try{ b.focus(); }catch(e){}
   return true;
 }
 /* One-time announcement: the undo button. Shown once per player, never stacked on another notice. */
@@ -7201,7 +7315,7 @@ function closeUndoNote(){
 function undoNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeUndoNote(); } }
 function showUndoNote(){
   var n=document.getElementById('undonote'); if(!n||!G||!me()||undoSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',undoNoteKey,true);
@@ -7224,7 +7338,7 @@ function closeRiverNote(){
 function riverNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeRiverNote(); } }
 function showRiverNote(){
   var n=document.getElementById('rivernote'); if(!n||!G||!me()||riverNoteSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',riverNoteKey,true);
@@ -7232,7 +7346,7 @@ function showRiverNote(){
   return true;
 }
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
