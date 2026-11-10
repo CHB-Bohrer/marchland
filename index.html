@@ -3170,6 +3170,20 @@ function pendingCastles(pid){                          // keeps still going up f
   for(var k in G.cells){ var c=G.cells[k]; if(c.cb && c.cbo===pid && c.o===pid){ var p=k.split('_'); out.push([parseInt(p[0],10),parseInt(p[1],10)]); } }
   return out;
 }
+function castlePct(c){ return Math.max(0,Math.min(100,Math.round((1-(c.cb-Date.now())/CASTLE_BUILD_MS)*100))); }
+/* What tapping a castle site says: how far along it is, and what it still needs. */
+function castleStatus(q,r){
+  var c=cellOf(q,r); if(!c||!c.cb) return;
+  var left=c.cb-Date.now(), cost=castleCost(ME), pl=me(), miss=[];
+  var held=castleSurrounded(q,r,ME);
+  for(var g in cost){ if((pl.res[g]||0)<cost[g]) miss.push((cost[g]-Math.floor(pl.res[g]||0))+' more '+g); }
+  if(fieldOf(ME)<SPEC[CASTLE].gar[1]) miss.push('a soldier (muster one at a castle)');
+  var h='<b>Castle going up &mdash; '+castlePct(c)+'% built.</b> '+(left>0?'It stands in <b>'+hoursLeft(c.cb)+'</b>.':'The day is up and it is only waiting on you.');
+  h+=' '+(held?'All six squares around it are still yours.':'<span class="bad">A square around it is no longer yours, so the building will stop.</span>');
+  h+=' When it finishes you pay '+costLine(cost)+' and one soldier from your nearest band walks in to garrison it.';
+  h+=miss.length?' <span class="bad">You are still short of '+miss.join(', ')+'</span> &mdash; the keep will wait until you have them.':' You have everything it needs.';
+  say(h);
+}
 function castleCost(pid){
   var n=Math.max(1,myCastleCells(pid).length+pendingCastles(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 … (one still going up counts)
   return {timber:260*n, stone:200*n, iron:60*n};
@@ -3684,7 +3698,7 @@ function cellActions(q,r){
       }
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
       if(!c.k && c.cb){
-        A('Castle going up','ready in '+hoursLeft(c.cb),function(){},'It stands in '+hoursLeft(c.cb)+', provided all six squares around it stay yours');
+        A('Castle going up','ready in '+hoursLeft(c.cb)+' &middot; '+castlePct(c)+'%',function(){ castleStatus(q,r); });
       } else if(!c.k){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
@@ -4995,7 +5009,7 @@ function draw(){
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.k===TOWER||(c.g>0&&!isRuin(c))) guns.push([c,p,col]); }
-    else if(c.cb && c.o){ builds.push([{k:CASTLE,l:1,w:0,g:0,site:true},p,col]); }   // a castle going up: drawn faint
+    else if(c.cb && c.o){ builds.push([{k:CASTLE,l:1,w:0,g:0,site:true,cb:c.cb},p,col]); }   // a castle going up: drawn faint
     if(c.tb>0 && c.o && !vl) trebs.push([c,p,col]);
     if(c.b>0 && c.o) bands.push([c,p,col]);
     if(amb){
@@ -5040,6 +5054,14 @@ function draw(){
   });
   spans.forEach(function(e){ span(e[0],e[1][0],e[1][1],S,e[2],detail); });
   builds.forEach(function(e){ drawBuilding(e[0],e[1][0],e[1][1],S,e[2],detail); });
+  builds.forEach(function(e){                        // a castle going up shows how far along it is
+    var sc=e[0]; if(!sc.site||!sc.cb||S<11) return;
+    var bw=S*1.3, bh=Math.max(3,S*0.16), bx=e[1][0]-bw/2, by=e[1][1]+S*0.5, f=Math.max(0,Math.min(1,1-(sc.cb-Date.now())/CASTLE_BUILD_MS));
+    ctx.save(); ctx.globalAlpha=.9; ctx.fillStyle=T['--surface']; ctx.fillRect(bx-1,by-1,bw+2,bh+2);
+    ctx.fillStyle=e[2]; ctx.fillRect(bx,by,bw*f,bh); ctx.strokeStyle=e[2]; ctx.lineWidth=1; ctx.strokeRect(bx-.5,by-.5,bw+1,bh+1);
+    if(S>=15){ ctx.font='600 '+Math.round(S*0.3)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=e[2]; ctx.fillText(hoursLeft(sc.cb),e[1][0],by+bh+2); }
+    ctx.restore();
+  });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); harvestTrot(ctx,now); }   // HARVEST LAYER
   trebs.forEach(function(e){                         // trebuchets stand to the lower left of the square, out of the band badge's way
@@ -7713,23 +7735,9 @@ document.getElementById('leave').addEventListener('click',function(){
   push().then(function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); });
 });
 
-/* ═══ idle sign-out ═══ Five minutes without a click, tap or key press signs you out, so a game left open on a shared
-   computer does not stay signed in. Time is counted by the clock, so a laptop that slept counts too. After the reload
-   the sign-in screen says why. */
-var IDLE_MS=5*60000, lastActive=Date.now(), idling=false;
-['pointerdown','mousedown','touchstart','keydown'].forEach(function(ev){ document.addEventListener(ev,function(){ lastActive=Date.now(); },true); });
-function idleCheck(){
-  if(idling||!G||!me()) return;
-  if(Date.now()-lastActive<IDLE_MS) return;
-  idling=true;
-  try{ localStorage.setItem('marchland.idleout','1'); }catch(e){}
-  var done=function(){ try{ localStorage.removeItem('marchland.name'); localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); };
-  try{ push().then(done,done); }catch(e){ done(); }
-}
-setInterval(idleCheck,10000);
-document.addEventListener('visibilitychange',idleCheck);
-window.addEventListener('focus',idleCheck);
-try{ if(localStorage.getItem('marchland.idleout')==='1'){ localStorage.removeItem('marchland.idleout'); var jh=document.getElementById('join-hint'); if(jh) jh.textContent='You were signed out after 5 minutes without a click. Sign back in to carry on.'; } }catch(e){}
+/* The idle sign-out (5 minutes without a click) was removed on 10 Nov 2026; a game stays signed in until you choose Switch player.
+   This just clears the old flag a device may still be holding. */
+try{ localStorage.removeItem('marchland.idleout'); }catch(e){}
 
 /* ═══ caravans ═════════════════════════════════════════════════════════
    A caravan is a gift: any of your stone, timber, iron or grain, sent to
