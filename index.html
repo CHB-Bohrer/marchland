@@ -1283,6 +1283,46 @@ function soldiersOf(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid) n+=(c.b||0)+(c.g||0); }
   return n;
 }
+/* ── inactivity ──
+   A player who has not opened the game for INACT_GRACE_MS starts to lose ground: one square a day (INACT_STEP_MS), taken
+   from bare squares only, farthest from their nearest castle first. Anything built, however small, is safe from this rule:
+   castle, tower, wall course, road, trebuchet, soldiers, a castle going up, and bridges (river squares). Opening the game
+   again stops it at once (the player's `seen` stamp moves forward). Like the castle upkeep, anyone's screen applies it, as
+   one write that removes the square and stamps the player's `decayAt`, so two screens rarely take two. */
+var INACT_GRACE_MS=3*864e5, INACT_STEP_MS=864e5;
+function bareSquare(c,q,r){
+  return !!c && !!c.o && !c.k && !(c.w>0) && !c.rd && !(c.b>0) && !(c.tb>0) && !c.cb && !c.f && groundAt(q,r)!==RIVER;
+}
+function settleInactivity(){
+  if(!G||!G.players||dirty||ELIM||!online||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length) return false;
+  var now=Date.now(), patch={}, lost=[];
+  Object.keys(G.players).forEach(function(pid){
+    var pl=G.players[pid]; if(!pl||pid===ME) return;           // my own screen never trims me: I am here
+    if(!(pl.seen>0)) return;
+    var first=pl.seen+INACT_GRACE_MS, due=(pl.decayAt>first)?pl.decayAt+INACT_STEP_MS:first;   // first loss after the grace, then one a day
+    if(now<due) return;
+    var castles=myCastleCells(pid), best=null, bd=-1;
+    for(var k in G.cells){
+      var c=G.cells[k]; if(c.o!==pid) continue;
+      var pp=k.split('_'), q=parseInt(pp[0],10), r=parseInt(pp[1],10);
+      if(!bareSquare(c,q,r)) continue;
+      var d=1e9; castles.forEach(function(ct){ d=Math.min(d,hexDist(q,r,ct[0],ct[1])); });
+      if(d>bd || (d===bd && best && k>best)){ bd=d; best=k; }
+    }
+    pl.decayAt=now; patch['players/'+pid+'/decayAt']=now;
+    if(!best) return;                                           // nothing bare left to lose
+    var c2=G.cells[best];
+    if(c2.gv && c2.gv.length){ G.cells[best]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c2.gv}; patch['cells/'+best]=G.cells[best]; }
+    else { delete G.cells[best]; patch['cells/'+best]=null; }
+    lost.push(pl.name);
+  });
+  if(!Object.keys(patch).length) return false;
+  patch['rev']=now; myRev=now;
+  dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+  render();
+  return lost.length>0;
+}
 function settleEliminations(){
   if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;   // never judge anyone from an old copy of the board
   if(!Object.keys(G.cells).length) return false;               // an empty board is a loading glitch, not a massacre
@@ -5874,6 +5914,7 @@ function render(){
     settleRemovals();
     settleProbation();
     settleEliminations();
+    settleInactivity();
   }
   if(ELIM) return;                                   // that was me: the goodbye screen is up
   var pl=me(), R=ratesFor(ME);
@@ -7248,6 +7289,10 @@ var NOTES=[
      +'<p><b>You can now watch a castle go up.</b> A castle being built shows a <b>progress bar and the time left</b> on the map. Tap the site and choose <b>Castle going up</b> to see how far along it is, whether all six squares around it are still yours, and whether you have what it needs.</p>'
      +'<p><b>One thing to know:</b> when the day is up you pay the cost then, and <b>one soldier from your nearest band walks in to garrison it</b>. So keep at least one soldier in the field and your stores stocked, or the castle will wait for you. The How to play manual now says so.</p>'
      +'<p>Thanks to <b>Pudding</b> for flagging both.</p>', go:'Understood'},
+  {id:'nov26-inactive', eyebrow:'A new rule', title:'Land you leave behind fades',
+   html:'<p>If you <b>don&rsquo;t open the game for 3 days</b>, you start losing ground: <b>one square a day</b>, starting with the outermost.</p>'
+     +'<p>For now <b>only bare squares</b> are taken. Anything built on a square keeps it safe: a castle, tower, wall, road, trebuchet, soldiers, or a castle going up, and your bridges too.</p>'
+     +'<p>Opening the game stops it at once. Going away for a trip? Log in once every couple of days and you lose nothing.</p>', go:'Understood'},
   {id:'nov26-gift', eyebrow:'A new rule', title:'Land can be given',
    html:'<p>You may now <b>give a square of your ground to another player</b>. Tap a bare square of yours and choose <b>Give this square away</b>.</p>'
      +'<ul><li>It is <b>free</b> and happens at once.</li>'
