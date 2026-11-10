@@ -7784,12 +7784,14 @@ function loadKnownNames(){
     knownExtra={strikes:x[0]||{},sponsorships:x[1]||{},claims:x[2]||{}};
     if(knownPlayers) loadSponsors({players:knownPlayers,strikes:knownExtra.strikes,sponsorships:knownExtra.sponsorships,claims:knownExtra.claims});
   });
-  dbGet(base+'/players').then(function(ps){
-    if(!ps) return;
+  Promise.all([dbGet(base+'/players'),dbGet(base+'/pending').catch(function(){ return null; })]).then(function(xx){
+    var ps=xx[0]||{}, pd=xx[1]||{};
+    var shown={}; for(var sp0 in ps) shown[sp0]=1;
     knownPlayers=ps;
     if(knownExtra) loadSponsors({players:ps,strikes:knownExtra.strikes,sponsorships:knownExtra.sponsorships,claims:knownExtra.claims});
     var names=[];
     for(var pid in ps){ if(ps[pid]&&ps[pid].name){ names.push(ps[pid].name); knownRn[ps[pid].name]=ps[pid].rn||''; } }
+    for(var qid in pd){ var pq=pd[qid]; if(pq&&pq.name&&pq.ok&&!pq.no&&!shown[qid]&&names.indexOf(pq.name)<0){ names.push(pq.name); knownRn[pq.name]=pq.rn||''; } }   // vouched for, not yet on the board: still listed, so they can find their name
     if(!names.length) return;
     names.sort(function(a,b){ return a.toLowerCase().localeCompare(b.toLowerCase()); });
     knownPick.setOptions(names.map(function(n){ return {value:n, label:esc(n)+(knownRn[n]?' <i>('+esc(knownRn[n])+')</i>':''), short:esc(n)}; }));
