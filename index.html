@@ -1323,6 +1323,38 @@ function settleInactivity(){
   render();
   return lost.length>0;
 }
+/* ── approved newcomers ──
+   A sponsor's "Vouch for them" used to leave the newcomer as only a record (pending/<pid>/ok + sponsorships/<pid>): they
+   joined the board only when their own page finished signing in. If that page was closed, the newcomer stayed invisible:
+   not in the player list, not in the sign-in drop-down. Now the sponsor's screen (or the steward's) puts them on the
+   board as soon as they are approved: the player and their starting ground in one write, after checking the live
+   database so a name is never seeded twice. Signing in later just finds the existing player (PIN and real name already set). */
+var admitting={};
+function settleApprovals(){
+  if(!G||!online||dirty||ELIM||!boardFresh()||!G.pending) return false;
+  var ids=Object.keys(G.pending).filter(function(pid){
+    var p=G.pending[pid], sp=(G.sponsorships||{})[pid];
+    return p && p.ok && !p.no && p.pin && !G.players[pid] && !admitting[pid] && !(sp&&(sp.fake||sp.gone))
+      && (p.ok.by===ME || isSteward());           // only the sponsor's screen or the steward's, so two screens rarely race
+  });
+  if(!ids.length) return false;
+  var pid=ids[0], p=G.pending[pid]; admitting[pid]=1;
+  var base='/marchland/'+gameCode;
+  Promise.all([dbGet(base+'/players/'+pid),dbGet(base+'/cells'),dbGet(base+'/players')]).then(function(x){
+    if(x[0]) return;                                   // already on the board (their own page got there first)
+    var rc=x[1]||{}, rp=x[2]||{};
+    for(var ck in rc) if(!G.cells[ck]) G.cells[ck]=rc[ck];            // see every square as the database has it, so nobody lands on anyone
+    for(var rk in rp) if(!G.players[rk]) G.players[rk]=rp[rk];
+    if(G.players[pid]) return;
+    if(!seedPlayer(pid,p.name)){ say('There is no clear ground left to start '+esc(p.name)+' on right now.'); return; }
+    var pl=G.players[pid]; pl.pin=p.pin; pl.rn=p.rn||''; pl.sp={by:p.ok.by,how:p.ok.how,t:p.ok.t}; pl.joined=Date.now();
+    var np={}; np['players/'+pid]=pl;
+    for(var nk in G.cells) if(G.cells[nk].o===pid) np['cells/'+nk]=G.cells[nk];
+    np.rev=Date.now(); myRev=np.rev;
+    return dbPatch(base,np).then(ok,fail).then(function(){ say('<span class="good">'+esc(p.name)+' is on the board.</span>'); });
+  }).catch(function(){ delete G.players[pid]; }).then(function(){ delete admitting[pid]; });
+  return true;
+}
 function settleEliminations(){
   if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;   // never judge anyone from an old copy of the board
   if(!Object.keys(G.cells).length) return false;               // an empty board is a loading glitch, not a massacre
@@ -5913,6 +5945,7 @@ function render(){
     settleTurkey();
     settleRemovals();
     settleProbation();
+    settleApprovals();
     settleEliminations();
     settleInactivity();
   }
@@ -6701,7 +6734,7 @@ function answerRequest(pid,p){
     dbPatch(base,patch).then(bumpRev).then(function(){
       G.pending[pid].ok=rec; G.sponsorships=G.sponsorships||{}; G.sponsorships[pid]=patch['sponsorships/'+pid];
       if(patch['players/'+pid+'/sp'] && G.players[pid]) G.players[pid].sp=patch['players/'+pid+'/sp'];
-      renderSponsorBtn(); say('<span class="good">You vouched for '+esc(p.name)+'.</span> They enter the board the next time their page checks, within a minute.');
+      renderSponsorBtn(); try{ settleApprovals(); }catch(e){} say('<span class="good">You vouched for '+esc(p.name)+'.</span> They are placed on the board right away.');
     },fail);
   });
 }
@@ -7716,6 +7749,7 @@ function join(){
       if(approved){ G.players[ME].sp={by:approved.by,how:approved.how,t:approved.t}; G.sponsorships=G.sponsorships||{}; G.sponsorships[ME]={by:approved.by,how:approved.how,t:approved.t,name:name,rn:realName}; }
     } else G.players[ME].name=name;
     G.players[ME].rn=realName;                       // real name, shown next to the user name everywhere
+    if(online && pend && pend.ok && !isNew) dbPut('/marchland/'+gameCode+'/pending/'+ME,null).catch(function(){});   // the approval is used up: a stale one must never let a fallen name back in without a sponsor
     G.players[ME].pin=tryHash;                    // first time a name is used it claims its PIN
     meTag=null; meBase=snapRes(G.players[ME].res); meBaseX=snapX(G.players[ME]);   // my record as the database has it, before this tab adds anything
     var moved=isNew?[]:migrateBands(ME);
