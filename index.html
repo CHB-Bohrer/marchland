@@ -1138,6 +1138,7 @@ function writeCell(q,r,c){
   if(c.cs && c.o) G.cells[k].cs=c.cs;                  // what the owner spent on what stands here (half comes back if it is torn down)
   if(c.tb>0 && c.o){ G.cells[k].tb=c.tb; if(c.tr) G.cells[k].tr=c.tr; }   // trebuchets, and when each can next fire
   if(c.rd && c.o){ G.cells[k].rd=1; if(c.rf) G.cells[k].rf=c.rf; }        // a road, and when it is finished
+  if(c.cb && c.o && c.cbo===c.o && !c.k){ G.cells[k].cb=c.cb; G.cells[k].cbo=c.cbo; }   // a castle going up, and whose (it used to be dropped here, so a begun castle vanished at once)
   cellsGen++;
 }
 var cellsGen=0;                                       // bumped whenever the cells change, so cached answers (live roads) know to refresh
@@ -3327,6 +3328,12 @@ function pendingCastles(pid){                          // keeps still going up f
   return out;
 }
 function castlePct(c){ return Math.max(0,Math.min(100,Math.round((1-(c.cb-Date.now())/CASTLE_BUILD_MS)*100))); }
+/* For the welcome-back line: each of my castles still going up, so it is plain one is being built. */
+function sitesLine(){
+  var ps=pendingCastles(ME); if(!ps.length) return '';
+  return ' '+ps.map(function(p){ var c=G.cells[key(p[0],p[1])], left=c.cb-Date.now();
+    return '<b>A castle of yours is going up</b> &mdash; '+castlePct(c)+'% built, '+(left>0?'standing in <b>'+hoursLeft(c.cb)+'</b>':'ready as soon as you have the materials and a soldier')+' (the faint keep with a bar under it).'; }).join(' ');
+}
 /* What tapping a castle site says: how far along it is, and what it still needs. */
 function castleStatus(q,r){
   var c=cellOf(q,r); if(!c||!c.cb) return;
@@ -7375,7 +7382,7 @@ function enterGame(isNew){
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
   if(isNew){ markNoticeSeen(); markCvNoteSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
-  else { setTimeout(showNext,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')); }
+  else { setTimeout(showNext,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')+sitesLine()); }
   chatStart();
   loadLetters();
 }
