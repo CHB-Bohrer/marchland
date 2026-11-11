@@ -803,6 +803,28 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   </div>
 </div>
 
+<!-- ── one-time announcement: comets fall on Kit's land for foul language (shown once per player, see showCometNote) ── -->
+<div id="cometnote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="cometnote-h">
+  <style>
+    #cometnote .cm-sky{ position:relative; height:84px; overflow:hidden; margin:-4px 0 12px; border-radius:2px; background:linear-gradient(#14202b,#3a2218 85%,#8a3b17); }
+    #cometnote .cm-sky i{ position:absolute; top:-30px; width:7px; height:7px; border-radius:50%; background:#fff4c8; box-shadow:0 0 10px 4px #ffb347, 18px -34px 18px 6px rgba(255,120,30,.55), 30px -56px 22px 6px rgba(200,40,10,.3); animation:cmfall 1.9s linear infinite; }
+    #cometnote .cm-sky i:nth-child(1){ left:12%; animation-delay:0s; } #cometnote .cm-sky i:nth-child(2){ left:31%; animation-delay:.6s; }
+    #cometnote .cm-sky i:nth-child(3){ left:50%; animation-delay:1.2s; } #cometnote .cm-sky i:nth-child(4){ left:68%; animation-delay:.3s; }
+    #cometnote .cm-sky i:nth-child(5){ left:84%; animation-delay:.9s; }
+    @keyframes cmfall{ from{ transform:translate(30px,-10px); opacity:1; } to{ transform:translate(-40px,110px); opacity:.2; } }
+    @media (prefers-reduced-motion:reduce){ #cometnote .cm-sky i{ animation:none; top:30px; } }
+  </style>
+  <div class="rulesnote-card">
+    <p class="rulesnote-eyebrow">Word from the gods</p>
+    <h2 id="cometnote-h">&#9732; Comets fall on Kit&rsquo;s land</h2>
+    <div class="cm-sky" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <p><b>Foul language will not be borne.</b> Great comets have fallen from the sky onto the land of <b>Kit</b>.</p>
+    <p><b>The punishment.</b> Seven of Kit&rsquo;s squares have been struck and set ablaze for <b>2 days</b>. Burning ground gives nothing until the fire dies, then it is his to farm again. Look for the comets still falling on the scorched squares.</p>
+    <p><b>A warning to all.</b> Mind your tongues in the chats. The next comet may have your name on it.</p>
+    <button type="button" class="rulesnote-go" id="cometnote-go">The gods have spoken</button>
+  </div>
+</div>
+
 <!-- ── one-time announcement: the plague on Mario's land, a warning about nonsense in the chats, and Mario's punishment (shown once per player, see showPlagueNote) ── -->
 <div id="plaguenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="plaguenote-h">
   <div class="rulesnote-card">
@@ -1108,7 +1130,7 @@ function writeCell(q,r,c){
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
   if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
   if(c.f) G.cells[k].f=c.f;
-  if(c.bn && c.bn>Date.now()){ G.cells[k].bn=c.bn; if(c.bx) G.cells[k].bx=1; }       // land on fire until this moment: it yields nothing (bx: a purge fire, the land is wiped when it ends)
+  if(c.bn && c.bn>Date.now()){ G.cells[k].bn=c.bn; if(c.bx) G.cells[k].bx=1; if(c.cm) G.cells[k].cm=1; }       // land on fire until this moment: it yields nothing (bx: a purge fire, the land is wiped when it ends)
   if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
   if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
   if(c.k===TOWER && c.h!=null) G.cells[k].h=c.h;       // tower health (only stored while it is damaged)
@@ -1670,6 +1692,68 @@ function settleJudge(){
     judgeChat('Vote only from your own account. Anyone caught using another player’s account will be dealt with the same way.',now,'c');
   }).catch(function(){}).then(function(){ judging=false; });
   return true;
+}
+/* ── the comets on Kit's land ──
+   The gods hurl great comets from the sky onto Kit's land as punishment for foul language: seven of his squares (castles and
+   towers are spared) are struck and burn for 2 days (burning ground gives nothing; the land stays his). Whichever up-to-date
+   screen sees the board first does it once (G.comet records who, when and which squares; claimed with a conditional write),
+   and it is announced in the chat and on a one-time scroll (see showCometNote). While the fire lasts, comets keep
+   falling on the struck squares (cell flag cm, see drawComet). Needs exactly one player named Kit. */
+var COMET_ID='comet1', COMET_BURN_MS=2*86400000, COMET_N=7, cometing=false, cometQ=[];
+function cometChat(m,now,tag){
+  if(!online) return;
+  var t=Math.floor(now/60000)*60000, id=q36(t)+'-comet-'+tag;
+  chatPut('/m/'+id,{pid:'sys',n:'The gods',t:t,m:m}).then(function(){ return chatPut('/rev',t); }).catch(function(){});
+}
+function settleComet(){
+  if(!online||cometing||!G||!G.players||dirty||ELIM||!boardFresh()||G.comet) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  var kt=judgePids(['kit']); if(kt.length!==1) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, burnEnd=now+COMET_BURN_MS, nm=G.players[kt[0]].name;
+  var hit=Object.keys(G.cells).filter(function(ck){
+    var cc=G.cells[ck]; return cc.o===kt[0] && !cc.k && !building(cc) && !burning(cc,now);
+  }).sort(function(a,b){
+    var pa=a.split('_'), pb=b.split('_');
+    return artHash(parseInt(pa[0],10),parseInt(pa[1],10),777)-artHash(parseInt(pb[0],10),parseInt(pb[1],10),777);   // scattered, not clumped
+  }).slice(0,COMET_N);
+  if(!hit.length) return false;
+  var C={id:COMET_ID,start:now,pids:kt,names:nm,burn:hit,burnEnd:burnEnd}, patch={};
+  cometing=true;
+  dbPutIf(base+'/comet',C).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.comet=x.v; return; }          // another screen got there first
+    G.comet=C;
+    hit.forEach(function(fk){ var c=G.cells[fk]; if(!c) return; c.bn=burnEnd; c.cm=1; patch['cells/'+fk]=c; });
+    patch['rev']=now; myRev=now; cellsGen++;
+    dbPatch(base,patch).then(ok,fail);
+    cometChat('Foul language will not be borne. Great comets fall from the sky onto the land of '+nm+'!',now,'a');
+    cometChat(hit.length+' of '+nm+'’s squares are struck and set ablaze for 2 days. Burning ground gives nothing until the fire dies.',now,'b');
+    cometChat('Mind your tongues, all of you. The next comet may have your name on it.',now,'c');
+  }).catch(function(){}).then(function(){ cometing=false; });
+  return true;
+}
+/* a comet streaks down onto a struck square every few seconds (each square on its own beat); a scorched crater stays between falls */
+function drawComet(x,y,s,q,r,t){
+  if(s<9) return;
+  var per=8, u=(((t+artHash(wrapC(q),wrapC(r),555)*per)%per)+per)%per/per, FALL=.16, FLASH=.28;
+  ctx.save();
+  ctx.globalAlpha=.5; ctx.fillStyle='#2B140E'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.42,s*0.24,0,0,6.284); ctx.fill();   // crater
+  ctx.globalAlpha=.55+.25*Math.sin(t*5+q*1.7+r); ctx.fillStyle='#FF9A3C'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.2,s*0.11,0,0,6.284); ctx.fill();   // glowing core
+  if(u<FALL){
+    var f=u/FALL, ex=s*2.6, ey=s*5.2, hx=x+ex*(1-f), hy=y-ey*(1-f), tx=hx+ex*0.55, ty=hy-ey*0.55;
+    var g=ctx.createLinearGradient(hx,hy,tx,ty); g.addColorStop(0,'rgba(255,236,160,.95)'); g.addColorStop(.45,'rgba(255,120,30,.55)'); g.addColorStop(1,'rgba(200,40,10,0)');
+    ctx.globalAlpha=1; ctx.strokeStyle=g; ctx.lineCap='round'; ctx.lineWidth=s*0.5; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(tx,ty); ctx.stroke();
+    ctx.lineWidth=s*0.22; ctx.strokeStyle='rgba(255,250,220,.9)'; ctx.beginPath(); ctx.moveTo(hx,hy); ctx.lineTo(hx+(tx-hx)*0.35,hy+(ty-hy)*0.35); ctx.stroke();
+    ctx.fillStyle='#FFF6CF'; ctx.beginPath(); ctx.arc(hx,hy,s*0.3,0,6.284); ctx.fill();
+    ctx.fillStyle='rgba(255,170,60,.55)'; ctx.beginPath(); ctx.arc(hx,hy,s*0.5,0,6.284); ctx.fill();
+  } else if(u<FLASH){
+    var k=(u-FALL)/(FLASH-FALL);                                   // impact: a flash, a ring and a few sparks
+    ctx.globalAlpha=(1-k)*.85; ctx.fillStyle='#FFE9A8'; ctx.beginPath(); ctx.arc(x,y,s*(0.3+0.9*k),0,6.284); ctx.fill();
+    ctx.globalAlpha=(1-k)*.9; ctx.strokeStyle='#FF7A1F'; ctx.lineWidth=Math.max(1.5,s*0.1); ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.3+1.3*k),s*(0.18+0.7*k),0,0,6.284); ctx.stroke();
+    ctx.fillStyle='#FFB347';
+    for(var i=0;i<6;i++){ var a=i*1.047+artHash(wrapC(q),wrapC(r),600+i)*0.8; ctx.beginPath(); ctx.arc(x+Math.cos(a)*s*1.1*k,y-Math.abs(Math.sin(a))*s*1.2*k+s*0.3*k*k,Math.max(1,s*0.07),0,6.284); ctx.fill(); }
+  }
+  ctx.restore();
 }
 /* ── the turkey hunt ──
    A photo of yourself beside a LIVING turkey earns 10 marches, once per player, until Thanksgiving. The photo is kept
@@ -2233,7 +2317,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -5076,7 +5160,7 @@ function draw(){
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
     if(c.o && plagueMul(c.o)<1) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
-    if(burning(G.cells[key(q,r)])) drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!G.cells[key(q,r)].bx);
+    if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
@@ -5141,6 +5225,7 @@ function draw(){
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
   });
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
+  cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawTreks(now,amb);
@@ -5941,6 +6026,7 @@ function render(){
     settlePurge();
     settlePlague();
     settleJudge();
+    settleComet();
     settlePudding();
     settleTurkey();
     settleRemovals();
@@ -7367,7 +7453,7 @@ function closeNotice(){
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
 function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
-  if(['sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
+  if(['sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
@@ -7461,7 +7547,7 @@ function closeGodsNote(){
 function godsNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeGodsNote(); } }
 function showGodsNote(){
   var n=document.getElementById('godsnote'); if(!n||!G||!me()||godsSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','plaguenote','judgenote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','plaguenote','judgenote','cometnote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',godsNoteKey,true);
@@ -7490,7 +7576,7 @@ function closeShadowNote(){
 function shadowNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeShadowNote(); } }
 function showShadowNote(){
   var n=document.getElementById('shadownote'); if(!n||!G||!me()||shadowSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','undonote','rivernote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',shadowNoteKey,true);
@@ -7519,7 +7605,7 @@ function novNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNovNote()
 function showNovNote(){
   var n=document.getElementById('novnote'); if(!n||!G||!me()||novSeen()) return false;
   if(Date.now()>=new Date(2026,10,1).getTime()) return false;   // its promise is kept: from November the new notices say what changed
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','undonote','rivernote','shadownote','outnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',novNoteKey,true);
@@ -7549,7 +7635,7 @@ function closePlagueNote(){
 function plagueNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closePlagueNote(); } }
 function showPlagueNote(){
   var n=document.getElementById('plaguenote'); if(!n||!G||!me()||!G.plague||plagueSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote','judgenote','turkeynote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','outnote','waitnote','judgenote','cometnote','turkeynote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',plagueNoteKey,true);
@@ -7585,6 +7671,35 @@ function showJudgeNote(){
   var b=document.getElementById('judgenote-go'); b.onclick=closeJudgeNote; try{ b.focus(); }catch(e){}
   return true;
 }
+/* One-time announcement: comets on Kit's land. Shown once per player, only once the strike has happened, never stacked. */
+var COMET_NOTE_ID='comet1';
+function cometSeen(){
+  var pl=me();
+  if(pl && pl.notes && pl.notes[COMET_NOTE_ID]) return true;
+  try{ return localStorage.getItem('marchland.notice.'+COMET_NOTE_ID+'.'+ME)==='1'; }catch(e){ return false; }
+}
+function markCometSeen(){
+  var pl=me(); if(!pl) return;
+  pl.notes=pl.notes||{}; pl.notes[COMET_NOTE_ID]=Date.now();
+  try{ localStorage.setItem('marchland.notice.'+COMET_NOTE_ID+'.'+ME,'1'); }catch(e){}
+  pushMe();
+}
+function closeCometNote(){
+  var n=document.getElementById('cometnote'); if(n) n.classList.add('hide');
+  document.removeEventListener('keydown',cometNoteKey,true);
+  markCometSeen();
+  setTimeout(showNext,250);
+}
+function cometNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeCometNote(); } }
+function showCometNote(){
+  var n=document.getElementById('cometnote'); if(!n||!G||!me()||!G.comet||cometSeen()) return false;
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','judgenote','cometnote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  if(other) return false;
+  n.classList.remove('hide'); n.scrollTop=0;
+  document.addEventListener('keydown',cometNoteKey,true);
+  var b=document.getElementById('cometnote-go'); b.onclick=closeCometNote; try{ b.focus(); }catch(e){}
+  return true;
+}
 /* One-time announcement: the turkey hunt. Shown once per player, only once the hunt has been proclaimed, never stacked. */
 var TURKEY_NOTE_ID='turkey1';
 function turkeySeen(){
@@ -7607,7 +7722,7 @@ function closeTurkeyNote(){
 function turkeyNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeTurkeyNote(); } }
 function showTurkeyNote(){
   var n=document.getElementById('turkeynote'); if(!n||!G||!me()||!G.turkeyhunt||turkeySeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','judgenote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','judgenote','cometnote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',turkeyNoteKey,true);
@@ -7636,7 +7751,7 @@ function closeUndoNote(){
 function undoNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeUndoNote(); } }
 function showUndoNote(){
   var n=document.getElementById('undonote'); if(!n||!G||!me()||undoSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',undoNoteKey,true);
@@ -7659,7 +7774,7 @@ function closeRiverNote(){
 function riverNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeRiverNote(); } }
 function showRiverNote(){
   var n=document.getElementById('rivernote'); if(!n||!G||!me()||riverNoteSeen()) return false;
-  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','turkeynote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
+  var other=['rulesnote','sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','undonote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
   document.addEventListener('keydown',riverNoteKey,true);
@@ -7667,7 +7782,7 @@ function showRiverNote(){
   return true;
 }
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
