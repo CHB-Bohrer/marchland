@@ -936,6 +936,11 @@ var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
    is attached it heals at exactly the rate it was losing. A fallen castle is a ruin that
    gives no supply and holds no garrison; whoever seizes it destroys it and gets the bounty. */
 var CASTLE_MAX_H=30, CASTLE_BOUNTY=50;
+/* A castle that falls stays fallen for a full day, farm or no farm, so whoever brought it down has time to walk in and seize it.
+   The moment it fell is kept on the square (c.rt); a ruin from before this rule counts from where its clock stopped (c.ht). */
+var RUIN_HOLD_MS=24*36e5;
+function ruinSince(c){ return c.rt!=null?c.rt:(c.ht||0); }
+function ruinHoldLeft(c,at){ return Math.max(0,ruinSince(c)+RUIN_HOLD_MS-(at||Date.now())); }
 /* Soldiers who fall are marked by little crosses in the cell where they died. Each cross is a
    timestamp (cell.gv, newest last) and disappears 5 days after the soldier fell. */
 var GRAVE_MS=5*864e5, GRAVE_MAX=12;
@@ -1138,7 +1143,7 @@ function writeCell(q,r,c){
   if(c.f) G.cells[k].f=c.f;
   if(c.bn && c.bn>Date.now()){ G.cells[k].bn=c.bn; if(c.bx) G.cells[k].bx=1; if(c.cm) G.cells[k].cm=1; }       // land on fire until this moment: it yields nothing (bx: a purge fire, the land is wiped when it ends)
   if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
-  if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; }   // castle health (only tracked while below full)
+  if(c.k===CASTLE && c.h!=null){ G.cells[k].h=c.h; if(c.ht) G.cells[k].ht=c.ht; if(c.rt) G.cells[k].rt=c.rt; }   // castle health (only tracked while below full)
   if(c.k===TOWER && c.h!=null) G.cells[k].h=c.h;       // tower health (only stored while it is damaged)
   if(c.w>0 && c.wd>0) G.cells[k].wd=c.wd;              // hits the top wall course has taken (two bring a course down)
   if(c.cs && c.o) G.cells[k].cs=c.cs;                  // what the owner spent on what stands here (half comes back if it is torn down)
@@ -1271,7 +1276,7 @@ function settleCastles(){
       if(!can) continue;
       for(var sg2 in scost) spl.res[sg2]-=scost[sg2];
       var sent=drawSoldiers(ME,sq,sr,1);
-      sc=cellOf(sq,sr); delete sc.cb; delete sc.cbo; sc.k=CASTLE; sc.l=1; sc.g=1; delete sc.h; delete sc.ht;
+      sc=cellOf(sq,sr); delete sc.cb; delete sc.cbo; sc.k=CASTLE; sc.l=1; sc.g=1; delete sc.h; delete sc.ht; delete sc.rt;
       if(sc.cs) delete sc.cs.n; spendAdd(sc,'k',scost,{});
       writeCell(sq,sr,sc); logMove('cs',sq,sr,fromFor(sq,sr,ME),null,0,null);
       sent.forEach(function(x){ if(key(x[0],x[1])!==key(sq,sr)) pushCell(x[0],x[1]); }); pushCell(sq,sr); pushMe(); changed++;
@@ -1290,14 +1295,17 @@ function settleCastles(){
       c.ht=now; if(c.h==null) c.h=CASTLE_MAX_H;
       castleSave(q,r,c.o,c); changed++; continue;
     }
-    var n=Math.floor((now-c.ht)/TICK_MS); if(n<1) continue;
     var h=castleH(c);
-    if(h<=0 && n>1){ c.ht=now-TICK_MS; n=1; }          // a fallen keep's clock stands still, so when it was fed again every day it sat fallen used to be paid out as healing at once (a castle near zero leapt back up); now a fed ruin gains one point a tick like any other
+    if(h<=0){                                          // a ruin: it lies fallen for a full day whatever is connected to it, and is never rewritten meanwhile (rewriting it is how seized ruins came back)
+      if(!fed || now-ruinSince(c)<RUIN_HOLD_MS) continue;
+      c.h=1; c.ht=now; delete c.rt;                    // the day is over and a farm is joined: it stands again at 1, and heals a point a tick from here like any other (never a leap)
+      castleSave(q,r,c.o,c); changed++; continue;
+    }
+    var n=Math.floor((now-c.ht)/TICK_MS); if(n<1) continue;
     var nh=fed?Math.min(CASTLE_MAX_H,h+n):Math.max(0,h-n);
-    if(h<=0 && nh<=0) continue;                       // a ruin that stays a ruin: nothing to write (rewriting it is how seized ruins came back)
-    if(nh>=CASTLE_MAX_H){ delete c.h; delete c.ht; }
+    if(nh>=CASTLE_MAX_H){ delete c.h; delete c.ht; delete c.rt; }
     else { c.h=nh; c.ht+=n*TICK_MS; }
-    if(h>0 && nh<=0){ c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; }   // it falls: the garrison walks out into the open
+    if(nh<=0){ c.rt=now; c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; }   // it falls: the garrison walks out into the open, and the day it lies fallen starts now
     castleSave(q,r,c.o,c); changed++;
   }
   return changed;
@@ -2038,7 +2046,7 @@ function castleAlert(pid){
   for(var k in G.cells){
     var c=G.cells[k]; if(c.k!==CASTLE||c.o!==pid||c.h==null) continue;
     var p=k.split('_'), fed=castleFed(parseInt(p[0],10),parseInt(p[1],10),pid);
-    if(isRuin(c)){ out={ruin:true, short:'castle fallen', long:'<span class="bad">One of your castles has fallen</span> and can be seized for '+CASTLE_BOUNTY+' marches. '+(fed?'It is connected to a farm again and is healing.':'Link a farm to it by unbroken ground of yours to bring it back.')}; break; }
+    if(isRuin(c)){ out={ruin:true, short:'castle fallen', long:'<span class="bad">One of your castles has fallen</span> and can be seized for '+CASTLE_BOUNTY+' marches. '+(ruinHoldLeft(c)>0?'It lies fallen for another '+Math.ceil(ruinHoldLeft(c)/36e5)+' h whatever you do; after that a farm joined to it by unbroken ground of yours raises it again.':(fed?'It is connected to a farm again and is about to stand.':'Link a farm to it by unbroken ground of yours to bring it back.'))}; break; }
     if(!fed){ var dl=c.ht+c.h*TICK_MS; if(!out||dl<out.dl) out={dl:dl, short:'castle starving — '+hoursLeft(dl), long:'<span class="bad">A castle of yours has no farm connected to it</span> and falls in '+hoursLeft(dl)+'. Link a grain square to it by unbroken ground of yours to stop that.'}; }
   }
   return out;
@@ -3062,7 +3070,7 @@ function fireNow(q,r,tq,tr,what,n){
       if(c.k!==CASTLE||isRuin(c)) throw {msg:'That castle has already fallen.'};
       used=Math.min(n,Math.ceil(castleH(c)/TREB_DMG));
       var ch=Math.max(0,castleH(c)-used*TREB_DMG); c.h=ch; if(c.ht==null) c.ht=Date.now();
-      if(ch<=0){ fell=true; c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; out='The castle falls: it is a ruin now'; }   // the garrison walks out, as when it starves
+      if(ch<=0){ fell=true; c.rt=Date.now(); c.b=(c.b||0)+(c.g||0); c.g=0; c.d=0; out='The castle falls: it is a ruin now, and stays one for a full day'; }   // the garrison walks out, as when it starves
       else out='Castle health '+ch+' of '+CASTLE_MAX_H;
     } else throw {msg:'A trebuchet only aims at walls, towers and castles.'};
     used=Math.max(1,used);
@@ -3543,7 +3551,7 @@ function wall0(q,r){
 function muster0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(!(c.o===ME&&c.k===CASTLE)) return nope('Soldiers muster at your castles.');
-  if(isRuin(c)) return nope('That castle has fallen &mdash; nobody musters at a ruin. Reconnecting a farm will heal it, or muster at another castle.');
+  if(isRuin(c)) return nope('That castle has fallen &mdash; nobody musters at a ruin. It lies fallen for a full day; after that a connected farm raises it again. Muster at another castle.');
   if(pl.res.iron<25||pl.res.grain<40) return nope('Not enough iron and grain — a soldier takes 25 iron and 40 grain. '+shortBy({iron:25,grain:40}));
   pl.res.iron-=25; pl.res.grain-=40; c.b=(c.b||0)+1;
   writeCell(q,r,c); logMove('ms',q,r,null,null,0);
@@ -7526,6 +7534,10 @@ var NOTES=[
      +'<p><b>You can now watch a castle go up.</b> A castle being built shows a <b>progress bar and the time left</b> on the map. Tap the site and choose <b>Castle going up</b> to see how far along it is, whether all six squares around it are still yours, and whether you have what it needs.</p>'
      +'<p><b>One thing to know:</b> when the day is up you pay the cost then, and <b>one soldier from your nearest band walks in to garrison it</b>. So keep at least one soldier in the field and your stores stocked, or the castle will wait for you. The How to play manual now says so.</p>'
      +'<p>Thanks to <b>Pudding</b> for flagging both.</p>', go:'Understood'},
+  {id:'nov26-ruinday', eyebrow:'A fix', title:'A fallen castle stays fallen for a day',
+   html:'<p>Castles that were <b>battered to nothing</b> were getting back up within hours, before anyone could walk in and take them. One even leapt back to 40% in an afternoon. That was a fault in the game, not a trick.</p>'
+     +'<p>From now on a castle that falls <b>lies fallen for a full 24 hours</b>, whether or not a farm is joined to it. In that day any band beside it can <b>seize it for '+CASTLE_BOUNTY+' marches</b>.</p>'
+     +'<p>If nobody takes it, and a farm is joined to it by its owner&rsquo;s ground, it then stands again at <b>1 health</b> and heals a point a tick, as before.</p>', go:'Understood'},
   {id:'nov26-inactive', eyebrow:'A new rule', title:'Land you leave behind fades',
    html:'<p>If you <b>don&rsquo;t open the game for 3 days</b>, you start losing ground: <b>one square a day</b>, starting with the outermost.</p>'
      +'<p>For now <b>only bare squares</b> are taken. Anything built on a square keeps it safe: a castle, tower, wall, road, trebuchet, soldiers, or a castle going up, and your bridges too.</p>'
