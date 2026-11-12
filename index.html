@@ -8319,7 +8319,7 @@ document.getElementById('cv-send').addEventListener('click',sendCaravan);
    Its fate is written once, conditionally, as c.end ({k:'arr'|'hit', t, by, q, r}) by whichever screen gets there
    first (the sender's, the tower owner's or a shooter's), so a horse can never both arrive and be shot down.
    After 1 December nothing new can be sent, but horses on the road still arrive and wrecks still fade out. */
-var HORSE_OK=(function(){ var d=new Date(); return d.getMonth()===10 && d.getDate()>=15; })();
+var HORSE_OK=(function(){ var d=new Date(); return d.getMonth()===10 && d.getDate()>=12; })();
 try{ if(/[?&]horse=1/.test(location.search)) HORSE_OK=true; }catch(e){}
 var HORSE_MS_CELL=30*60000, HORSE_SIGHT=4, HORSE_WRECK_MS=3*864e5;
 
@@ -8710,7 +8710,7 @@ var HZ_STEPS=[
      return crSvg(crHex(44,64,30,'#e9dcb6')+'<rect x="33" y="50" width="22" height="24" fill="#8a7a5a"/><rect x="30" y="44" width="28" height="8" fill="#6d5e40"/>'+crTxt(44,108,'Your castle',11)
        +hzDraw(140,70,0.62,false,'#2c6bb0')
        +crHex(240,64,30,'#d9c2c2')+'<rect x="233" y="42" width="14" height="34" fill="#7a5a5a"/><path d="M232 42 h16 l-3 -7 h-10z" fill="#5a3f3f"/>'+crTxt(240,108,'Their tower',11)); },
-   html:'<p>For the second half of November, from the 15th to the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon.</p>'},
+   html:'<p>Until the end of November, through the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon.</p>'},
   {title:'Thirty minutes a square', pic:function(){
      return crSvg(crHex(30,60,20,'#e9dcb6')+crHex(70,60,20,'#e9dcb6')+crHex(110,60,20,'#eee6cf')+crHex(150,60,20,'#eee6cf')+crHex(190,60,20,'#eee6cf')+crHex(230,60,20,'#d9c2c2')+'<rect x="224" y="40" width="12" height="30" fill="#7a5a5a"/>'
        +hzDraw(110,56,0.42,false,'#2c6bb0')+'<circle cx="140" cy="100" r="19" fill="#efe3c0" stroke="#3a2f18" stroke-width="2"/><path d="M140 100 V88 M140 100 L149 106" stroke="#3a2f18" stroke-width="2.4" stroke-linecap="round"/>'+crTxt(200,104,'30 min a square',12)); },
