@@ -1626,6 +1626,53 @@ function settlePlague(){
   plagueChat('The plague has passed from the land of '+(P.names||'Mario')+'. His fields give a full harvest again.',now,'end');
   return true;
 }
+/* ── the plague on Soul Crusher's two squares ──
+   A second, smaller plague: the gods strike just two of Soul Crusher's (Lewis Johnson's) supplied grain squares for 2 days,
+   and each gives only half its harvest while it lasts. Like the first, whichever up-to-date screen sees the board first
+   starts it once (G.plague2 records who, when and which two squares), and one later screen marks it finished. Announced in the chat. */
+var PLAGUE2_MS=2*86400000, PLAGUE2_N=2;
+function plague2Pid(){
+  var hit=null;
+  Object.keys(G.players).forEach(function(pid){
+    var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
+    if(n==='soulcrusher') hit=pid;
+  });
+  return hit;
+}
+/* 1 normally, .5 on a square struck by the second plague while it lasts */
+function plague2Mul(k,at){
+  var P=G&&G.plague2; if(!P||!P.cells||P.cells.indexOf(k)<0) return 1;
+  at=at||Date.now(); return (at>=P.start && at<P.end)?0.5:1;
+}
+function settlePlague2(){
+  if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;   // an empty board is a loading glitch
+  var now=Date.now(), P=G.plague2, patch={};
+  if(!P){
+    var pid=plague2Pid(); if(!pid) return false;
+    var sup=supplied(pid), nm=G.players[pid].name;
+    var pick=function(farmOnly){
+      return Object.keys(G.cells).filter(function(ck){
+        var cc=G.cells[ck]; if(cc.o!==pid||building(cc)||cc.k||burning(cc,now)||!sup[ck]) return false;
+        if(!farmOnly) return groundAt(parseInt(ck.split('_')[0],10),parseInt(ck.split('_')[1],10))!==RIVER;
+        var pp=ck.split('_'); return isFarmCell(cc,parseInt(pp[0],10),parseInt(pp[1],10));
+      }).sort();
+    };
+    var cells=pick(true).slice(0,PLAGUE2_N);
+    if(cells.length<PLAGUE2_N){ pick(false).forEach(function(ck){ if(cells.length<PLAGUE2_N && cells.indexOf(ck)<0) cells.push(ck); }); }
+    if(!cells.length) return false;
+    P=G.plague2={id:'plague2',start:now,end:now+PLAGUE2_MS,pid:pid,names:nm,cells:cells,done:0};
+    patch['plague2']=P; patch['rev']=now; myRev=now;
+    if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+    plagueChat('A plague has fallen on two squares of '+nm+'. For 2 days they give only half their harvest.',now,'p2start');
+    return true;
+  }
+  if(P.done||now<P.end) return false;
+  P.done=now; patch['plague2']=P; patch['rev']=now; myRev=now;
+  if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+  plagueChat('The plague has passed from the land of '+(P.names||'Soul Crusher')+'. His squares give a full harvest again.',now,'p2end');
+  return true;
+}
 /* ── the gods' judgment on Davide ──
    Davide logged into other players' accounts (Elisa and Cuwucca) and voted against Ant's step claims from inside them.
    The judgment, done once (G.judge records it): Davide's army cannot march, move or attack for one full day, eight of his
@@ -2059,7 +2106,7 @@ function ratesFor(pid,at){
     // ground held from before rivers ran through it keeps the yield of the land it was;
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
-    var pm=plagueMul(pid,at);                           // a plague on the land halves every harvest
+    var pm=plagueMul(pid,at)*plague2Mul(k,at);          // a plague on the land halves every harvest (and one on a single square halves that square's)
     if(y) out[y.r]+=y.n*pm;
     if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm;
   }
@@ -2318,7 +2365,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -5166,7 +5213,7 @@ function draw(){
     else if(wet){ if(c.o) spans.push([c,p,col]); else if(S>9) waves(p[0],p[1],S); }
     else if(c.t!==PLAIN&&S>9) mark(c.t,p[0],p[1],S,col);
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
-    if(c.o && plagueMul(c.o)<1) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
+    if(c.o && (plagueMul(c.o)<1 || plague2Mul(key(q,r))<1)) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
@@ -6032,6 +6079,7 @@ function render(){
     settleCastles();
     settlePurge();
     settlePlague();
+    settlePlague2();
     settleJudge();
     settleComet();
     settlePudding();
