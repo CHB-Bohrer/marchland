@@ -1904,16 +1904,13 @@ function settlePudding(){
 /* ── Pietro's castle ──  On 11 Nov Pietro battered Bohrer's castle to nothing; the clock fault raised it again before his
    soldiers arrived, and a steward reset then left it standing. Settled once (fixes/pietro1, claimed with a conditional write):
    the square becomes Pietro's with the castle razed, exactly as a seized ruin, and he is paid the bounty. Bohrer's men and
-   engines on the square step back onto a neighbouring square of his. Needs exactly one Pietro, one Bohrer, and one castle of
-   Bohrer's that is below full health (or his only castle); otherwise nothing is touched. */
+   engines on the square step back onto a neighbouring square of his. It is Bohrer's castle at 25,28; if that square is no longer his castle, nothing is touched. */
 var pietroing=false;
 function settlePietro(){
   if(!online||pietroing||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.pietro1)) return false;
   if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
-  var pi=judgePids(['pietro']), bo=judgePids(['bohrer']); if(pi.length!==1||bo.length!==1) return false;
-  var pid=pi[0], boh=bo[0], all=[], hurt=[], k;
-  for(k in G.cells){ var cc=G.cells[k]; if(cc.k===CASTLE && cc.o===boh){ all.push(k); if(cc.h!=null) hurt.push(k); } }
-  var tk=hurt.length===1?hurt[0]:(all.length===1?all[0]:null); if(!tk) return false;
+  var pid=pidFor('Pietro'), boh=pidFor('Bohrer'), tk='25_28';   // named outright: the castle his trebuchets brought down (the move log has it at 25,28)
+  var tc0=G.cells[tk]; if(!G.players[pid]||!tc0||tc0.k!==CASTLE||tc0.o!==boh) return false;
   var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,from:boh,cell:tk,n:CASTLE_BOUNTY,t:now};
   pietroing=true;
   dbPutIf(base+'/fixes/pietro1',rec0).then(function(x){
