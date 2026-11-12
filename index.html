@@ -8367,6 +8367,8 @@ function horseDialog(q,r){
   scrollDialog({eyebrow:'The Trojan horse', title:'Send a horse to '+esc(nameOf(tc.o))+'&rsquo;s tower',
     html:'<p>It leaves your castle at <b>'+og.q+','+og.r+'</b>, '+og.d+' square'+(og.d===1?'':'s')+' away: <b>'+fmtDur(horseTravel(og.d))+'</b> on the road. No marches, but like any wagon it eats 1 grain a tick on the way.</p>'
       +'<table class="sc-table">'+rows+'</table>'
+      +'<p><label for="hz-letter"><b>Your letter</b> <i>(required)</i></label><br><textarea id="hz-letter" rows="3" maxlength="300" placeholder="Dear neighbour, ..." style="width:100%;box-sizing:border-box;font-size:16px;font-family:inherit"></textarea></p>'
+      +'<p>The letter rides in the horse. Whoever opens it reads it: the tower&rsquo;s owner if it arrives, or whoever brings it down.</p>'
       +'<p>Goods arrive <b>a tenth bigger</b>. Soldiers come out of the band at that castle and spring out inside the tower when it arrives. Nobody but you can see what is inside.</p><p class="sc-note"></p>',
     cancel:false, buttons:[{label:'Not now',value:false},{label:'Send the horse',value:true,primary:true}],
     check:function(v,box){ return v?horseLoadError(horseLoad(box),og):''; }
@@ -8376,10 +8378,12 @@ function horseLoad(box){
   var g={};
   GOODS.forEach(function(k){ var el=box.querySelector('#hz-'+k); g[k]=Math.max(0,Math.floor(parseFloat(el&&el.value)||0)); });
   var a=box.querySelector('#hz-army'); a=Math.max(0,Math.floor(parseFloat(a&&a.value)||0));
-  return {g:g,a:a};
+  var ln=box.querySelector('#hz-letter'); ln=((ln&&ln.value)||'').replace(/\s+/g,' ').trim().slice(0,300);
+  return {g:g,a:a,ln:ln};
 }
 function horseLoadError(L,og){
   var pl=me(), short=[];
+  if(!L.ln) return 'A horse must come with a <b>letter</b>. Write a few words to whoever opens it.';
   if(!L.a && !hasGoods(L.g)) return 'Put something in the horse first &mdash; goods, soldiers, or both.';
   GOODS.forEach(function(k){ if(L.g[k]>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')'); });
   if(short.length) return '<span class="bad">Not enough to send.</span> You are short of '+short.join(' and ')+'.';
@@ -8392,7 +8396,7 @@ function sendHorse(tq,tr,L){
   if(!HORSE_OK||tc.k!==TOWER||!tc.o||tc.o===ME) return nope('That is no longer a tower of another player. Nothing was sent.');
   var og=horseOrigin(tq,tr); if(!og) return nope('You need a standing castle to send a horse from.');
   var err=horseLoadError(L,og); if(err) return nope(err);
-  var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapC(tq),tr:wrapC(tr),h:1};
+  var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapC(tq),tr:wrapC(tr),h:1,ln:L.ln||''};
   function launch(){
     GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
     G.caravans=G.caravans||{}; G.caravans[id]=rec;
@@ -8545,6 +8549,7 @@ function horseReport(c,viewer){
     else if(res.k==='home') out.push(x+' came out on their own ground and stand there.');
     else if(res.k==='scatter') out.push(x+' were caught in the open, with no ground of their own beneath them, and scattered.');
   }
+  if(c.ln && (viewer==='from'||e.by===ME||(viewer==='to'&&e.k==='arr'))) out.push('The letter inside reads: &ldquo;'+esc(c.ln)+'&rdquo;'+(viewer==='from'?'':' &mdash; '+esc(nameOf(c.from))));
   if(e.k==='hit') out.push('The wreck lies there for 3 days.');
   return out.join(' ');
 }
@@ -8710,7 +8715,7 @@ var HZ_STEPS=[
      return crSvg(crHex(44,64,30,'#e9dcb6')+'<rect x="33" y="50" width="22" height="24" fill="#8a7a5a"/><rect x="30" y="44" width="28" height="8" fill="#6d5e40"/>'+crTxt(44,108,'Your castle',11)
        +hzDraw(140,70,0.62,false,'#2c6bb0')
        +crHex(240,64,30,'#d9c2c2')+'<rect x="233" y="42" width="14" height="34" fill="#7a5a5a"/><path d="M232 42 h16 l-3 -7 h-10z" fill="#5a3f3f"/>'+crTxt(240,108,'Their tower',11)); },
-   html:'<p>Until the end of November, through the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon.</p>'},
+   html:'<p>Until the end of November, through the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon. Every horse must carry a <b>letter</b> from you, read by whoever opens it: the tower&rsquo;s owner, or whoever brings it down.</p>'},
   {title:'Thirty minutes a square', pic:function(){
      return crSvg(crHex(30,60,20,'#e9dcb6')+crHex(70,60,20,'#e9dcb6')+crHex(110,60,20,'#eee6cf')+crHex(150,60,20,'#eee6cf')+crHex(190,60,20,'#eee6cf')+crHex(230,60,20,'#d9c2c2')+'<rect x="224" y="40" width="12" height="30" fill="#7a5a5a"/>'
        +hzDraw(110,56,0.42,false,'#2c6bb0')+'<circle cx="140" cy="100" r="19" fill="#efe3c0" stroke="#3a2f18" stroke-width="2"/><path d="M140 100 V88 M140 100 L149 106" stroke="#3a2f18" stroke-width="2.4" stroke-linecap="round"/>'+crTxt(200,104,'30 min a square',12)); },
