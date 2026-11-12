@@ -1901,6 +1901,51 @@ function settlePudding(){
   }).catch(function(){}).then(function(){ puddinging=false; });
   return true;
 }
+/* ── Pietro's castle ──  On 11 Nov Pietro battered Bohrer's castle to nothing; the clock fault raised it again before his
+   soldiers arrived, and a steward reset then left it standing. Settled once (fixes/pietro1, claimed with a conditional write):
+   the square becomes Pietro's with the castle razed, exactly as a seized ruin, and he is paid the bounty. Bohrer's men and
+   engines on the square step back onto a neighbouring square of his. Needs exactly one Pietro, one Bohrer, and one castle of
+   Bohrer's that is below full health (or his only castle); otherwise nothing is touched. */
+var pietroing=false;
+function settlePietro(){
+  if(!online||pietroing||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.pietro1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pi=judgePids(['pietro']), bo=judgePids(['bohrer']); if(pi.length!==1||bo.length!==1) return false;
+  var pid=pi[0], boh=bo[0], all=[], hurt=[], k;
+  for(k in G.cells){ var cc=G.cells[k]; if(cc.k===CASTLE && cc.o===boh){ all.push(k); if(cc.h!=null) hurt.push(k); } }
+  var tk=hurt.length===1?hurt[0]:(all.length===1?all[0]:null); if(!tk) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,from:boh,cell:tk,n:CASTLE_BOUNTY,t:now};
+  pietroing=true;
+  dbPutIf(base+'/fixes/pietro1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.pietro1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.pietro1=rec0;
+    var tp=tk.split('_'), q=parseInt(tp[0],10), r=parseInt(tp[1],10), c=cellOf(q,r), patch={};
+    if(c.k!==CASTLE||c.o!==boh) return;
+    var men=(c.b||0)+(c.g||0), tb=c.tb||0, tr=(c.tr||[]).slice(0,tb);
+    if(men||tb){                                         // Bohrer's soldiers and trebuchets fall back to a square of his beside it
+      for(var i=0;i<6;i++){
+        var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[key(nq,nr)];
+        if(!n||n.o!==boh||building(n)||groundAt(nq,nr)===RIVER) continue;
+        n=cellOf(nq,nr); if(men) n.b=(n.b||0)+men;
+        if(tb){ var ntr=(n.tr||[]).slice(0,n.tb||0); while(ntr.length<(n.tb||0)) ntr.push(0); while(tr.length<tb) tr.push(0); n.tb=(n.tb||0)+tb; n.tr=ntr.concat(tr); }
+        writeCell(nq,nr,n); patch['cells/'+key(nq,nr)]=G.cells[key(nq,nr)]; break;
+      }
+    }
+    c.o=pid; c.w=0; delete c.wd; delete c.tb; delete c.tr; delete c.b; c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; delete c.rt;
+    if(c.cs || c.rd) c.cs={n:1};
+    writeCell(q,r,c); patch['cells/'+tk]=G.cells[tk]||null;
+    var gid=q36(now)+'-'+pid, rec={pid:pid,n:CASTLE_BOUNTY,why:'the castle you brought down on 11 November, which the game wrongly raised again',by:'gods',t:now};
+    G.grants=G.grants||{}; G.grants[gid]=rec; patch['grants/'+gid]=rec; patch['fixes/pietro1']=rec0;
+    plagueChat('A wrong is put right. Pietro brought down Bohrer’s castle on 11 November, and a fault in the game raised it again before he could take it. The castle is razed, the ground is Pietro’s, and he is paid '+CASTLE_BOUNTY+' marches.',now,'pietro1');
+    var done=function(){ patch['rev']=now; myRev=now; render(); return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ me().squares=(me().squares||0)+CASTLE_BOUNTY; pushMe(); return done(); }
+    return dbGet(base+'/players/'+pid+'/squares').then(function(cur){
+      var next=(cur||0)+CASTLE_BOUNTY; patch['players/'+pid+'/squares']=next; G.players[pid].squares=next; return done();
+    });
+  }).catch(function(){}).then(function(){ pietroing=false; });
+  return true;
+}
 function settleTurkey(){
   if(!online||turkeying||!G||!G.players||dirty||ELIM||!boardFresh()||G.turkeyhunt||!turkeyOpen()) return false;
   if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
@@ -6153,6 +6198,7 @@ function render(){
     settleComet();
     settleComet2();
     settlePudding();
+    settlePietro();
     settleTurkey();
     settleRemovals();
     settleProbation();
