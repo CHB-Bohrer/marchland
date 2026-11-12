@@ -3995,7 +3995,7 @@ function cellActions(q,r){
     else if(wet) A('Take this bridge',price,take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
-    if(c.k===TOWER && HORSE_OK && towerH(c)>0){ var hog=horseOrigin(q,r); A('Send a Trojan horse here','30 min a square &middot; goods grow 10%',function(){ horseDialog(q,r); },hog?'':'Needs a standing castle of yours to send it from'); }
+    if(c.k===TOWER && HORSE_OK && towerH(c)>0){ var hog=horseOrigin(q,r); A('Send a Trojan horse here','25 iron &middot; 40 grain &middot; 30 min a square',function(){ horseDialog(q,r); },hog?'':'Needs a standing castle of yours to send it from'); }
     if(c.rd){ var RL=roadBreakLine(q,r); A('Break their road',BREAK_ROAD_MARCH+' march'+(band?' &middot; '+pct(battleOdds(band.n,RL.p).win):''),function(){ breakRoadPrompt(q,r); },!band?'Needs one of your bands beside it':marches(BREAK_ROAD_MARCH)); }
   } else if(building(c)){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
@@ -8379,6 +8379,7 @@ document.getElementById('cv-send').addEventListener('click',sendCaravan);
    After 1 December nothing new can be sent, but horses on the road still arrive and wrecks still fade out. */
 var HORSE_OK=(function(){ var d=new Date(); return d.getMonth()===10 && d.getDate()>=12; })();
 try{ if(/[?&]horse=1/.test(location.search)) HORSE_OK=true; }catch(e){}
+var HORSE_COST={iron:25,grain:40};   // the horse itself costs as much as a soldier
 var HORSE_MS_CELL=30*60000, HORSE_SIGHT=4, HORSE_WRECK_MS=3*864e5;
 
 function horseBonus(g){ var o={}; GOODS.forEach(function(k){ var v=Math.max(0,Math.floor((g&&g[k])||0)); o[k]=v+Math.floor(v/10); }); return o; }
@@ -8423,7 +8424,7 @@ function horseDialog(q,r){
   }).join('')
   +'<tr><td><label for="hz-army">Soldiers <i>('+og.b+' at that castle)</i></label></td><td><input id="hz-army" type="number" min="0" step="1" inputmode="numeric" placeholder="0" style="width:96px;font-size:16px"'+(og.b?'':' disabled')+'></td></tr>';
   scrollDialog({eyebrow:'The Trojan horse', title:'Send a horse to '+esc(nameOf(tc.o))+'&rsquo;s tower',
-    html:'<p>It leaves your castle at <b>'+og.q+','+og.r+'</b>, '+og.d+' square'+(og.d===1?'':'s')+' away: <b>'+fmtDur(horseTravel(og.d))+'</b> on the road. No marches, but like any wagon it eats 1 grain a tick on the way.</p>'
+    html:'<p>Building the horse costs <b>25 iron and 40 grain</b>, as much as a soldier, on top of whatever you load. It leaves your castle at <b>'+og.q+','+og.r+'</b>, '+og.d+' square'+(og.d===1?'':'s')+' away: <b>'+fmtDur(horseTravel(og.d))+'</b> on the road. No marches, but like any wagon it eats 1 grain a tick on the way.</p>'
       +'<table class="sc-table">'+rows+'</table>'
       +'<p><label for="hz-letter"><b>Your letter</b> <i>(required)</i></label><br><textarea id="hz-letter" rows="3" maxlength="300" placeholder="Dear neighbour, ..." style="width:100%;box-sizing:border-box;font-size:16px;font-family:inherit"></textarea></p>'
       +'<p>The letter rides in the horse. Whoever opens it reads it: the tower&rsquo;s owner if it arrives, or whoever brings it down.</p>'
@@ -8443,7 +8444,7 @@ function horseLoadError(L,og){
   var pl=me(), short=[];
   if(!L.ln) return 'A horse must come with a <b>letter</b>. Write a few words to whoever opens it.';
   if(!L.a && !hasGoods(L.g)) return 'Put something in the horse first &mdash; goods, soldiers, or both.';
-  GOODS.forEach(function(k){ if(L.g[k]>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')'); });
+  GOODS.forEach(function(k){ var need=L.g[k]+(HORSE_COST[k]||0); if(need>Math.floor(pl.res[k]||0)) short.push(k+' (need '+need+', you have '+Math.floor(pl.res[k]||0)+')'); });
   if(short.length) return '<span class="bad">Not enough to send.</span> You are short of '+short.join(' and ')+'.';
   if(L.a>og.b) return '<span class="bad">Too many soldiers.</span> Only '+og.b+' stand at that castle.';
   return '';
@@ -8456,7 +8457,7 @@ function sendHorse(tq,tr,L){
   var err=horseLoadError(L,og); if(err) return nope(err);
   var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapC(tq),tr:wrapC(tr),h:1,ln:L.ln||''};
   function launch(){
-    GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
+    GOODS.forEach(function(k){ pl.res[k]-=g[k]+(HORSE_COST[k]||0); });
     G.caravans=G.caravans||{}; G.caravans[id]=rec;
     pushMe().then(function(){ return putPath('/caravans/'+id,rec); });
     render();
@@ -8773,7 +8774,7 @@ var HZ_STEPS=[
      return crSvg(crHex(44,64,30,'#e9dcb6')+'<rect x="33" y="50" width="22" height="24" fill="#8a7a5a"/><rect x="30" y="44" width="28" height="8" fill="#6d5e40"/>'+crTxt(44,108,'Your castle',11)
        +hzDraw(140,70,0.62,false,'#2c6bb0')
        +crHex(240,64,30,'#d9c2c2')+'<rect x="233" y="42" width="14" height="34" fill="#7a5a5a"/><path d="M232 42 h16 l-3 -7 h-10z" fill="#5a3f3f"/>'+crTxt(240,108,'Their tower',11)); },
-   html:'<p>Until the end of November, through the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon. Every horse must carry a <b>letter</b> from you, read by whoever opens it: the tower&rsquo;s owner, or whoever brings it down.</p>'},
+   html:'<p>Until the end of November, through the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches but <b>25 iron and 40 grain</b> to build (as much as a soldier), and eats 1 grain a tick on the road like any wagon. Every horse must carry a <b>letter</b> from you, read by whoever opens it: the tower&rsquo;s owner, or whoever brings it down.</p>'},
   {title:'Thirty minutes a square', pic:function(){
      return crSvg(crHex(30,60,20,'#e9dcb6')+crHex(70,60,20,'#e9dcb6')+crHex(110,60,20,'#eee6cf')+crHex(150,60,20,'#eee6cf')+crHex(190,60,20,'#eee6cf')+crHex(230,60,20,'#d9c2c2')+'<rect x="224" y="40" width="12" height="30" fill="#7a5a5a"/>'
        +hzDraw(110,56,0.42,false,'#2c6bb0')+'<circle cx="140" cy="100" r="19" fill="#efe3c0" stroke="#3a2f18" stroke-width="2"/><path d="M140 100 V88 M140 100 L149 106" stroke="#3a2f18" stroke-width="2.4" stroke-linecap="round"/>'+crTxt(200,104,'30 min a square',12)); },
