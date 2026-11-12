@@ -624,7 +624,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
-          <button id="horsehelp" class="hide" aria-label="The Trojan horse: how it works" title="The Trojan horse: how it works">&#128014;</button>
+          <button id="horsehelp" class="hide" aria-label="Send a Trojan horse" title="Send a Trojan horse">&#128014;</button>
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
@@ -8357,7 +8357,7 @@ function horseWatch(c,pid,t){
 /* ── sending one: tap an enemy tower, choose "Send a Trojan horse here" ── */
 function horseDialog(q,r){
   var pl=me(), tc=cellOf(q,r);
-  if(!HORSE_OK) return nope('The Trojan horse is only about from 15 to 30 November.');
+  if(!HORSE_OK) return nope('The Trojan horse is only about from 12 to 30 November.');
   if(tc.k!==TOWER||!tc.o||tc.o===ME) return nope('A Trojan horse goes only to a tower of another player.');
   var og=horseOrigin(q,r); if(!og) return nope('You need a standing castle to send a horse from.');
   var rows=GOODS.map(function(k){
@@ -8748,7 +8748,28 @@ function horseTutorial(i,auto){
     else if(auto) setTimeout(showNext,250);            // the announcement's tutorial: the next waiting notice may now follow
   });
 }
-document.getElementById('horsehelp').addEventListener('click',function(){ horseTutorial(0,false); });
+document.getElementById('horsehelp').addEventListener('click',function(){ horseMenu(); });
+/* the side button: send a horse (pick a rival tower) or read how it works */
+function horseMenu(){
+  if(!G||!me()) return;
+  var T=[];
+  Object.keys(G.cells).forEach(function(k){
+    var c=G.cells[k]; if(!c||c.k!==TOWER||!c.o||c.o===ME||!G.players[c.o]||towerH(c)<=0) return;
+    var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10), og=horseOrigin(tq,tr); T.push({q:tq,r:tr,o:c.o,d:og?og.d:null});
+  });
+  T=T.filter(function(t){ return t.d!=null; }).sort(function(a,b){ return a.d-b.d; }).slice(0,4);
+  var btns=[{label:'Close',value:false},{label:'How it works',value:'how'}];
+  T.forEach(function(t,i){ btns.push({label:'Send to '+nameOf(t.o)+' ('+t.d+' sq)',value:'t'+i,primary:i===0}); });
+  scrollDialog({eyebrow:'The Trojan horse', title:'Send a Trojan horse',
+    html:'<p>A horse goes only to a <b>standing tower of another player</b>, 30 minutes a square. You can also tap any rival tower on the map and choose <b>Send a Trojan horse here</b>.</p>'
+      +(T.length?'<p>Nearest rival towers to your castles:</p>':(horseOrigin(0,0)?'<p>No rival tower stands anywhere yet, so there is nothing to send a horse to.</p>':'<p>You need a standing castle to send a horse from.</p>')),
+    cancel:false, buttons:btns
+  }).then(function(res){
+    var v=res.value; if(!v) return;
+    if(v==='how') return horseTutorial(0,false);
+    var t=T[parseInt(v.slice(1),10)]; if(t) horseDialog(t.q,t.r);
+  });
+}
 function renderHorseButton(){ var b=document.getElementById('horsehelp'); if(b) b.classList.toggle('hide',!HORSE_OK); }
 
 /* ═══ the next-step coach ════════════════════════════════════════════
