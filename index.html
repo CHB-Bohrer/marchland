@@ -336,6 +336,8 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .caravan-alert .ca-row{ display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; }
 .caravan-alert .ca-head{ font-size:21px; font-weight:800; text-transform:uppercase; letter-spacing:.01em; }
 .caravan-alert .ca-time{ font-family:var(--mono); font-weight:700; background:rgba(0,0,0,.28); padding:2px 8px; border-radius:2px; white-space:nowrap; }
+.caravan-alert.hunger{ background:#a3210f; border-color:#5a0f05; }
+.caravan-alert.hunger button{ color:#5a0f05; border-color:#5a0f05; }
 .caravan-alert.arrived{ background:#8a5a12; border-color:#4a2f06; }
 .caravan-alert button{ font-size:15px; font-weight:700; padding:8px 14px; background:#fff; color:#0f3d27; border:2px solid #0f3d27; border-radius:2px; cursor:pointer; }
 .caravan-alert.arrived button{ color:#4a2f06; border-color:#4a2f06; }
@@ -540,6 +542,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
     <div class="dispute-alert hide" id="disputealert" role="alert" aria-live="assertive"></div>
     <div class="caravan-alert hide" id="caravanalert" role="alert" aria-live="assertive"></div>
+    <div class="caravan-alert hunger hide" id="hungeralert" role="alert" aria-live="assertive"></div>
     <div class="caravan-alert horse hide" id="horsealert" role="alert" aria-live="polite"></div>
 
     <!-- today's steps and the Claim button, at the very top of the page -->
@@ -2310,7 +2313,7 @@ function catchUp(pid){
     pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
     pl.res.grain+=R.out.grain-(R.mouths-R.wagons+wagonsAt(pid,tickEnd));
     if(pl.res.grain<0){                       // hungry soldiers desert (and trebuchets are abandoned), biggest group first
-      var gone=Math.ceil(-pl.res.grain/2); pl.res.grain=0;
+      var gone=Math.ceil(-pl.res.grain/2), gone0=gone; pl.res.grain=0;
       var groups=bandsOf(pid).map(function(bd){ return {k:bd.k,n:bd.n,f:'b'}; });
       for(var tk0 in G.cells){ var tc0=G.cells[tk0]; if(tc0.o===pid && tc0.tb>0) groups.push({k:tk0,n:tc0.tb,f:'tb'}); }
       groups.sort(function(a,b){ return (b.n-a.n)||(a.f===b.f?0:(a.f==='b'?-1:1)); }).forEach(function(gp){
@@ -2318,6 +2321,7 @@ function catchUp(pid){
         if(gp.f==='tb'){ c.tr=arr(c.tr).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } } else if(!c.b) delete c.b;
         touched[gp.k]=1;
       });
+      if(gone0>gone){ var dz=pl.des&&!pl.des.seen?pl.des:(pl.des={n:0,t:0,seen:false}); dz.n+=gone0-gone; dz.t=Date.now(); }   // remembered, so the warning shows until it is read
     }
     // a damaged tower mends 1 health a tick for 1 stone, if there is stone; it never loses health by itself
     for(var hk in G.cells){
@@ -6260,7 +6264,7 @@ function render(){
   renderSponsorBtn();
   renderLetterBtn();
   renderCrusades();
-  renderHorseAlert(); renderHorseButton();
+  renderHorseAlert(); renderHorseButton(); renderHungerAlert();
   if(!document.getElementById('caravan').classList.contains('hide')) cvPanel();
   draw();
 }
@@ -8660,6 +8664,24 @@ function renderHorseAlert(){
   el.innerHTML=rows.join('<hr>');
   el.classList.toggle('hide',!rows.length);
 }
+/* ── hunger: a warning before the grain runs out, and a notice (until read) of soldiers who deserted ── */
+function renderHungerAlert(){
+  var el=document.getElementById('hungeralert'); if(!el||!G||!me()) return;
+  var pl=me(), rows=[], R=ratesFor(ME,Date.now()), net=R.net, gr=Math.floor(pl.res.grain||0);
+  if(pl.des && !pl.des.seen && pl.des.n>0){
+    rows.push('<div class="ca-row"><span class="ca-head">Hungry men deserted</span></div><div class="ca-row"><span>Your grain ran out, and <b>'+pl.des.n+'</b> soldier'+(pl.des.n>1?'s':'')+' (or trebuchets) walked off. Keep your grain above zero, or more will go.</span> <button data-act="hgseen">Got it</button></div>');
+  }
+  if(net<0){
+    var ticks=gr/(-net), hrs=ticks*(TICK_MS/36e5);
+    if(hrs<48) rows.push('<div class="ca-row"><span class="ca-head">Grain running out</span><span class="ca-time">'+(gr<=0?'none left':'about '+fmtDur(hrs*36e5))+'</span></div><div class="ca-row"><span>You are eating <b>'+Math.round(-net*10)/10+'</b> more grain a tick than you earn, and have <b>'+gr+'</b>. When it runs out, <b>hungry soldiers desert</b> and trebuchets are abandoned. Send grain, draw soldiers down, or join more farms.</span></div>');
+  }
+  el.innerHTML=rows.join('<hr>');
+  el.classList.toggle('hide',!rows.length);
+}
+document.getElementById('hungeralert').addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-act]'); if(!b||!G||!me()) return;
+  if(b.getAttribute('data-act')==='hgseen'){ if(me().des) me().des.seen=true; pushMe(); renderHungerAlert(); }
+});
 document.getElementById('horsealert').addEventListener('click',function(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
   var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
