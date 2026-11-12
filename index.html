@@ -8763,17 +8763,13 @@ function horseMenu(){
     var c=G.cells[k]; if(!c||c.k!==TOWER||!c.o||c.o===ME||!G.players[c.o]||towerH(c)<=0) return;
     var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10), og=horseOrigin(tq,tr); T.push({q:tq,r:tr,o:c.o,d:og?og.d:null});
   });
-  T=T.filter(function(t){ return t.d!=null; }).sort(function(a,b){ return a.d-b.d; }).slice(0,4);
-  var btns=[{label:'Close',value:false}];
-  T.forEach(function(t,i){ btns.push({label:'Send to '+nameOf(t.o)+' ('+t.d+' sq)',value:'t'+i,primary:i===0}); });
+  T=T.filter(function(t){ return t.d!=null; }).sort(function(a,b){ return a.d-b.d; });
   scrollDialog({eyebrow:'The Trojan horse', title:'Send a Trojan horse',
     html:'<p>A horse goes only to a <b>standing tower of another player</b>, 30 minutes a square. You can also tap any rival tower on the map and choose <b>Send a Trojan horse here</b>.</p>'
-      +(T.length?'<p>Nearest rival towers to your castles:</p>':(horseOrigin(0,0)?'<p>No rival tower stands anywhere yet, so there is nothing to send a horse to.</p>':'<p>You need a standing castle to send a horse from.</p>')),
-    cancel:false, buttons:btns
-  }).then(function(res){
-    var v=res.value; if(!v) return;
-    var t=T[parseInt(v.slice(1),10)]; if(t) horseDialog(t.q,t.r);
-  });
+      +(T.length?'<p>Choose a tower, nearest first:</p>':(horseOrigin(0,0)?'<p>No rival tower stands anywhere yet, so there is nothing to send a horse to.</p>':'<p>You need a standing castle to send a horse from.</p>')),
+    list:T.map(function(t){ return {label:esc(nameOf(t.o))+'&rsquo;s tower at '+t.q+','+t.r,cost:t.d+' square'+(t.d===1?'':'s')+' &middot; '+fmtDur(horseTravel(t.d)),value:t}; }),
+    listLabel:'Rival towers', cancel:null, buttons:[{label:'Close',value:null}]
+  }).then(function(res){ if(res.value) horseDialog(res.value.q,res.value.r); });
 }
 function renderHorseButton(){ var b=document.getElementById('horsehelp'); if(b) b.classList.toggle('hide',!HORSE_OK); }
 
