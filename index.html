@@ -340,6 +340,8 @@ ol{ margin:8px 0 0; padding-left:20px; } li{ margin-bottom:7px; font-size:14px; 
 .caravan-alert button{ font-size:15px; font-weight:700; padding:8px 14px; background:#fff; color:#0f3d27; border:2px solid #0f3d27; border-radius:2px; cursor:pointer; }
 .caravan-alert.arrived button{ color:#4a2f06; border-color:#4a2f06; }
 .caravan-alert hr{ border:0; border-top:1px solid rgba(255,255,255,.35); width:100%; margin:0; }
+.caravan-alert.horse{ background:#8E1B1B; border-color:#4a0d0d; }
+.caravan-alert.horse button{ color:#4a0d0d; border-color:#4a0d0d; }
 @media (prefers-reduced-motion:no-preference){ .dispute-alert:not(.void){ animation:daPulse 2.4s ease-in-out infinite; } }
 @keyframes daPulse{ 0%,100%{ box-shadow:0 0 0 0 rgba(179,64,42,.55); } 50%{ box-shadow:0 0 0 8px rgba(179,64,42,0); } }
 .claims-head{ display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 14px; padding:14px 18px 4px; }
@@ -538,6 +540,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
     <div class="dispute-alert hide" id="disputealert" role="alert" aria-live="assertive"></div>
     <div class="caravan-alert hide" id="caravanalert" role="alert" aria-live="assertive"></div>
+    <div class="caravan-alert horse hide" id="horsealert" role="alert" aria-live="polite"></div>
 
     <!-- today's steps and the Claim button, at the very top of the page -->
     <div class="panel" id="claimtop">
@@ -621,6 +624,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
+          <button id="horsehelp" class="hide" aria-label="The Trojan horse: how it works" title="The Trojan horse: how it works">&#128014;</button>
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
           <button id="helpme" class="helpme" aria-label="What should I do now?" title="What should I do now?">?</button>
         </div>
@@ -2196,7 +2200,11 @@ function nextToMine(q,r){ return !!attackBand(q,r); }
    touches.                                                                   */
 var TREK_MS_CELL=3*36e5;                              // a band on the road covers one cell every three hours
 /* soldiers currently walking between cells (they stand nowhere, so they guard nothing) */
-function transitOf(pid){ var n=0, T=(G&&G.treks)||{}; for(var id in T){ var t=T[id]; if(t && t.o===pid) n+=t.n||0; } return n; }
+function transitOf(pid){
+  var n=0, T=(G&&G.treks)||{}; for(var id in T){ var t=T[id]; if(t && t.o===pid) n+=t.n||0; }
+  var C=(G&&G.caravans)||{}; for(var cid in C){ var c=C[cid]; if(c && c.h && c.from===pid && c.a>0 && !c.end) n+=c.a; }   // soldiers riding in a Trojan horse
+  return n;
+}
 function bandsOf(pid){
   var out=[];
   for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0){ var p=k.split('_'); out.push({q:parseInt(p[0],10),r:parseInt(p[1],10),n:c.b,k:k}); } }
@@ -2761,8 +2769,8 @@ function towerMax(l){ return TOWER_MAX_H[Math.max(1,Math.min(3,l||1))]; }
 function towerH(c){ return c.h==null?towerMax(c.l):Math.max(0,c.h); }
 function towerUnits(c){ return Math.ceil(towerH(c)/TOWER_UNIT_H); }
 /* the defenders of (q,r) as the attacker (ME) would meet them */
-function defenderLine(q,r){
-  var c=cellOf(q,r), own=c.o, units=[], guard=guardOn(q,r,own), guns=own?coverOn(q,r,ME):0, i;
+function defenderLine(q,r,att){                       // att: who attacks (default me); a horse's soldiers are sent by someone else
+  var c=cellOf(q,r), own=c.o, units=[], guard=guardOn(q,r,own), guns=own?coverOn(q,r,att||ME):0, i;
   for(i=0;i<(c.w||0);i++) units.push({t:'wall'});
   for(i=0;i<guard.n;i++) units.push({t:'guard'});
   for(i=0;i<guns;i++) units.push({t:'gun'});
@@ -3934,6 +3942,7 @@ function cellActions(q,r){
     else if(wet) A('Take this bridge',price,take,whyTake);
     else A('Take this square',price,take,whyTake);
     if(wet) A('Break this bridge',BREAK_COST+' marches'+(need2?' &middot; '+need2+' soldier'+(need2>1?'s':'')+' lost':''),function(){ breakBridge(q,r); },bandWhy(need2)||marches(BREAK_COST));
+    if(c.k===TOWER && HORSE_OK && towerH(c)>0){ var hog=horseOrigin(q,r); A('Send a Trojan horse here','30 min a square &middot; goods grow 10%',function(){ horseDialog(q,r); },hog?'':'Needs a standing castle of yours to send it from'); }
     if(c.rd){ var RL=roadBreakLine(q,r); A('Break their road',BREAK_ROAD_MARCH+' march'+(band?' &middot; '+pct(battleOdds(band.n,RL.p).win):''),function(){ breakRoadPrompt(q,r); },!band?'Needs one of your bands beside it':marches(BREAK_ROAD_MARCH)); }
   } else if(building(c)){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
@@ -5332,6 +5341,7 @@ function draw(){
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
+  drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
   drawTreks(now,amb);
   drawRiverNames();                                 // the rivers' names, lying along the water
   if(amb) ambClouds(ctx,now);
@@ -6123,6 +6133,7 @@ function render(){
   if(boardFresh()){                                   // only an up-to-date screen writes on the board's behalf
     settleMine();
     settleCaravans();
+    settleHorses();
     settleTreks();
     settleCrusades();
     settleCrusadeDues();
@@ -6198,6 +6209,7 @@ function render(){
   renderSponsorBtn();
   renderLetterBtn();
   renderCrusades();
+  renderHorseAlert(); renderHorseButton();
   if(!document.getElementById('caravan').classList.contains('hide')) cvPanel();
   draw();
 }
@@ -7526,6 +7538,14 @@ var NOTES=[
      +'<li>A gift is final. You can&rsquo;t take it back.</li></ul>'},
   {id:'thanks-'+new Date().getFullYear(), eyebrow:'Thanksgiving Day', title:'Happy Thanksgiving', forNew:true, when:function(){ return harvestState()==='day'; },
    html:'<p>A full table to every marcher. May your steps be many and your supplies be dry.</p>', go:'Thank you'},
+  {id:'nov26-horse', eyebrow:'Halfway through the crusades', title:'The Trojan horse has come to Marchland', forNew:true, when:function(){ return HORSE_OK; },
+   html:'<p>The crusades are half over, and a great wooden <b>Trojan horse</b> has been wheeled out. From now until the end of November you may send one against any tower in the realm.</p>'
+     +'<ul><li>It rides like a caravan, but goes <b>only to another player&rsquo;s tower</b>, and covers a square every <b>30 minutes</b>.</li>'
+     +'<li>Fill it with goods and they arrive <b>10% bigger</b>.</li>'
+     +'<li>Or fill it with <b>soldiers</b>, and who knows what will spring out of it at the gates.</li>'
+     +'<li>Nobody can see what is inside. But a horse that comes within <b>4 squares</b> of a tower or trebuchet may be attacked by its owner: the goods are lost, the soldiers are deployed where it stands, and the wreck lies on the map for <b>3 days</b>.</li></ul>'
+     +'<p>It vanishes when November ends, so use it while you can. And in the years to come, <b>ask your elders about the days when the Trojan horse was around.</b></p>'
+     +'<p>A short illustrated tutorial follows. You will find it again on the horse button beside the map.</p>', go:'Show me how it works'},
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return CRUSADE_OK; },
    html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
@@ -7552,8 +7572,10 @@ var noteOpen=null;
 function closeNotice(){
   var n=document.getElementById('rulesnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',noticeKey,true);
+  var was=noteOpen;
   if(noteOpen) markNoteSeen(noteOpen);
   noteOpen=null;
+  if(was==='nov26-horse' && HORSE_OK){ setTimeout(function(){ horseTutorial(0,true); },250); return; }   // the illustrated tutorial opens once, straight after it
   setTimeout(showNext,250);
 }
 function noticeKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeNotice(); } }
@@ -8102,10 +8124,11 @@ function cvPanel(){
     eta.innerHTML='The road to <b>'+esc(full(b))+'</b>&rsquo;s keep is '+d+' cells, so a caravan arrives in about <b>'+fmtDur(cvTravel(ME,to))+'</b>.'; }
   else eta.textContent='Once someone else joins, you can send them goods.';
   var mine=Object.keys(G.caravans||{}).map(function(id){ var c=G.caravans[id]; return c; })
-    .filter(function(c){ return (c.from===ME||c.to===ME) && !c.got && c.eta>Date.now()-60000; })
+    .filter(function(c){ return (c.from===ME||c.to===ME) && !c.got && !c.end && c.eta>Date.now()-60000; })
     .sort(function(a,b){ return a.eta-b.eta; });
   document.getElementById('cv-list').innerHTML=mine.map(function(c){
     var out=c.from===ME, who=esc(nameOf(out?c.to:c.from));
+    if(c.h) return '<div>'+(out?'&rarr; Trojan horse to <b>'+who+'</b>&rsquo;s tower: '+(hasGoods(c.g)?goodsLine(c.g):'')+(hasGoods(c.g)&&c.a?' and ':'')+(c.a?c.a+' soldier'+(c.a>1?'s':''):''):'&larr; A Trojan horse for your tower from <b>'+who+'</b>: nobody knows what is inside')+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
     return '<div>'+(out?'&rarr; To <b>'+who+'</b>':'&larr; From <b>'+who+'</b>')+': '+goodsLine(c.g||{})+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
   }).join('');
 }
@@ -8157,7 +8180,7 @@ function settleCaravans(){
   pl.cvGot=pl.cvGot||{};
   Object.keys(G.caravans||{}).forEach(function(id){
     var c=G.caravans[id]; if(!c) return;
-    if(c.to===ME && !c.got && c.eta<=now && !pl.cvGot[id]){
+    if(!c.h && c.to===ME && !c.got && c.eta<=now && !pl.cvGot[id]){
       GOODS.forEach(function(k){ pl.res[k]=(pl.res[k]||0)+((c.g&&c.g[k])||0); });
       pl.cvGot[id]=now; c.got=now; mine=true;
       writes.push(['/caravans/'+id+'/got',now]);
@@ -8189,7 +8212,7 @@ function renderCaravanAlert(){
   var el=document.getElementById('caravanalert'); if(!el||!G||!me()) return;
   var pl=me(), now=Date.now(), coming=[], here=[];
   Object.keys(G.caravans||{}).forEach(function(id){
-    var c=G.caravans[id]; if(!c||c.to!==ME) return;
+    var c=G.caravans[id]; if(!c||c.to!==ME||c.h) return;
     var what=(hasGoods(c.g)?goodsLine(c.g||{}):'')+(c.lt?(hasGoods(c.g)?' and ':'')+'a sealed letter':'');
     if(!c.got && c.eta>now) coming.push('<div class="ca-row"><span class="ca-head">A caravan is coming</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, carrying '+what+'.</span></div>');
     else if(c.got && now-c.got<2*864e5 && !cvSeen(id)) here.push('<div class="ca-row"><span class="ca-head">A caravan has arrived</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>: <b>'+what+'</b>. It is already in your stores'+(c.lt?' &mdash; the letter is in your Letters.':'.')+'</span> <button data-act="cvseen" data-id="'+id+'">Got it</button></div>');
@@ -8203,13 +8226,13 @@ function drawCaravans(now,amb){
   var list=Object.keys(G.caravans||{}), t=Date.now();
   if(!list.length) return;
   list.forEach(function(id){
-    var c=G.caravans[id]; if(!c||c.got||t>=c.eta||t<c.t) return;
+    var c=G.caravans[id]; if(!c||c.got||c.end||t>=c.eta||t<c.t) return;
     var k=(t-c.t)/(c.eta-c.t);
     var A=nearCopy(c.fq,c.fr,viewQ,viewR), B=nearCopy(c.tq,c.tr,A[0],A[1]);
     var q=A[0]+(B[0]-A[0])*k, r=A[1]+(B[1]-A[1])*k, P=toScreen(q,r);
     if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) return;
     var PB=toScreen(B[0],B[1]), face=PB[0]>=P[0]?1:-1;
-    artCaravan(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face);
+    if(c.h) artHorse(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face); else artCaravan(ctx,P[0],P[1]+S*0.2,Math.max(10,S),pColor(c.from),amb?now:0,face);
     if(c.lt && S>=10){                               // a sealed scroll rides on the wagon (the letter itself is never on the board)
       var lx=P[0]+S*0.05, ly=P[1]-S*0.32, lw=Math.max(8,S*0.3);
       ctx.save(); ctx.fillStyle='#F2E6C8'; ctx.strokeStyle='#6E5434'; ctx.lineWidth=1; ctx.fillRect(lx-lw/2,ly-lw*0.22,lw,lw*0.44); ctx.strokeRect(lx-lw/2,ly-lw*0.22,lw,lw*0.44);
@@ -8278,6 +8301,455 @@ document.getElementById('m-caravan').addEventListener('click',function(){
 });
 var cvPick=scrollPick(document.getElementById('cv-to'),{label:'Send the caravan to',title:'Send to whom?',empty:'Nobody else has joined yet.',onPick:function(){ cvPanel(); }});
 document.getElementById('cv-send').addEventListener('click',sendCaravan);
+
+/* ═══ the Trojan horse (15–30 November) ═════════════════════════════════════
+   From the middle of the crusade month a wooden horse can be sent. It is a caravan that rides in the same
+   record (G.caravans, marked h:1), so the wagon's upkeep (1 grain a tick), its place on the map, its clearing
+   away and its removal with a player who leaves all come with it. What is different:
+   · it goes only to a tower of another player, from the sender's nearest castle, a square every 30 minutes
+     (no minimum, no maximum);
+   · goods in it arrive a tenth bigger (a whole tenth, rounded down: 100 stone arrive as 110);
+   · soldiers can ride in it too, taken from the band standing at the castle it leaves from. When it arrives they
+     spring out inside the tower and storm its square at once, the wall courses out of the fight (they are already
+     inside). No marches, no spoils. If they win, the square is theirs and the tower is gone;
+   · while it is on the road, any player but the sender with a standing tower or a trebuchet within HORSE_SIGHT squares
+     of it may attack it. Goods inside are lost; soldiers are "deployed" on the square it stands on (see deployArmy);
+   · a horse that is lost leaves a wreck (an overturned cart and spilled goods) on the map for 3 days;
+   · nobody but the sender sees what is inside until it is over.
+   Its fate is written once, conditionally, as c.end ({k:'arr'|'hit', t, by, q, r}) by whichever screen gets there
+   first (the sender's, the tower owner's or a shooter's), so a horse can never both arrive and be shot down.
+   After 1 December nothing new can be sent, but horses on the road still arrive and wrecks still fade out. */
+var HORSE_OK=(function(){ var d=new Date(); return d.getMonth()===10 && d.getDate()>=15; })();
+try{ if(/[?&]horse=1/.test(location.search)) HORSE_OK=true; }catch(e){}
+var HORSE_MS_CELL=30*60000, HORSE_SIGHT=4, HORSE_WRECK_MS=3*864e5;
+
+function horseBonus(g){ var o={}; GOODS.forEach(function(k){ var v=Math.max(0,Math.floor((g&&g[k])||0)); o[k]=v+Math.floor(v/10); }); return o; }
+function horseTravel(d){ return Math.max(1,d)*HORSE_MS_CELL; }
+/* my nearest standing castle to a tower, and how many soldiers stand in it */
+function horseOrigin(tq,tr){
+  var best=null;
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==ME||c.k!==CASTLE||isRuin(c)) continue;
+    var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), d=hexDist(q,r,tq,tr);
+    if(!best||d<best.d) best={q:q,r:r,d:d,b:c.b||0};
+  }
+  return best;
+}
+/* the square a horse is over at time t */
+function horsePos(c,t){
+  var k=Math.max(0,Math.min(1,(t-c.t)/Math.max(1,c.eta-c.t)));
+  var B=nearCopy(c.tq,c.tr,c.fq,c.fr), h=cubeRound(c.fq+(B[0]-c.fq)*k, c.fr+(B[1]-c.fr)*k);
+  return [wrapC(h[0]),wrapC(h[1])];
+}
+/* the nearest standing tower or trebuchet of pid's within sight of the horse, or null (the sender never sees it that way) */
+function horseWatch(c,pid,t){
+  if(!c||!c.h||c.end||c.got||t>=c.eta||t<c.t||pid===c.from) return null;
+  var p=horsePos(c,t), best=null;
+  for(var k in G.cells){
+    var x=G.cells[k]; if(x.o!==pid) continue;
+    var tw=x.k===TOWER&&towerH(x)>0, tb=x.tb>0; if(!tw&&!tb) continue;
+    var s=k.split('_'), q=parseInt(s[0],10), r=parseInt(s[1],10), d=hexDist(p[0],p[1],q,r);
+    if(d<=HORSE_SIGHT && (!best||d<best.d)) best={q:q,r:r,d:d,tower:tw,treb:tb&&!tw};
+  }
+  return best;
+}
+
+/* ── sending one: tap an enemy tower, choose "Send a Trojan horse here" ── */
+function horseDialog(q,r){
+  var pl=me(), tc=cellOf(q,r);
+  if(!HORSE_OK) return nope('The Trojan horse is only about from 15 to 30 November.');
+  if(tc.k!==TOWER||!tc.o||tc.o===ME) return nope('A Trojan horse goes only to a tower of another player.');
+  var og=horseOrigin(q,r); if(!og) return nope('You need a standing castle to send a horse from.');
+  var rows=GOODS.map(function(k){
+    return '<tr><td><label for="hz-'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+' <i>('+Math.floor(pl.res[k]||0)+')</i></label></td><td><input id="hz-'+k+'" type="number" min="0" step="10" inputmode="numeric" placeholder="0" style="width:96px;font-size:16px"></td></tr>';
+  }).join('')
+  +'<tr><td><label for="hz-army">Soldiers <i>('+og.b+' at that castle)</i></label></td><td><input id="hz-army" type="number" min="0" step="1" inputmode="numeric" placeholder="0" style="width:96px;font-size:16px"'+(og.b?'':' disabled')+'></td></tr>';
+  scrollDialog({eyebrow:'The Trojan horse', title:'Send a horse to '+esc(nameOf(tc.o))+'&rsquo;s tower',
+    html:'<p>It leaves your castle at <b>'+og.q+','+og.r+'</b>, '+og.d+' square'+(og.d===1?'':'s')+' away: <b>'+fmtDur(horseTravel(og.d))+'</b> on the road. No marches, but like any wagon it eats 1 grain a tick on the way.</p>'
+      +'<table class="sc-table">'+rows+'</table>'
+      +'<p>Goods arrive <b>a tenth bigger</b>. Soldiers come out of the band at that castle and spring out inside the tower when it arrives. Nobody but you can see what is inside.</p><p class="sc-note"></p>',
+    cancel:false, buttons:[{label:'Not now',value:false},{label:'Send the horse',value:true,primary:true}],
+    check:function(v,box){ return v?horseLoadError(horseLoad(box),og):''; }
+  }).then(function(res){ if(res.value) sendHorse(q,r,horseLoad(res.box)); });
+}
+function horseLoad(box){
+  var g={};
+  GOODS.forEach(function(k){ var el=box.querySelector('#hz-'+k); g[k]=Math.max(0,Math.floor(parseFloat(el&&el.value)||0)); });
+  var a=box.querySelector('#hz-army'); a=Math.max(0,Math.floor(parseFloat(a&&a.value)||0));
+  return {g:g,a:a};
+}
+function horseLoadError(L,og){
+  var pl=me(), short=[];
+  if(!L.a && !hasGoods(L.g)) return 'Put something in the horse first &mdash; goods, soldiers, or both.';
+  GOODS.forEach(function(k){ if(L.g[k]>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')'); });
+  if(short.length) return '<span class="bad">Not enough to send.</span> You are short of '+short.join(' and ')+'.';
+  if(L.a>og.b) return '<span class="bad">Too many soldiers.</span> Only '+og.b+' stand at that castle.';
+  return '';
+}
+function sendHorse(tq,tr,L){
+  var pl=me(), tc=cellOf(tq,tr), g=L.g, a=L.a|0;
+  if(fighting) return;
+  if(!HORSE_OK||tc.k!==TOWER||!tc.o||tc.o===ME) return nope('That is no longer a tower of another player. Nothing was sent.');
+  var og=horseOrigin(tq,tr); if(!og) return nope('You need a standing castle to send a horse from.');
+  var err=horseLoadError(L,og); if(err) return nope(err);
+  var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapC(tq),tr:wrapC(tr),h:1};
+  function launch(){
+    GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
+    G.caravans=G.caravans||{}; G.caravans[id]=rec;
+    pushMe().then(function(){ return putPath('/caravans/'+id,rec); });
+    render();
+    say('<b>The horse is on the road</b> to '+esc(nameOf(tc.o))+'&rsquo;s tower with '+(hasGoods(g)?goodsLine(g):'')+(hasGoods(g)&&a?' and ':'')+(a?a+' soldier'+(a>1?'s':'')+' inside':'')+'. It arrives in about <b>'+fmtDur(rec.eta-now)+'</b>'+(hasGoods(g)?'; the goods will be a tenth bigger':'')+'. While it rolls it costs you 1 grain a tick.');
+  }
+  if(!a) return launch();
+  fighting=true;                                      // the soldiers leave the band at the castle, but only if it is just as this screen saw it
+  cellFresh(og.q,og.r).then(function(f){
+    var k=key(og.q,og.r);
+    if(!f.c||f.c.o!==ME||(f.c.b||0)<a) throw {msg:'Only '+((f.c&&f.c.o===ME&&f.c.b)||0)+' soldiers stand at that castle now. Nothing was sent.'};
+    G.cells[k]=f.c; var cc=cellOf(og.q,og.r); cc.b=(cc.b||0)-a; if(cc.b<=0) delete cc.b; writeCell(og.q,og.r,cc);
+    return cellPutIf(og.q,og.r,G.cells[k]||null,f.tag).then(function(okw){ if(!okw) throw {msg:'The band at that castle changed just now. Nothing was sent &mdash; look again.'}; });
+  }).then(launch).catch(function(e){ render(); nope(e&&e.msg?e.msg:'<span class="bad">Could not reach the board</span> &mdash; the horse did not leave.'); })
+    .then(function(){ fighting=false; });
+}
+
+/* ── its fate ── */
+var horseBusy={};
+function pullCaravan(id){ return online?dbGet('/marchland/'+gameCode+'/caravans/'+id):Promise.resolve((G.caravans&&G.caravans[id])||null); }
+/* the one write that decides a horse's fate: only the first screen to try gets it */
+function sealHorse(id,end){
+  if(!online){ var c0=G.caravans&&G.caravans[id]; if(!c0||c0.end) return Promise.resolve(false); c0.end=end; pushAll(); return Promise.resolve(true); }
+  return pullCaravan(id).then(function(cur){
+    if(!cur||cur.end) return false;                  // gone, or already settled by someone else
+    return dbPutIf('/marchland/'+gameCode+'/caravans/'+id+'/end',end,'null_etag').then(function(x){
+      if(x.ok){ var c1=G.caravans&&G.caravans[id]; if(c1) c1.end=end; bumpRev().then(ok,fail); }
+      return !!x.ok;
+    });
+  });
+}
+/* a flag on a horse's record that can be set once only (gd: its goods were collected) */
+function claimHorseFlag(id,field,val){
+  if(!online){ var c0=G.caravans&&G.caravans[id]; if(!c0||c0[field]) return Promise.resolve(false); c0[field]=val; pushAll(); return Promise.resolve(true); }
+  return dbPutIf('/marchland/'+gameCode+'/caravans/'+id+'/'+field,val,'null_etag').then(function(x){
+    if(x.ok){ var c1=G.caravans&&G.caravans[id]; if(c1) c1[field]=val; bumpRev().then(ok,fail); }
+    return !!x.ok;
+  });
+}
+/* every screen of the sender or the tower's owner looks after horses that have reached the gate */
+function settleHorses(){
+  if(!G||!me()) return;
+  var now=Date.now(), C=G.caravans||{};
+  Object.keys(C).forEach(function(id){
+    var c=C[id]; if(!c||!c.h||now<c.eta) return;
+    if(!c.end){
+      if((c.to!==ME&&c.from!==ME)||horseBusy[id]) return;
+      horseBusy[id]=1;
+      var tc=cellOf(c.tq,c.tr), valid=tc.k===TOWER&&tc.o===c.to&&towerH(tc)>0&&!!G.players[c.to];
+      var end=valid?{k:'arr',t:now,by:ME,q:c.tq,r:c.tr}:{k:'hit',t:now,by:ME,q:c.tq,r:c.tr,why:'gone'};   // a tower that is gone: the horse is stranded at its gate
+      sealHorse(id,end).then(function(won){ if(won) return finishHorse(id,end); })
+        .catch(function(){}).then(function(){ delete horseBusy[id]; });
+    } else if(c.end.k==='arr' && c.to===ME && !c.gd && hasGoods(c.g)){
+      collectHorseGoods(id);
+    }
+  });
+}
+/* the screen that sealed the fate does the rest: soldiers come out, the horse is cleared or becomes a wreck, the tower's owner is paid */
+function finishHorse(id,end){
+  var c=G.caravans&&G.caravans[id]; if(!c) return Promise.resolve();
+  var defender=end.why==='gone'?c.to:(end.k==='hit'?end.by:c.to), now=Date.now();
+  var armyP=(c.a|0)>0?deployArmy(c,end.q,end.r,defender,end.k==='arr'):Promise.resolve({k:'none',n:0,l:0,left:0});
+  return armyP.catch(function(){ return {k:'scatter',n:c.a|0,l:c.a|0,left:0}; }).then(function(res){
+    c.res=res; putPath('/caravans/'+id+'/res',res);
+    if(end.k==='hit'||!hasGoods(c.g)){ c.got=now; putPath('/caravans/'+id+'/got',now); }   // nothing left to collect: clear it away in 3 days (and it stops costing upkeep)
+    if(end.k==='arr' && c.to===ME && hasGoods(c.g)) collectHorseGoods(id);
+    render();
+    var viewer=c.to===ME?'to':(c.from===ME?'from':'by');
+    say(horseReport(c,viewer));
+    draw();
+  });
+}
+/* the tower's owner takes the gift in, a tenth bigger, once */
+function collectHorseGoods(id){
+  var c=G.caravans&&G.caravans[id], pl=me(); if(!c||!pl||c.gd||horseBusy['g'+id]) return;
+  pl.cvGot=pl.cvGot||{}; if(pl.cvGot[id]) return;
+  horseBusy['g'+id]=1;
+  claimHorseFlag(id,'gd',Date.now()).then(function(won){
+    if(!won) return;
+    var b=horseBonus(c.g), now=Date.now();
+    GOODS.forEach(function(k){ pl.res[k]=(pl.res[k]||0)+b[k]; });
+    pl.cvGot[id]=now; c.got=now; putPath('/caravans/'+id+'/got',now);
+    pushMe(); render();
+    play({pid:ME,k:'claim',q:c.tq,r:c.tr,n:3,label:'Horse: +'+goodsLine(b)});
+    setTimeout(function(){ say('<b>A Trojan horse from '+esc(nameOf(c.from))+' has reached your tower:</b> <span class="good">'+goodsLine(b)+'</span>, a tenth more than was sent.'); },50);
+  }).catch(function(){}).then(function(){ delete horseBusy['g'+id]; });
+}
+
+/* soldiers that come out of a horse: the horse is at (q,r), and "defender" is the player whose tower or trebuchet
+   brought it down, or whose tower it was sent to.
+   · on the sender's own ground they just stand there as a band;
+   · on the defender's ground they storm the square at once, as an ordinary battle (see the chain of duels),
+     with the wall courses left out if the horse got inside (inside=true). If they win the square is theirs and
+     any tower on it is gone. A standing castle can't be stormed, so they scatter instead;
+   · anywhere else (open country, or ground of a third player) they have nothing of their own beneath them and scatter. */
+function deployArmy(c,q,r,defender,inside,tries){
+  var n=c.a|0; tries=tries||0; if(n<=0) return Promise.resolve({k:'none',n:0,l:0,left:0});
+  var k=key(q,r);
+  return cellFresh(q,r).then(function(f){
+    if(f.c) G.cells[k]=f.c; else delete G.cells[k];
+    var tc=cellOf(q,r), owner=tc.o;
+    if(owner===c.from){
+      tc.b=(tc.b||0)+n; writeCell(q,r,tc);
+      return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(w){
+        if(!w&&tries<2) return deployArmy(c,q,r,defender,inside,tries+1);
+        return w?{k:'home',n:n,l:0,left:n}:{k:'scatter',n:n,l:n,left:0};
+      });
+    }
+    if(!owner||owner!==defender||tc.k===CASTLE||building(tc)) return {k:'scatter',n:n,l:n,left:0};
+    var L=defenderLine(q,r,c.from), units=inside?L.units.filter(function(u){ return u.t!=='wall'; }):L.units;
+    var p=units.map(function(u){ return u.p; }), seed=newSeed(), res=fightOut(n,p,seed), kn=lineCounts(units,0,res.killed), touched=[];
+    if(kn.wall){ tc.w=Math.max(0,(tc.w||0)-kn.wall); delete tc.wd; }
+    var gl=kn.guard||0;
+    L.guard.cells.forEach(function(g){
+      if(gl<=0) return; var gk=key(g[0],g[1]), gc=G.cells[gk]; if(!gc||!(gc.b>0)) return;
+      var d=Math.min(gc.b,gl); gc.b-=d; gl-=d; addGraves(gc,d); if(!gc.b) delete gc.b; if(gk!==k) touched.push(g);
+    });
+    if(kn.tower){ var h=towerH(tc)-kn.tower*TOWER_UNIT_H; if(h<=0){ tc.k=null; tc.l=0; tc.g=0; tc.d=0; delete tc.h; } else tc.h=h; }
+    if(kn.treb){ tc.tb=Math.max(0,(tc.tb||0)-kn.treb); tc.tr=arr(tc.tr).slice(0,tc.tb); if(!tc.tb){ delete tc.tb; delete tc.tr; } }
+    addGraves(tc,res.lost);
+    if(res.won){ tc.o=c.from; tc.w=0; delete tc.wd; delete tc.tb; delete tc.tr; tc.b=res.left; if(tc.cs||tc.rd||tc.t===RIVER) tc.cs={n:1}; }
+    writeCell(q,r,tc);
+    return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(w){
+      if(!w){ if(tries<2) return deployArmy(c,q,r,defender,inside,tries+1); return {k:'scatter',n:n,l:n,left:0}; }
+      touched.forEach(function(g){ pushCell(g[0],g[1]); });
+      return {k:res.won?'won':'lost',n:n,l:res.lost,left:res.won?res.left:0,kn:res.killed,seed:seed};
+    });
+  });
+}
+
+/* what happened, in words, for the sender ('from'), the tower's owner ('to') or the one who brought it down ('by') */
+function horseReport(c,viewer){
+  var e=c.end||{}, res=c.res||{}, goods=hasGoods(c.g), army=(c.a|0)>0, s='<b>'+esc(nameOf(c.from))+'</b>', t='<b>'+esc(nameOf(c.to))+'</b>', out=[];
+  var tell=viewer==='from'||e.by===ME||(viewer==='to'&&e.k==='arr');   // what was inside is known to the sender, to the one who broke it open, and to a tower it reached
+  if(e.k==='arr'){
+    out.push(viewer==='to'?'<b>A Trojan horse from '+s+' has reached your tower.</b>':viewer==='from'?'<b>Your Trojan horse has reached '+t+'&rsquo;s tower.</b>':'The Trojan horse of '+s+' has reached '+t+'&rsquo;s tower.');
+    if(goods&&tell) out.push('The gift: <span class="good">'+goodsLine(horseBonus(c.g))+'</span>, a tenth bigger than was sent.');
+  } else if(e.why==='gone'){
+    out.push(viewer==='to'?'<b>A Trojan horse for your tower found it gone</b> and was left stranded.':viewer==='from'?'<b>Your Trojan horse found '+t+'&rsquo;s tower gone</b> and was left stranded.':'A Trojan horse found its tower gone and was left stranded.');
+    if(goods&&tell) out.push('The goods are lost: '+goodsLine(c.g)+'.');
+  } else {
+    out.push(e.by===ME?'<b>You brought down the Trojan horse of '+s+'.</b>':viewer==='to'?'<b>'+esc(nameOf(e.by))+' brought down the Trojan horse '+s+' sent for your tower.</b>':viewer==='from'?'<b>'+esc(nameOf(e.by))+' brought down your Trojan horse.</b>':'The Trojan horse of '+s+' was brought down by '+esc(nameOf(e.by))+'.');
+    if(goods&&tell) out.push('The goods are lost: '+goodsLine(c.g)+'.');
+  }
+  if(army&&tell){
+    var n=c.a, x=n+' soldier'+(n>1?'s':'');
+    if(res.k==='won') out.push('<span class="'+(viewer==='from'?'good':'bad')+'">'+x+' sprang out, stormed the square and took it</span> ('+res.left+' survive, '+res.l+' fell).');
+    else if(res.k==='lost') out.push(x+' sprang out and stormed the square, and <span class="'+(viewer==='from'?'bad':'good')+'">were beaten back</span>; none survived.');
+    else if(res.k==='home') out.push(x+' came out on their own ground and stand there.');
+    else if(res.k==='scatter') out.push(x+' were caught in the open, with no ground of their own beneath them, and scattered.');
+  }
+  if(e.k==='hit') out.push('The wreck lies there for 3 days.');
+  return out.join(' ');
+}
+
+/* ── attacking a horse that is within sight of my tower or trebuchet ── */
+function hitHorse(id){
+  var c=G.caravans&&G.caravans[id], now=Date.now();
+  if(!c||!c.h||c.end) return nope('That horse has already met its fate.');
+  var w=horseWatch(c,ME,now); if(!w) return nope('The horse is out of reach of your towers and trebuchets now.');
+  var pos=horsePos(c,now), mine=cellOf(pos[0],pos[1]).o===ME;
+  scrollDialog({eyebrow:'The Trojan horse', title:'Attack the horse?',
+    html:'<p>A horse sent by <b>'+esc(nameOf(c.from))+'</b> is <b>'+w.d+'</b> square'+(w.d===1?'':'s')+' from your '+(w.treb?'trebuchet':'tower')+' at '+w.q+','+w.r+'. Nobody knows what is inside.</p>'
+      +'<p>Attack it and it is wrecked on the spot. <b>Any goods inside are lost.</b> <b>Any soldiers inside are deployed</b> on the square it stands on: '+(mine?'your own ground, so they storm it and your defenders there meet them':'not your ground, so they are caught in the open and scatter')+'.</p>'
+      +'<p>It costs nothing, and the wreck lies there for 3 days. Let it through and it may be a gift, or it may be an army.</p>',
+    cancel:false, buttons:[{label:'Let it pass',value:false},{label:'Attack the horse',value:true,primary:true}]
+  }).then(function(r){ if(r.value) hitHorseNow(id); });
+}
+function hitHorseNow(id){
+  var c=G.caravans&&G.caravans[id], now=Date.now(); if(!c||c.end||fighting) return;
+  var w=horseWatch(c,ME,now); if(!w) return nope('The horse is out of reach of your towers and trebuchets now.');
+  var pos=horsePos(c,now), end={k:'hit',t:now,by:ME,q:pos[0],r:pos[1]};
+  fighting=true;
+  sealHorse(id,end).then(function(won){
+    if(!won){ render(); return nope('Too late &mdash; the horse has already arrived, or someone else brought it down.'); }
+    return finishHorse(id,end);
+  }).catch(function(){ nope('<span class="bad">Could not reach the board</span> &mdash; the horse was not touched.'); })
+    .then(function(){ fighting=false; render(); });
+}
+
+/* ── the banner above the map: horses I could attack, a horse bound for my tower, and what became of horses of mine ── */
+function renderHorseAlert(){
+  var el=document.getElementById('horsealert'); if(!el||!G||!me()) return;
+  var now=Date.now(), rows=[];
+  Object.keys(G.caravans||{}).forEach(function(id){
+    var c=G.caravans[id]; if(!c||!c.h) return;
+    if(!c.end && now>=c.t && now<c.eta){
+      var w=horseWatch(c,ME,now), pos=horsePos(c,now);
+      if(w){
+        rows.push('<div class="ca-row"><span class="ca-head">A Trojan horse is near</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div>'
+          +'<div class="ca-row"><span>Sent by <b>'+esc(nameOf(c.from))+'</b> for '+(c.to===ME?'<b>your</b> tower':esc(nameOf(c.to))+'&rsquo;s tower')+'. It is <b>'+w.d+'</b> square'+(w.d===1?'':'s')+' from your '+(w.treb?'trebuchet':'tower')+'. Nobody knows what is inside: a gift, or an army.</span> <button data-act="hzhit" data-id="'+id+'">Attack the horse</button></div>');
+      } else if(c.to===ME){
+        rows.push('<div class="ca-row"><span class="ca-head">A Trojan horse is coming</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div>'
+          +'<div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, bound for your tower at '+c.tq+','+c.tr+'. Nobody knows what is inside: a gift, or an army. Once it is within '+HORSE_SIGHT+' squares of your towers or trebuchets you may attack it.</span></div>');
+      }
+    }
+    if(c.end && now-c.end.t<2*864e5){
+      if(c.to===ME && !cvSeen(id) && c.from!==ME) rows.push('<div class="ca-row"><span>'+horseReport(c,'to')+'</span> <button data-act="hzseen" data-id="'+id+'">Got it</button></div>');
+      else if(c.from===ME && !cvSeen(id+'.s')) rows.push('<div class="ca-row"><span>'+horseReport(c,'from')+'</span> <button data-act="hzseen" data-id="'+id+'.s">Got it</button></div>');
+      else if(c.end.by===ME && c.from!==ME && c.to!==ME && !cvSeen(id+'.b')) rows.push('<div class="ca-row"><span>'+horseReport(c,'by')+'</span> <button data-act="hzseen" data-id="'+id+'.b">Got it</button></div>');
+    }
+  });
+  el.innerHTML=rows.join('<hr>');
+  el.classList.toggle('hide',!rows.length);
+}
+document.getElementById('horsealert').addEventListener('click',function(ev){
+  var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
+  var id=b.getAttribute('data-id'), act=b.getAttribute('data-act');
+  if(act==='hzhit') return hitHorse(id);
+  if(act==='hzseen'){ try{ localStorage.setItem(cvSeenKey(id),'1'); }catch(e){} renderHorseAlert(); }
+});
+
+/* ── on the map: the horse on the road, and the wreck of one that was lost ── */
+function artHorse(g,x,y,s,col,t,face){
+  var z=s*0.62, roll=t?Math.sin(t*6)*0.012*z:0, W=NAT.wood, D=NAT.wood2;
+  g.save(); g.translate(x,y); g.scale(face,1);
+  blob(g,0,z*0.36,z*1.1,z*0.15,NAT.shadow);
+  g.lineJoin='round';
+  poly(g,[[-z*0.78,z*0.1],[z*0.78,z*0.1],[z*0.78,z*0.2],[-z*0.78,z*0.2]],D,NAT.line,Math.max(0.5,z*0.03));                    // the cart it rolls on
+  [[-z*0.5],[z*0.5]].forEach(function(o){                                                                                      // wheels, turning as it rolls
+    g.beginPath(); g.arc(o[0],z*0.24,z*0.17,0,6.284); g.fillStyle=D; g.fill();
+    g.beginPath(); g.arc(o[0],z*0.24,z*0.12,0,6.284); g.fillStyle=W; g.fill();
+    g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath();
+    for(var i=0;i<4;i++){ var a=i*Math.PI/4+(t||0)*3; g.moveTo(o[0]+Math.cos(a)*z*0.12,z*0.24+Math.sin(a)*z*0.12); g.lineTo(o[0]-Math.cos(a)*z*0.12,z*0.24-Math.sin(a)*z*0.12); }
+    g.stroke();
+  });
+  [-0.5,-0.28,0.3,0.52].forEach(function(lx){ g.fillStyle=W; g.fillRect(z*lx-z*0.06,-z*0.08+roll,z*0.12,z*0.2); g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.strokeRect(z*lx-z*0.06,-z*0.08+roll,z*0.12,z*0.2); });   // four stiff legs
+  g.beginPath(); g.ellipse(0,-z*0.2+roll,z*0.62,z*0.3,0,0,6.284); g.fillStyle=W; g.fill(); g.strokeStyle=D; g.lineWidth=Math.max(0.7,z*0.045); g.stroke();   // the body
+  g.beginPath(); for(var i=-2;i<=2;i++){ g.moveTo(z*i*0.2,-z*0.46+roll+Math.abs(i)*z*0.03); g.lineTo(z*i*0.2,-z*0.0+roll-Math.abs(i)*z*0.02); } g.stroke();       // planks
+  poly(g,[[z*0.32,-z*0.36+roll],[z*0.56,-z*0.92+roll],[z*0.9,-z*0.98+roll],[z*0.98,-z*0.78+roll],[z*0.7,-z*0.68+roll],[z*0.58,-z*0.3+roll]],W,D,Math.max(0.7,z*0.045));   // neck and head
+  poly(g,[[z*0.56,-z*0.92+roll],[z*0.62,-z*1.08+roll],[z*0.7,-z*0.94+roll]],D,D,1);                                                                                    // an ear
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,z*0.07); g.lineCap='round'; g.beginPath(); g.moveTo(z*0.36,-z*0.4+roll); g.quadraticCurveTo(z*0.44,-z*0.7+roll,z*0.58,-z*0.92+roll); g.stroke();   // the mane
+  g.fillStyle=NAT.line; g.beginPath(); g.arc(z*0.78,-z*0.84+roll,Math.max(0.8,z*0.035),0,6.284); g.fill();                                                               // an eye
+  g.beginPath(); g.moveTo(-z*0.6,-z*0.3+roll); g.quadraticCurveTo(-z*0.9,-z*0.2+roll,-z*0.82,z*0.0+roll); g.stroke();                                                    // the tail
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04); g.beginPath(); g.moveTo(-z*0.2,-z*0.46+roll); g.lineTo(-z*0.2,-z*1.0+roll); g.stroke();                       // a pennant in the sender's colour
+  poly(g,[[-z*0.2,-z*1.0+roll],[z*0.1,-z*0.92+roll],[-z*0.2,-z*0.84+roll]],col,NAT.line,Math.max(0.5,z*0.025));
+  g.restore();
+  if(s>=18) artPerson(g,x+face*(-z*1.0),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});                                                                         // a driver walking behind
+}
+/* the wreck: the cart overturned, its wheels off, and the load spilled on the ground */
+function artWreck(g,x,y,s,col,alpha,age){
+  var z=s*0.62, W=NAT.wood, D=NAT.wood2;
+  g.save(); g.translate(x,y); g.globalAlpha*=alpha; g.lineJoin='round';
+  blob(g,0,z*0.3,z*1.25,z*0.2,NAT.shadow);
+  g.save(); g.translate(-z*0.15,z*0.02); g.rotate(2.85);                                                                          // the bed, upside down and tilted
+  poly(g,[[-z*0.62,-z*0.18],[z*0.5,-z*0.18],[z*0.5,z*0.12],[-z*0.62,z*0.12]],W,D,Math.max(0.6,z*0.04));
+  g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath(); for(var i=-2;i<=1;i++){ g.moveTo(z*i*0.25,-z*0.18); g.lineTo(z*i*0.25,z*0.12); } g.stroke();
+  g.restore();
+  g.save(); g.translate(z*0.3,-z*0.2); g.rotate(0.4);                                                                             // a wheel still in the air
+  g.beginPath(); g.arc(0,0,z*0.2,0,6.284); g.fillStyle=D; g.fill(); g.beginPath(); g.arc(0,0,z*0.15,0,6.284); g.fillStyle=W; g.fill();
+  g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath(); for(var j=0;j<4;j++){ var a=j*Math.PI/4; g.moveTo(Math.cos(a)*z*0.15,Math.sin(a)*z*0.15); g.lineTo(-Math.cos(a)*z*0.15,-Math.sin(a)*z*0.15); } g.stroke();
+  g.restore();
+  g.save(); g.translate(z*0.78,z*0.3);                                                                                            // a wheel that came off and lies flat
+  g.beginPath(); g.ellipse(0,0,z*0.2,z*0.08,0,0,6.284); g.fillStyle=D; g.fill(); g.beginPath(); g.ellipse(0,0,z*0.14,z*0.05,0,0,6.284); g.fillStyle=W; g.fill();
+  g.restore();
+  g.strokeStyle=D; g.lineWidth=Math.max(1,z*0.06); g.lineCap='round'; g.beginPath(); g.moveTo(-z*0.6,z*0.3); g.lineTo(-z*1.05,z*0.38); g.stroke();   // a snapped shaft
+  [[-0.95,0.22,0.12],[-0.78,0.36,0.09],[0.0,0.38,0.1],[0.42,0.4,0.08],[1.05,0.22,0.1]].forEach(function(p,i){                      // stone, spilled
+    poly(g,[[z*p[0]-z*p[2],z*p[1]],[z*p[0]-z*p[2]*0.3,z*p[1]-z*p[2]],[z*p[0]+z*p[2],z*p[1]-z*p[2]*0.4],[z*p[0]+z*p[2]*0.8,z*p[1]+z*p[2]*0.5]],i%2?NAT.stone:NAT.stone2,NAT.line,Math.max(0.4,z*0.02));
+  });
+  g.lineCap='round';                                                                                                              // timber logs
+  [[-0.5,0.44,0.0],[-0.28,0.5,0.3],[0.62,0.5,-0.25]].forEach(function(p){ g.save(); g.translate(z*p[0],z*p[1]); g.rotate(p[2]); g.fillStyle=NAT.trunk; g.fillRect(-z*0.2,-z*0.04,z*0.4,z*0.08); g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.4,z*0.02); g.strokeRect(-z*0.2,-z*0.04,z*0.4,z*0.08); g.restore(); });
+  [[0.18,0.5,0.2],[0.34,0.54,-0.15],[-0.1,0.55,0.05]].forEach(function(p){ g.save(); g.translate(z*p[0],z*p[1]); g.rotate(p[2]); g.fillStyle=NAT.ironRock2; g.fillRect(-z*0.14,-z*0.025,z*0.28,z*0.05); g.restore(); });   // iron bars
+  g.fillStyle=NAT.wheat; for(var m=0;m<14;m++){ var gx=z*(0.7+0.1*((m*37)%7)/7*3+((m%3)-1)*0.07), gy=z*(0.48+((m*13)%5)*0.025); g.beginPath(); g.arc(gx-z*0.2,gy,Math.max(0.6,z*0.025),0,6.284); g.fill(); }   // spilled grain
+  poly(g,[[z*0.9,z*0.4],[z*1.12,z*0.34],[z*1.2,z*0.46],[z*1.0,z*0.52]],NAT_DARK?'#E4DCC6':'#FBF6E8',NAT.line,Math.max(0.4,z*0.02));   // the split sack
+  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04); g.beginPath(); g.moveTo(-z*0.35,z*0.1); g.lineTo(-z*0.5,-z*0.35); g.stroke();   // a broken pennant on the ground
+  poly(g,[[-z*0.5,-z*0.35],[-z*0.28,-z*0.29],[-z*0.45,-z*0.2]],col,NAT.line,Math.max(0.4,z*0.02));
+  g.restore();
+}
+function drawWrecks(){
+  var C=G.caravans||{}, t=Date.now();
+  for(var id in C){
+    var c=C[id]; if(!c||!c.h||!c.end||c.end.k!=='hit') continue;
+    var age=t-c.end.t; if(age<0||age>=HORSE_WRECK_MS) continue;
+    var P=toNear(c.end.q,c.end.r); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
+    var sz=Math.max(12,S*1.15);
+    artWreck(ctx,P[0],P[1]+S*0.05,sz,pColor(c.from),1-0.4*(age/HORSE_WRECK_MS),age);
+    if(S>=14) artLabel(ctx,P[0],P[1]+S*0.05+sz*0.58,'wrecked horse · '+fmtDur(HORSE_WRECK_MS-age)+' left',Math.max(9,S*0.26),NAT_DARK?'#E8DFC8':'#4A3A22',1);
+  }
+}
+
+/* ── the tutorial: six scrolls with a drawing each (from the announcement, then from the horse button on the map) ── */
+function hzDraw(x,y,k,army,col){
+  var W='#b08355', D='#7a5534', st='stroke="'+D+'" stroke-width="1.8" stroke-linejoin="round"';
+  return '<g transform="translate('+x+','+y+') scale('+k+')">'
+    +'<ellipse cx="0" cy="25" rx="40" ry="5" fill="#00000026"/>'
+    +'<rect x="-36" y="14" width="72" height="7" fill="'+D+'"/>'
+    +'<circle cx="-24" cy="22" r="8" fill="'+W+'" '+st+'/><circle cx="24" cy="22" r="8" fill="'+W+'" '+st+'/><circle cx="-24" cy="22" r="2" fill="'+D+'"/><circle cx="24" cy="22" r="2" fill="'+D+'"/>'
+    +'<rect x="-27" y="-4" width="6" height="19" fill="'+W+'" '+st+'/><rect x="-13" y="-4" width="6" height="19" fill="'+W+'" '+st+'/><rect x="13" y="-4" width="6" height="19" fill="'+W+'" '+st+'/><rect x="27" y="-4" width="6" height="19" fill="'+W+'" '+st+'/>'
+    +'<path d="M-30 -10 Q-34 -26 -10 -27 L16 -27 Q34 -26 32 -10 Q30 4 8 4 L-14 4 Q-30 4 -30 -10Z" fill="'+W+'" '+st+'/>'
+    +'<path d="M-14 -25 V3 M0 -27 V4 M14 -26 V3" stroke="'+D+'" stroke-width="1.3" fill="none"/>'
+    +'<path d="M18 -22 L28 -46 L46 -52 L52 -40 L36 -34 L32 -14Z" fill="'+W+'" '+st+'/>'
+    +'<path d="M28 -46 L32 -58 L38 -48Z" fill="'+D+'"/><path d="M20 -22 Q24 -38 30 -48" stroke="#3a2f18" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    +'<circle cx="42" cy="-43" r="2.4" fill="#3a2f18"/><path d="M-30 -14 Q-46 -10 -42 6" stroke="#3a2f18" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    +(col?'<path d="M-10 -26 V-58" stroke="#3a2f18" stroke-width="2"/><path d="M-10 -58 L10 -52 L-10 -46Z" fill="'+col+'" stroke="#3a2f18" stroke-width="1"/>':'')
+    +(army?'<g fill="#e6c9a0" stroke="#3a2f18" stroke-width="1.3"><circle cx="-14" cy="-33" r="5.5"/><circle cx="-2" cy="-35" r="5.5"/><circle cx="10" cy="-33" r="5.5"/></g><g fill="#8a8a8a" stroke="#3a2f18" stroke-width="1"><path d="M-19 -35 Q-14 -43 -9 -35Z"/><path d="M-7 -37 Q-2 -45 3 -37Z"/><path d="M5 -35 Q10 -43 15 -35Z"/></g>':'')
+    +'</g>';
+}
+function hzWreckSvg(){
+  var W='#b08355', D='#7a5534';
+  return crSvg('<ellipse cx="140" cy="100" rx="118" ry="13" fill="#00000024"/>'
+    +'<g transform="rotate(-26 118 72)"><rect x="70" y="56" width="92" height="30" rx="3" fill="'+W+'" stroke="'+D+'" stroke-width="2"/><path d="M92 56 V86 M115 56 V86 M138 56 V86" stroke="'+D+'" stroke-width="1.6"/></g>'
+    +'<circle cx="176" cy="46" r="20" fill="'+D+'"/><circle cx="176" cy="46" r="15" fill="'+W+'"/><path d="M176 31 V61 M161 46 H191 M165 35 L187 57 M187 35 L165 57" stroke="'+D+'" stroke-width="1.6"/>'
+    +'<ellipse cx="236" cy="98" rx="22" ry="8" fill="'+D+'"/><ellipse cx="236" cy="98" rx="15" ry="5" fill="'+W+'"/><path d="M214 100 Q196 98 190 104" stroke="'+D+'" stroke-width="4" fill="none" stroke-linecap="round"/>'
+    +'<path d="M62 96 L28 104" stroke="'+D+'" stroke-width="4" stroke-linecap="round"/>'
+    +'<g stroke="#3a2f18" stroke-width="1.2"><path d="M40 92 l9 -9 l12 3 l3 11 l-10 4Z" fill="#a6a39a"/><path d="M70 104 l7 -8 l10 2 l2 8 l-9 3Z" fill="#8d8a80"/><path d="M104 106 l8 -7 l9 3 l1 8 l-9 2Z" fill="#a6a39a"/></g>'
+    +'<g stroke="#3a2f18" stroke-width="1.2" fill="#8a5a33"><rect x="124" y="98" width="30" height="8" rx="2" transform="rotate(-8 139 102)"/><rect x="150" y="104" width="30" height="8" rx="2" transform="rotate(6 165 108)"/></g>'
+    +'<g fill="#3d3f46" stroke="#1f2024" stroke-width="1"><rect x="186" y="102" width="30" height="5" transform="rotate(-12 201 104)"/><rect x="196" y="108" width="30" height="5" transform="rotate(8 211 110)"/><rect x="176" y="109" width="26" height="5"/></g>'
+    +'<g fill="#d8b14a">'+[[218,86],[224,90],[230,84],[236,88],[242,92],[248,86],[254,90],[246,96],[226,96],[238,100]].map(function(p){ return '<circle cx="'+p[0]+'" cy="'+p[1]+'" r="2.3"/>'; }).join('')+'</g>'
+    +'<path d="M250 104 l14 -6 l8 8 l-12 6Z" fill="#fbf6e8" stroke="#3a2f18" stroke-width="1.2"/>'
+    +'<path d="M96 52 L92 22" stroke="#3a2f18" stroke-width="2"/><path d="M92 22 L112 28 L94 34Z" fill="#8E1B1B" stroke="#3a2f18" stroke-width="1"/>');
+}
+var HZ_STEPS=[
+  {title:'A caravan with a secret', pic:function(){
+     return crSvg(crHex(44,64,30,'#e9dcb6')+'<rect x="33" y="50" width="22" height="24" fill="#8a7a5a"/><rect x="30" y="44" width="28" height="8" fill="#6d5e40"/>'+crTxt(44,108,'Your castle',11)
+       +hzDraw(140,70,0.62,false,'#2c6bb0')
+       +crHex(240,64,30,'#d9c2c2')+'<rect x="233" y="42" width="14" height="34" fill="#7a5a5a"/><path d="M232 42 h16 l-3 -7 h-10z" fill="#5a3f3f"/>'+crTxt(240,108,'Their tower',11)); },
+   html:'<p>For the second half of November, from the 15th to the 30th, you can send a <b>Trojan horse</b>. It rides like a caravan, but it goes <b>only to a tower belonging to another player</b>.</p><p>Tap a rival&rsquo;s tower and choose <b>Send a Trojan horse here</b>. It leaves from your nearest castle, costs no marches, and eats 1 grain a tick on the road like any wagon.</p>'},
+  {title:'Thirty minutes a square', pic:function(){
+     return crSvg(crHex(30,60,20,'#e9dcb6')+crHex(70,60,20,'#e9dcb6')+crHex(110,60,20,'#eee6cf')+crHex(150,60,20,'#eee6cf')+crHex(190,60,20,'#eee6cf')+crHex(230,60,20,'#d9c2c2')+'<rect x="224" y="40" width="12" height="30" fill="#7a5a5a"/>'
+       +hzDraw(110,56,0.42,false,'#2c6bb0')+'<circle cx="140" cy="100" r="19" fill="#efe3c0" stroke="#3a2f18" stroke-width="2"/><path d="M140 100 V88 M140 100 L149 106" stroke="#3a2f18" stroke-width="2.4" stroke-linecap="round"/>'+crTxt(200,104,'30 min a square',12)); },
+   html:'<p>A caravan takes 40 minutes a square, with a minimum of six hours. A horse takes <b>30 minutes a square</b>, with no minimum, so a tower close by is reached in no time.</p><p>Everyone can watch it roll across the map in the colour of its sender. The tower&rsquo;s owner is told it is coming, but <b>nobody can see what is inside.</b></p>'},
+  {title:'Goods arrive a tenth bigger', pic:function(){
+     return crSvg('<g fill="#a6a39a" stroke="#3a2f18" stroke-width="1.4"><path d="M16 80 l12 -14 l18 5 l4 16 l-16 6Z"/><path d="M36 64 l10 -12 l14 4 l3 12 l-14 5Z"/></g>'+crTxt(36,108,'100 stone',12)
+       +hzDraw(140,70,0.56,false,'#2c6bb0')+'<path d="M92 76 H72" stroke="#3a2f18" stroke-width="2"/>'
+       +'<g fill="#a6a39a" stroke="#3a2f18" stroke-width="1.4"><path d="M212 80 l12 -14 l18 5 l4 16 l-16 6Z"/><path d="M232 64 l10 -12 l14 4 l3 12 l-14 5Z"/><path d="M222 50 l9 -10 l12 4 l2 10 l-12 4Z"/></g>'+crTxt(238,108,'110 stone',12)); },
+   html:'<p>Load the horse with <b>stone, timber, iron or grain</b>, and the gift arrives <b>10% bigger</b>: send 100 and the tower&rsquo;s owner receives 110. A gift of 5 has no tenth to add.</p><p>It all goes to the owner of the tower it was sent to, so it makes a fine present for a friend, or a fine disguise.</p>'},
+  {title:'Or fill it with soldiers', pic:function(){
+     return crSvg(hzDraw(70,76,0.7,true,'#2c6bb0')
+       +'<path d="M130 64 H168" stroke="#8E1B1B" stroke-width="3" stroke-dasharray="6 5"/><polygon points="168,56 184,64 168,72" fill="#8E1B1B"/>'
+       +crHex(230,60,32,'#d9c2c2','#8E1B1B',2.5)+'<rect x="223" y="36" width="14" height="36" fill="#7a5a5a"/>'+crTxt(230,108,'storm the tower',11)); },
+   html:'<p>You can also hide <b>soldiers</b> in the horse. They come out of the band standing at the castle it leaves from.</p><p>If the horse reaches the tower, they <b>spring out inside it and storm the square at once</b>. Its wall courses do not count, since they are already inside. Win, and the square is yours and the tower is gone. Lose, and the soldiers are lost. It costs no marches, and there are no spoils.</p>'},
+  {title:'Bring the horse down', pic:function(){
+     return crSvg('<circle cx="140" cy="62" r="52" fill="#efe3c0" stroke="#8E1B1B" stroke-dasharray="5 4" stroke-width="2"/><rect x="132" y="40" width="16" height="30" fill="#7a5a5a"/><path d="M130 40 h20 l-3 -8 h-14z" fill="#5a3f3f"/>'+crTxt(140,90,'4 squares',11)
+       +hzDraw(48,86,0.4,false,'#2c6bb0')+'<rect x="196" y="14" width="76" height="26" rx="3" fill="#8E1B1B"/>'+crTxt(234,31,'Attack it',13).replace('#3a2f18','#fff')); },
+   html:'<p>While a horse is on the road, any player <b>except its sender</b> who has a standing tower or a trebuchet within <b>4 squares</b> of it may attack it. A red banner above the map shows the button. It is free, it is instant, and the first to act wins.</p><p>Nobody knows what is inside. It may be a gift worth 10% more, or it may be an army that is about to take your tower. Let it through and find out.</p>'},
+  {title:'What a wrecked horse leaves', pic:hzWreckSvg,
+   html:'<p>A horse that is brought down is wrecked on the spot. <b>Goods inside are lost</b>, spilled on the ground. <b>Soldiers inside are deployed</b> on the square where it stood: on the attacker&rsquo;s ground they storm it and meet its defenders, on any other ground they are caught in the open and scatter.</p><p>The overturned cart and the spilled load <b>stay on the map for 3 days</b>.</p>'},
+  {title:'Only until the end of November', pic:function(){
+     return crSvg('<rect x="82" y="14" width="116" height="92" rx="5" fill="#f4ead0" stroke="#3a2f18" stroke-width="2"/><rect x="82" y="14" width="116" height="24" rx="5" fill="#8E1B1B"/>'+crTxt(140,31,'NOVEMBER',13).replace('#3a2f18','#fff')
+       +'<g stroke="#3a2f18" stroke-width="1" fill="none">'+[0,1,2,3,4,5].map(function(i){ return '<path d="M'+(92+i*16)+' 44 V100"/>'; }).join('')+[0,1,2,3].map(function(i){ return '<path d="M82 '+(52+i*14)+' H198"/>'; }).join('')+'</g>'
+       +'<path d="M170 82 l8 8 l14 -18" stroke="#8E1B1B" stroke-width="3.5" fill="none" stroke-linecap="round"/>'
+       +hzDraw(36,84,0.4,false,'#2c6bb0')+hzDraw(244,84,0.4,false,'#2c6bb0')); },
+   html:'<p>The horse rolls only from <b>15 to 30 November</b>, along with the crusades. When the month ends it goes back to the legends. Horses still on the road will arrive, and wrecks will fade, but no new ones can be sent.</p><p>So use it while you can. Years from now, <b>ask your elders about the days when the Trojan horse was around.</b></p>'}
+];
+function horseTutorial(i,auto){
+  i=i||0; var st=HZ_STEPS[i], last=i===HZ_STEPS.length-1;
+  var btns=[]; if(i>0) btns.push({label:'Back',value:'back'});
+  btns.push(last?{label:'Done',value:'close',primary:true}:{label:'Next',value:'next',primary:true});
+  if(!last) btns.push({label:'Close',value:'close'});
+  scrollDialog({eyebrow:'The Trojan horse &middot; '+(i+1)+' of '+HZ_STEPS.length, title:st.title, html:(typeof st.pic==='function'?st.pic():'')+st.html, cancel:'close', buttons:btns}).then(function(res){
+    if(res.value==='next') horseTutorial(i+1,auto); else if(res.value==='back') horseTutorial(i-1,auto);
+    else if(auto) setTimeout(showNext,250);            // the announcement's tutorial: the next waiting notice may now follow
+  });
+}
+document.getElementById('horsehelp').addEventListener('click',function(){ horseTutorial(0,false); });
+function renderHorseButton(){ var b=document.getElementById('horsehelp'); if(b) b.classList.toggle('hide',!HORSE_OK); }
 
 /* ═══ the next-step coach ════════════════════════════════════════════
    A strip above the map always names one good next move, worked out from the
