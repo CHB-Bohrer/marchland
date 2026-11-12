@@ -1217,6 +1217,22 @@ function settleCastles(){
       var rp=rk.split('_'); delete G.cells[rk]; pushCell(parseInt(rp[0],10),parseInt(rp[1],10)); changed++;
     }
   }
+  /* One-time steward fix (11 Nov 2026): Bohrer's castle was near zero in the morning and then leapt up (the clock bug just above).
+     Put it back into the red (3 of 30). Applies once (G.fixes.castle1), only to a castle of his with stored health between 11 and 29,
+     only if there is exactly one such castle, and only before the cut-off below, so a castle that later heals past 10 on its own is never reset. */
+  if(!(G.fixes&&G.fixes.castle1) && now<Date.UTC(2026,10,12,12,0,0)){
+    var bohId=null; Object.keys(G.players||{}).forEach(function(pid){ if(((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'')==='bohrer') bohId=pid; });
+    if(bohId){
+      var fixHits=[]; for(var fk in G.cells){ var fcx=G.cells[fk]; if(fcx.k===CASTLE && fcx.o===bohId && fcx.h!=null && fcx.h>10 && fcx.h<CASTLE_MAX_H) fixHits.push(fk); }
+      if(fixHits.length===1){
+        var fpp=fixHits[0].split('_'), fcc=G.cells[fixHits[0]]; fcc.h=3; fcc.ht=now;
+        castleSave(parseInt(fpp[0],10),parseInt(fpp[1],10),bohId,fcc);
+        G.fixes=G.fixes||{}; G.fixes.castle1=now;
+        if(online) dbPut('/marchland/'+gameCode+'/fixes/castle1',now).then(bumpRev).then(ok,fail);
+        changed++;
+      }
+    }
+  }
   /* PT's keeps are struck down at once (they used to stand, burning, for the whole 2-day purge, and could not be stormed).
      Checked by NAME on every pass, not just by the pids recorded when the purge began, so a keep that PT raised
      afterwards, or under a second account of the same name, goes too. The ground under it stays and keeps burning. */
@@ -1269,7 +1285,9 @@ function settleCastles(){
       castleSave(q,r,c.o,c); changed++; continue;
     }
     var n=Math.floor((now-c.ht)/TICK_MS); if(n<1) continue;
-    var h=castleH(c), nh=fed?Math.min(CASTLE_MAX_H,h+n):Math.max(0,h-n);
+    var h=castleH(c);
+    if(h<=0 && n>1){ c.ht=now-TICK_MS; n=1; }          // a fallen keep's clock stands still, so when it was fed again every day it sat fallen used to be paid out as healing at once (a castle near zero leapt back up); now a fed ruin gains one point a tick like any other
+    var nh=fed?Math.min(CASTLE_MAX_H,h+n):Math.max(0,h-n);
     if(h<=0 && nh<=0) continue;                       // a ruin that stays a ruin: nothing to write (rewriting it is how seized ruins came back)
     if(nh>=CASTLE_MAX_H){ delete c.h; delete c.ht; }
     else { c.h=nh; c.ht+=n*TICK_MS; }
@@ -2365,7 +2383,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
