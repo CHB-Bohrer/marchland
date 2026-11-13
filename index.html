@@ -8371,7 +8371,7 @@ document.getElementById('cv-send').addEventListener('click',sendCaravan);
    · soldiers can ride in it too, taken from the band standing at the castle it leaves from. When it arrives they
      spring out inside the tower and storm its square at once, the wall courses out of the fight (they are already
      inside). No marches, no spoils. If they win, the square is theirs and the tower is gone;
-   · while it is on the road, any player but the sender with a standing tower or a trebuchet within HORSE_SIGHT squares
+   · while it is on the road, only the player it is bound for, with a standing tower or a trebuchet within HORSE_SIGHT squares
      of it may attack it. Goods inside are lost; soldiers are "deployed" on the square it stands on (see deployArmy);
    · a horse that is lost leaves a wreck (an overturned cart and spilled goods) on the map for 3 days;
    · nobody but the sender sees what is inside until it is over.
@@ -8403,7 +8403,7 @@ function horsePos(c,t){
 }
 /* the nearest standing tower or trebuchet of pid's within sight of the horse, or null (the sender never sees it that way) */
 function horseWatch(c,pid,t){
-  if(!c||!c.h||c.end||c.got||t>=c.eta||t<c.t||pid===c.from) return null;
+  if(!c||!c.h||c.end||c.got||t>=c.eta||t<c.t||pid!==c.to) return null;   // only the player it is bound for may bring it down
   var p=horsePos(c,t), best=null;
   for(var k in G.cells){
     var x=G.cells[k]; if(x.o!==pid) continue;
@@ -8652,7 +8652,7 @@ function renderHorseAlert(){
           +'<div class="ca-row"><span>Sent by <b>'+esc(nameOf(c.from))+'</b> for '+(c.to===ME?'<b>your</b> tower':esc(nameOf(c.to))+'&rsquo;s tower')+'. It is <b>'+w.d+'</b> square'+(w.d===1?'':'s')+' from your '+(w.treb?'trebuchet':'tower')+'. Nobody knows what is inside: a gift, or an army.</span> <button data-act="hzhit" data-id="'+id+'">Attack the horse</button></div>');
       } else if(c.to===ME){
         rows.push('<div class="ca-row"><span class="ca-head">A Trojan horse is coming</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div>'
-          +'<div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, bound for your tower at '+c.tq+','+c.tr+'. Nobody knows what is inside: a gift, or an army. Once it is within '+HORSE_SIGHT+' squares of your towers or trebuchets you may attack it.</span></div>');
+          +'<div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, bound for your tower at '+c.tq+','+c.tr+'. Nobody knows what is inside: a gift, or an army. Only you may bring it down, and only once it is within '+HORSE_SIGHT+' squares of your towers or trebuchets.</span></div>');
       }
     }
     if(c.end && now-c.end.t<2*864e5){
@@ -8811,7 +8811,7 @@ var HZ_STEPS=[
   {title:'Bring the horse down', pic:function(){
      return crSvg('<circle cx="140" cy="62" r="52" fill="#efe3c0" stroke="#8E1B1B" stroke-dasharray="5 4" stroke-width="2"/><rect x="132" y="40" width="16" height="30" fill="#7a5a5a"/><path d="M130 40 h20 l-3 -8 h-14z" fill="#5a3f3f"/>'+crTxt(140,90,'4 squares',11)
        +hzDraw(48,86,0.4,false,'#2c6bb0')+'<rect x="196" y="14" width="76" height="26" rx="3" fill="#8E1B1B"/>'+crTxt(234,31,'Attack it',13).replace('#3a2f18','#fff')); },
-   html:'<p>While a horse is on the road, any player <b>except its sender</b> who has a standing tower or a trebuchet within <b>4 squares</b> of it may attack it. A red banner above the map shows the button. It is free, it is instant, and the first to act wins.</p><p>Nobody knows what is inside. It may be a gift worth 10% more, or it may be an army that is about to take your tower. Let it through and find out.</p>'},
+   html:'<p>While a horse is on the road, only the <b>player it is bound for</b> may attack it, once it comes within <b>4 squares</b> of one of their standing towers or trebuchets. A red banner above the map shows the button. It is free and it is instant.</p><p>Nobody knows what is inside. It may be a gift worth 10% more, or it may be an army that is about to take your tower. Let it through and find out.</p>'},
   {title:'What a wrecked horse leaves', pic:hzWreckSvg,
    html:'<p>A horse that is brought down is wrecked on the spot. <b>Goods inside are lost</b>, spilled on the ground. <b>Soldiers inside are deployed</b> on the square where it stood: on the attacker&rsquo;s ground they storm it and meet its defenders, on any other ground they are caught in the open and scatter.</p><p>The overturned cart and the spilled load <b>stay on the map for 3 days</b>.</p>'},
   {title:'Only until the end of November', pic:function(){

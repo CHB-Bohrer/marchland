@@ -234,7 +234,7 @@ footer a{color:var(--gold2)}
       <dt>Claims</dt><dd>Every claim is public. With a screenshot of your step count it stands. Without one, anyone may dispute it for 24 hours and the others vote for 24 more: more than half of at least 3 votes voids it, and the marches come off your next claim.</dd>
       <dt>Joining</dt><dd>A newcomer picks a sponsor already playing, who vouches for them by real name. Three strikes and a sponsor can vouch no more.</dd>
       <dt>Crusade</dt><dd>November only. Proclaimed against one player for 72 hours; crusaders&rsquo; bands beside the same square strike as one, share losses and spoils, and can pay marches into a shared treasury.</dd>
-      <dt>Trojan horse</dt><dd>12 to 30 November. Tap another player&rsquo;s standing tower and choose Send a Trojan horse here, or use the horse button beside the map. Building it costs 25 iron and 40 grain, as much as a soldier. It rolls from your nearest castle at 30 minutes a square and costs 1 grain every 4 hours. It carries goods, which arrive a tenth bigger, or soldiers from the band at that castle, who storm the tower&rsquo;s square at once (walls don&rsquo;t count). Every horse must carry a letter, read by the tower&rsquo;s owner on arrival or by whoever brings it down. Only the sender sees what else is inside. Any other player with a standing tower or trebuchet within 4 squares may strike it down for free; the wreck lies on the map for 3 days.</dd>
+      <dt>Trojan horse</dt><dd>12 to 30 November. Tap another player&rsquo;s standing tower and choose Send a Trojan horse here, or use the horse button beside the map. Building it costs 25 iron and 40 grain, as much as a soldier. It rolls from your nearest castle at 30 minutes a square and costs 1 grain every 4 hours. It carries goods, which arrive a tenth bigger, or soldiers from the band at that castle, who storm the tower&rsquo;s square at once (walls don&rsquo;t count). Every horse must carry a letter, read by the tower&rsquo;s owner on arrival or by whoever brings it down. Only the sender sees what else is inside. Only the player it is bound for may strike it down, for free, once it is within 4 squares of one of their standing towers or trebuchets; the wreck lies on the map for 3 days.</dd>
       <dt>The map</dt><dd>One board for everyone, 120 squares across, wrapping at every edge.</dd>
     </dl>
   </details>
@@ -2061,7 +2061,7 @@ var HZ_A=[-3,0], HZ_T=[2,0], HZ_B=[1,-1];
 function hzX(k){ return lerp(hx(HZ_A[0],HZ_A[1])+S*0.75, hx(HZ_T[0],HZ_T[1])-S*0.8, k); }
 chapter({
   id:'horse', tag:'Trojan horse', title:'This Month: The Trojan Horse',
-  facts:['Until <b>30 November</b>','Sent to a rival&rsquo;s <b>tower</b>','Gifts or hidden <b>soldiers</b>','Towers and trebuchets nearby can <b>wreck</b> it'],
+  facts:['Until <b>30 November</b>','Sent to a rival&rsquo;s <b>tower</b>','Gifts or hidden <b>soldiers</b>','Only its <b>target</b> can wreck it, from nearby'],
   init:function(){
     M=blank(); homeLand(HZ_A[0],HZ_A[1],'you'); cell(HZ_A[0],HZ_A[1]).b=4;
     [[3,0],[3,-1],[2,-1],[2,1],[1,1],[3,1],[1,-2],[2,-2],[4,-1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
