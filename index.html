@@ -298,6 +298,15 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .cv-x{ display:none; float:right; padding:2px 8px; }
 .caravan.onmap .cv-x{ display:inline-flex; }
 .mapctl{ position:absolute; top:8px; right:8px; display:flex; flex-direction:column; gap:5px; }
+.sc-body .good{ color:#2f6b2a; } .sc-body .bad{ color:#a3210f; }
+.dip-rows{ display:flex; flex-direction:column; gap:8px; margin:6px 0 4px; max-height:52vh; overflow:auto; }
+.dip-row,.dip-card{ border-top:1px solid rgba(90,60,20,.25); padding:7px 0 4px; }
+.dip-name{ font-size:14px; margin-bottom:5px; }
+.dip-set{ display:flex; gap:6px; }
+.dip-b{ flex:1; min-height:36px; padding:4px 6px; border:1px solid rgba(90,60,20,.45); border-radius:6px; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.dip-b.on.dip-a{ background:#2f6b2a; color:#fff; border-color:#1d4a1a; }
+.dip-b.on.dip-n{ background:#6b5a3a; color:#fff; border-color:#4a3d25; }
+.dip-b.on.dip-e{ background:#a3210f; color:#fff; border-color:#5a0f05; }
 .mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
 .status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
 .status .mini{ padding:2px 8px; font-size:11px; margin:0 2px; }
@@ -626,6 +635,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="rival" aria-label="Find another player" title="Find another player">⚑</button>
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
+          <button id="dipbtn" aria-label="Diplomacy board: allies, neutrals and enemies" title="Diplomacy board: mark players as allies, neutral or enemies">&#9876;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
           <button id="horsehelp" class="hide" aria-label="The Trojan horse: how it works and send one" title="The Trojan horse">&#128014;</button>
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
@@ -1142,7 +1152,7 @@ function writeCell(q,r,c){
   var k=key(q,r);
   if(!c.o && !c.k && !(c.gv && c.gv.length)){ delete G.cells[k]; return; }   // (a cell with crosses stays until they fade)
   G.cells[k]={o:c.o||null,w:c.w||0,k:c.k||null,l:c.l||0,g:c.g||0,d:c.d||0};
-  if(c.b>0 && c.o) G.cells[k].b=c.b;                 // a band of soldiers standing here
+  if(c.b>0 && c.o){ G.cells[k].b=c.b; if(c.sv>0) G.cells[k].sv=c.sv; }   // a band of soldiers standing here (sv: ticks it has been cut off from every castle, see strandedCells)
   if(c.f) G.cells[k].f=c.f;
   if(c.bn && c.bn>Date.now()){ G.cells[k].bn=c.bn; if(c.bx) G.cells[k].bx=1; if(c.cm) G.cells[k].cm=1; }       // land on fire until this moment: it yields nothing (bx: a purge fire, the land is wiped when it ends)
   if(c.gv && c.gv.length) G.cells[k].gv=c.gv;          // crosses for fallen soldiers
@@ -1556,7 +1566,24 @@ function undoWrap(label,q,r,fn){
   undoCommit(label,snap);
   return out;
 }
-function spendMarch(q,r){ return undoWrap('Cell taken',q,r,function(){ return spendMarch0(q,r); }); }
+function spendMarch(q,r){
+  var pl=me(), c=G&&pl?cellOf(q,r):null;
+  // empty land that would really be claimed asks first (a stray tap while scrolling or zooming used to spend a march at once);
+  // anything that would be refused, and every attack (it has its own scroll), goes straight through so the reason shows
+  if(c && !c.o && c.t!==RIVER && (pl.squares||0)>=1 && touchesLive(q,r,ME) && !claimAsking){
+    claimAsking=true;
+    return scrollDialog({eyebrow:'Claim land', title:'Claim this square?',
+      html:'<p>It costs <b>1 march</b>. You have <b>'+Math.floor(pl.squares)+'</b> now, and can undo for 5 minutes.</p>',
+      cancel:'no', buttons:[{label:'Cancel',value:'no'},{label:'Claim it',value:'yes',primary:true}]
+    }).then(function(res){
+      claimAsking=false;
+      if(res.value!=='yes'||!G||!me()) return;
+      return undoWrap('Cell taken',q,r,function(){ return spendMarch0(q,r); });
+    });
+  }
+  return undoWrap('Cell taken',q,r,function(){ return spendMarch0(q,r); });
+}
+var claimAsking=false;
 function buildTreb(q,r){ return undoWrap('Trebuchet built',q,r,function(){ return buildTreb0(q,r); }); }
 function buildRoad(q,r){ return undoWrap('Road started',q,r,function(){ return buildRoad0(q,r); }); }
 function bridge(q,r){ return undoWrap('Bridge started',q,r,function(){ return bridge0(q,r); }); }
@@ -2218,10 +2245,11 @@ function ratesFor(pid,at){
     if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
-  var f=fieldOf(pid)+transitOf(pid);                 // men on the road still eat
+  var strd=strandedMen(pid,sup);                      // cut-off bands are fed by nobody (see strandedCells)
+  var f=fieldOf(pid)-strd+transitOf(pid);            // men on the road still eat
   var wg=wagonsAt(pid,Date.now());                   // and so do the wagons: 1 grain a tick for each caravan on the road
   var tg=trebsOf(pid)*TREB_GRAIN+towerGrain(pid);     // and the trebuchets, 2 a tick each, and the towers' upkeep
-  return {out:out,sup:s,own:own,mouths:f+g[0]+wg+tg,net:out.grain-(f+g[0]+wg+tg),supset:sup,gar:g,field:f,wagons:wg,trebs:tg};
+  return {out:out,sup:s,own:own,mouths:f+g[0]+wg+tg,net:out.grain-(f+g[0]+wg+tg),supset:sup,gar:g,field:fieldOf(pid)+transitOf(pid),stranded:strd,wagons:wg,trebs:tg};
 }
 /* Caravan upkeep: every caravan a player has sent costs them 1 grain at each tick while it is still
    on the road (sent, not yet arrived). A tick is the same 4-hour beat as the harvest. */
@@ -2264,6 +2292,18 @@ function bandsOf(pid){
   return out;
 }
 function fieldOf(pid){ var n=0; for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0) n+=c.b; } return n; }
+/* Cut-off bands. Grain does not teleport: soldiers eat only while their square is joined to one of their owner's
+   standing castles by unbroken ground (the same link that supplies a farm). A band stranded beyond that (inside a
+   rival's land after a Trojan horse, say, or behind a line that was cut) is fed by nobody. It has STRAND_GRACE_TICKS
+   ticks of rations, then loses one man a tick until the ground around it is joined up again (or it is brought home).
+   Their own bread no longer costs the home granary, either. */
+var STRAND_GRACE_TICKS=6;                             // one day (a tick is four hours)
+function strandedCells(pid,sup){
+  sup=sup||supplied(pid); var out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0 && !building(c) && !sup[k]) out.push(k); }
+  return out;
+}
+function strandedMen(pid,sup){ var n=0; strandedCells(pid,sup).forEach(function(k){ n+=G.cells[k].b||0; }); return n; }
 /* soldiers of the cell's owner standing on it or next to it */
 function guardOn(q,r,owner){
   if(!owner) return {n:0,cells:[]};
@@ -2323,6 +2363,14 @@ function catchUp(pid){
       });
       if(gone0>gone){ var dz=pl.des&&!pl.des.seen?pl.des:(pl.des={n:0,t:0,seen:false}); dz.n+=gone0-gone; dz.t=Date.now(); }   // remembered, so the warning shows until it is read
     }
+    // cut-off bands: a day of rations, then one man dies each tick until they are joined to a castle again
+    var sup0=R.supset, strK=strandedCells(pid,sup0), lostStr=0;
+    strK.forEach(function(sk){
+      var sc=G.cells[sk]; sc.sv=(sc.sv||0)+1; touched[sk]=1;
+      if(sc.sv>STRAND_GRACE_TICKS){ sc.b-=1; lostStr++; addGraves(sc,1); if(!(sc.b>0)){ delete sc.b; delete sc.sv; } }
+    });
+    for(var vk in G.cells){ var vc=G.cells[vk]; if(vc.o===pid && vc.sv && !(vc.b>0 && !building(vc) && !sup0[vk])){ delete vc.sv; touched[vk]=1; } }   // joined up again (or empty): the clock resets
+    if(lostStr){ var sz=pl.starved&&!pl.starved.seen?pl.starved:(pl.starved={n:0,t:0,seen:false}); sz.n+=lostStr; sz.t=Date.now(); }
     // a damaged tower mends 1 health a tick for 1 stone, if there is stone; it never loses health by itself
     for(var hk in G.cells){
       var hc=G.cells[hk]; if(hc.o!==pid||hc.k!==TOWER||hc.h==null) continue;
@@ -3967,7 +4015,7 @@ function cellTitle(c){
   else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
-  if(c.o&&c.b>0) sub.push('band of '+c.b);
+  if(c.o&&c.b>0){ sub.push('band of '+c.b); if(c.o===ME && !building(c) && !supplied(ME)[key(c.q,c.r)]){ var sv0=c.sv||0; sub.push(sv0>STRAND_GRACE_TICKS?'<span class="bad">cut off &mdash; starving, losing a man every tick</span>':'<span class="bad">cut off from every castle &mdash; starves in '+fmtDur((STRAND_GRACE_TICKS-sv0+1)*TICK_MS)+'</span>'); } }
   if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]+(c.wd?' (cracked)':''));
   if(c.o&&c.tb>0) sub.push(c.tb+' trebuchet'+(c.tb>1?'s':''));
   if(c.o&&c.rd) sub.push(roadUp(c)?'road ready in '+hoursLeft(c.rf):(liveRoads(c.o)[key(c.q,c.r)]?'live road':'dead road, cut off from every castle'));
@@ -5619,7 +5667,7 @@ function openPlayerList(byJoin){
     : function(a,b){ return cellsOf(b)-cellsOf(a); });
   scrollDialog({eyebrow:'Players', title:byJoin?'In order of joining':'Go to a castle', cancel:null,
     html:byJoin?'<p class="sc-note" style="color:inherit">Oldest first. Older accounts were never dated, so for them the order is by seat number, which can be a little off where someone left and their seat was reused.</p>':'',
-    list:ids.map(function(pid,i){ return {label:(byJoin?(i+1)+'. ':'')+esc(full(ps[pid]))+(pid===ME?' <i>(you)</i>':''), cost:cellsOf(pid)+' squares', value:pid}; }),
+    list:ids.map(function(pid,i){ var st=pid===ME?'':stanceOf(ME,pid); return {label:(byJoin?(i+1)+'. ':'')+esc(full(ps[pid]))+(pid===ME?' <i>(you)</i>':'')+(st==='a'?' <b class="good">&middot; ally</b>':st==='e'?' <b class="bad">&middot; enemy</b>':''), cost:cellsOf(pid)+' squares', value:pid}; }),
     buttons:[{label:'Close',value:null,primary:true},{label:byJoin?'By squares':'By joining',value:'__flip'}]}).then(function(res){
     var pid=res.value; if(!pid) return;
     if(pid==='__flip') return openPlayerList(!byJoin);
@@ -5630,6 +5678,71 @@ function openPlayerList(byJoin){
   });
 }
 document.getElementById('namesbtn').addEventListener('click',function(){ openPlayerList(false); });
+
+/* ═══ the Diplomacy board ═══════════════════════════════════════════════
+   Pure bookkeeping, no rules attached. Each player marks every other player as an ally ('a'), an enemy ('e') or
+   neutral (nothing stored), kept on their own record as pl.dip = {playerId:'a'|'e'}. Everyone can read everyone's marks,
+   so the board shows who stands with whom: a pair that marked each other allies are "allied", enemies "at war". */
+function stanceOf(from,to){ var p=G&&G.players[from]; var v=p&&p.dip&&p.dip[to]; return v==='a'||v==='e'?v:'n'; }
+function setStance(to,v){
+  var pl=me(); if(!pl||!G.players[to]||to===ME) return;
+  var d=pl.dip=pl.dip||{};
+  if(v==='n') delete d[to]; else d[to]=v;
+  for(var k in d) if(!G.players[k]) delete d[k];       // players who have left drop off
+  if(!Object.keys(d).length) delete pl.dip;
+  pushMe();
+}
+var STANCE_NAME={a:'Ally',n:'Neutral',e:'Enemy'};
+function pairNote(a,b){                                  // how two players stand with each other, from both marks
+  var x=stanceOf(a,b), y=stanceOf(b,a);
+  if(x==='a'&&y==='a') return '<b class="good">allied</b>';
+  if(x==='e'&&y==='e') return '<b class="bad">at war</b>';
+  return '';
+}
+function openDiplomacy(view){
+  if(!G||!me()) return;
+  view=view||'mine';
+  var ps=G.players, ids=Object.keys(ps).filter(function(p){ return p!==ME; }).sort(function(a,b){ return (ps[a].name||'').toLowerCase().localeCompare((ps[b].name||'').toLowerCase()); });
+  var html;
+  if(view==='mine'){
+    html='<p class="sc-note" style="color:inherit">Mark each player as you see them. Everyone can see these marks, and nothing in the game changes because of them. &ldquo;Calls you&rdquo; is how they have marked <i>you</i>.</p><div class="dip-rows">'
+      +(ids.length?ids.map(function(pid){
+        var mine=stanceOf(ME,pid), theirs=stanceOf(pid,ME), pn=pairNote(ME,pid);
+        return '<div class="dip-row" data-pid="'+esc(pid)+'"><div class="dip-name">'+esc(full(ps[pid]))+(pn?' &middot; '+pn:'')
+          +'<span class="muted"> &middot; calls you '+(theirs==='a'?'an ally':theirs==='e'?'an enemy':'neutral')+'</span></div>'
+          +'<div class="dip-set" role="group" aria-label="Your view of '+esc(full(ps[pid]))+'">'
+          +['a','n','e'].map(function(v){ return '<button type="button" class="dip-b dip-'+v+(mine===v?' on':'')+'" data-v="'+v+'" aria-pressed="'+(mine===v)+'">'+STANCE_NAME[v]+'</button>'; }).join('')
+          +'</div></div>';
+      }).join(''):'<p>No other players yet.</p>')+'</div>';
+  } else {
+    var all=Object.keys(ps).sort(function(a,b){ return (ps[a].name||'').toLowerCase().localeCompare((ps[b].name||'').toLowerCase()); });
+    function namesFor(pid,v){ return all.filter(function(o){ return o!==pid && stanceOf(pid,o)===v; }).map(function(o){ return esc(full(ps[o])); }); }
+    function aimed(pid,v){ return all.filter(function(o){ return o!==pid && stanceOf(o,pid)===v; }).length; }
+    html='<p class="sc-note" style="color:inherit">What every player has marked. &ldquo;Marked enemy by&rdquo; counts how many players have marked them an enemy.</p><div class="dip-rows">'
+      +all.map(function(pid){
+        var al=namesFor(pid,'a'), en=namesFor(pid,'e'), hated=aimed(pid,'e'), liked=aimed(pid,'a');
+        return '<div class="dip-card"><div class="dip-name"><b>'+esc(full(ps[pid]))+'</b>'+(pid===ME?' <i>(you)</i>':'')+'</div>'
+          +'<div><span class="good">Allies:</span> '+(al.length?al.join(', '):'<span class="muted">none marked</span>')+'</div>'
+          +'<div><span class="bad">Enemies:</span> '+(en.length?en.join(', '):'<span class="muted">none marked</span>')+'</div>'
+          +'<div class="muted">Marked ally by '+liked+' &middot; marked enemy by '+hated+'</div></div>';
+      }).join('')+'</div>';
+  }
+  scrollDialog({eyebrow:'Diplomacy board', title:view==='mine'?'Allies, neutrals and enemies':'Who stands with whom', cancel:null, html:html,
+    buttons:[{label:'Close',value:null,primary:true},{label:view==='mine'?'Whole realm':'My marks',value:'__flip'}],
+    onOpen:function(box){
+      box.addEventListener('click',function(ev){
+        var b=ev.target.closest('.dip-b'); if(!b) return;
+        var row=b.closest('.dip-row'); if(!row) return;
+        var pid=row.getAttribute('data-pid'), v=b.getAttribute('data-v');
+        setStance(pid,v);
+        [].slice.call(row.querySelectorAll('.dip-b')).forEach(function(x){ var on=x===b; x.classList.toggle('on',on); x.setAttribute('aria-pressed',on); });
+        var pn=pairNote(ME,pid), nm=row.querySelector('.dip-name'), theirs=stanceOf(pid,ME);
+        nm.innerHTML=esc(full(ps[pid]))+(pn?' &middot; '+pn:'')+'<span class="muted"> &middot; calls you '+(theirs==='a'?'an ally':theirs==='e'?'an enemy':'neutral')+'</span>';
+      });
+    }}).then(function(res){ if(res.value==='__flip') openDiplomacy(view==='mine'?'all':'mine'); });
+}
+document.getElementById('dipbtn').addEventListener('click',function(){ openDiplomacy('mine'); });
+
 
 
 /* ═══ the living map ═══════════════════════════════════════════════════
@@ -7589,6 +7702,14 @@ var NOTES=[
    html:'<p>If you <b>don&rsquo;t open the game for 3 days</b>, you start losing ground: <b>one square a day</b>, starting with the outermost.</p>'
      +'<p>For now <b>only bare squares</b> are taken. Anything built on a square keeps it safe: a castle, tower, wall, road, trebuchet, soldiers, or a castle going up, and your bridges too.</p>'
      +'<p>Opening the game stops it at once. Going away for a trip? Log in once every couple of days and you lose nothing.</p>', go:'Understood'},
+  {id:'nov14-strand', eyebrow:'A rule changed', title:'Grain does not teleport: cut-off soldiers starve',
+   html:'<p>Until now, soldiers stranded deep in someone else&rsquo;s land (after a Trojan horse, say) ate from the grain in their home keep, however far away, so they could stand there forever. <b>That was a mistake.</b></p>'
+     +'<p><b>The new rule:</b> soldiers are fed only while their square is joined to one of your standing castles by <b>unbroken ground of yours</b>. A band cut off from every castle has <b>one day of rations</b>, then <b>loses one man each tick</b> until the squares around it are joined back up. A cut-off band also no longer costs your home granary anything.</p>'
+     +'<p>So a stranded band is a reason to <b>claim the ground between it and home</b>, which is exactly what it should be. A warning shows above the map, and tapping a cut-off band says how long it has left.</p>', go:'Understood'},
+  {id:'nov14-confirm', eyebrow:'A fix', title:'Claiming land now asks first',
+   html:'<p>A single tap on empty land used to claim it straight away, which cost marches whenever a finger slipped while scrolling or zooming. Now a small scroll <b>asks before a march is spent</b>. Tap <b>Claim</b> (or press Enter) to go ahead, or <b>Cancel</b> to leave it be. And the <b>Undo</b> button still works for five minutes.</p>', go:'Understood'},
+  {id:'nov14-diplomacy', eyebrow:'New', title:'The Diplomacy board',
+   html:'<p>There is now a <b>Diplomacy board</b> (the crossed-swords button beside the map). Mark every other player as an <b>Ally</b>, <b>Neutral</b> or <b>Enemy</b>, and anyone can open the board to see who stands with whom. It changes no rules; it is only to help everyone keep track of things. Allies and enemies also show beside names in the player list.</p>', go:'Understood'},
   {id:'nov26-gift', eyebrow:'A new rule', title:'Land can be given',
    html:'<p>You may now <b>give a square of your ground to another player</b>. Tap a bare square of yours and choose <b>Give this square away</b>.</p>'
      +'<ul><li>It is <b>free</b> and happens at once.</li>'
@@ -8671,6 +8792,13 @@ function renderHungerAlert(){
   if(pl.des && !pl.des.seen && pl.des.n>0){
     rows.push('<div class="ca-row"><span class="ca-head">Hungry men deserted</span></div><div class="ca-row"><span>Your grain ran out, and <b>'+pl.des.n+'</b> soldier'+(pl.des.n>1?'s':'')+' (or trebuchets) walked off. Keep your grain above zero, or more will go.</span> <button data-act="hgseen">Got it</button></div>');
   }
+  if(pl.starved && !pl.starved.seen && pl.starved.n>0){
+    rows.push('<div class="ca-row"><span class="ca-head">Cut-off soldiers starved</span></div><div class="ca-row"><span><b>'+pl.starved.n+'</b> of your soldiers died of hunger, cut off from every castle. Join the ground around them back to a castle of yours (take the squares between), or they will keep dying.</span> <button data-act="svseen">Got it</button></div>');
+  }
+  if(R.stranded>0){
+    var cutN=strandedCells(ME,R.supset).length;
+    rows.push('<div class="ca-row"><span class="ca-head">Soldiers cut off</span></div><div class="ca-row"><span><b>'+R.stranded+'</b> soldier'+(R.stranded>1?'s':'')+' in '+cutN+' band'+(cutN>1?'s':'')+' stand'+(cutN>1?'':'s')+' where no unbroken ground of yours reaches a castle. Grain does not travel: after a day of rations <b>one man dies each tick</b> until you claim the squares between and join them up again.</span></div>');
+  }
   if(net<0){
     var ticks=gr/(-net), hrs=ticks*(TICK_MS/36e5);
     if(hrs<48) rows.push('<div class="ca-row"><span class="ca-head">Grain running out</span><span class="ca-time">'+(gr<=0?'none left':'about '+fmtDur(hrs*36e5))+'</span></div><div class="ca-row"><span>You are eating <b>'+Math.round(-net*10)/10+'</b> more grain a tick than you earn, and have <b>'+gr+'</b>. When it runs out, <b>hungry soldiers desert</b> and trebuchets are abandoned. Send grain, draw soldiers down, or join more farms.</span></div>');
@@ -8681,6 +8809,7 @@ function renderHungerAlert(){
 document.getElementById('hungeralert').addEventListener('click',function(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G||!me()) return;
   if(b.getAttribute('data-act')==='hgseen'){ if(me().des) me().des.seen=true; pushMe(); renderHungerAlert(); }
+  if(b.getAttribute('data-act')==='svseen'){ if(me().starved) me().starved.seen=true; pushMe(); renderHungerAlert(); }
 });
 document.getElementById('horsealert').addEventListener('click',function(ev){
   var b=ev.target.closest('button[data-act]'); if(!b||!G) return;
