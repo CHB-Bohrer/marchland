@@ -1931,6 +1931,31 @@ function settlePudding(){
   }).catch(function(){}).then(function(){ puddinging=false; });
   return true;
 }
+/* ── Pudding's bridge bounty ──  Pudding spotted soldiers walking over a river after the bridge they were crossing had been broken.
+   Ten marches for finding the bug, paid once (G.fixes.bridge1, claimed with a conditional write so it can only happen once), with a line
+   in the chat from the gods. The one-time scroll for everyone is the 'nov15-bridge' note. Needs exactly one player named Pudding. */
+var BRIDGE_BOUNTY=10, bridging=false;
+function settleBridgeBounty(){
+  if(!online||bridging||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.bridge1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pu=judgePids(['pudding']); if(pu.length!==1) return false;
+  var pid=pu[0], now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,n:BRIDGE_BOUNTY,t:now};
+  bridging=true;
+  dbPutIf(base+'/fixes/bridge1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.bridge1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.bridge1=rec0;
+    var gid=q36(now)+'-'+pid, rec={pid:pid,n:BRIDGE_BOUNTY,why:'bug bounty: soldiers walking on water after a bridge was broken',by:'gods',t:now}, patch={};
+    G.grants=G.grants||{}; G.grants[gid]=rec; patch['grants/'+gid]=rec; patch['fixes/bridge1']=rec0;
+    plagueChat('A bug is slain. Pudding saw soldiers walking across a river after the bridge under them had been broken, and the gods have paid '+BRIDGE_BOUNTY+' marches for the finding of it. Soldiers can no longer walk on water.',now,'bridge1');
+    var done=function(){ patch['rev']=now; myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ me().squares=(me().squares||0)+BRIDGE_BOUNTY; render(); pushMe(); done(); }
+    else dbGet(base+'/players/'+pid+'/squares').then(function(cur){
+      var next=(cur||0)+BRIDGE_BOUNTY; patch['players/'+pid+'/squares']=next; G.players[pid].squares=next; return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ bridging=false; });
+  return true;
+}
 /* ── Pietro's castle ──  On 11 Nov Pietro battered Bohrer's castle to nothing; the clock fault raised it again before his
    soldiers arrived, and a steward reset then left it standing. Settled once (fixes/pietro1, claimed with a conditional write):
    the square becomes Pietro's with the castle razed, exactly as a seized ruin, and he is paid the bounty. Bohrer's men and
@@ -3438,6 +3463,92 @@ function trekPos(tk,t){
   var f=dt[i]?e/dt[i]:1, A=pts[i], B=pts[i+1];
   return {q:A[0]+(B[0]-A[0])*f, r:A[1]+(B[1]-A[1])*f, i:i, f:f, pts:pts};
 }
+/* ── a band on the march keeps to ground that is still its owner's ──
+   A walk stores its whole route when it sets off, and used to carry on along it whatever happened to the squares
+   underneath. Break or take a bridge (or lose any square) that a band had yet to cross and it walked straight over the
+   empty river and arrived on the far bank. Now every up-to-date screen re-checks the route of every band on the
+   road each time it redraws: if the square a band stands on, or any square still ahead of it, is no longer its owner's
+   finished ground, the band turns back (or steps on) to the nearest square that is, and goes on from there by the
+   fastest way over what its owner still holds. If its destination has been cut off, it halts at the cut-off ground
+   nearest to it. */
+var trekMending={}, trekToldRr={};
+function trekIsCell(p){ return p && p[0]===Math.round(p[0]) && p[1]===Math.round(p[1]); }
+function trekCellOk(pid,p){ var c=G.cells[key(p[0],p[1])]; return !!(c && c.o===pid && !building(c)); }
+/* every square of pid's that can be reached from (aq,ar) over pid's own finished ground, rivers only where there is a bridge */
+function trekReach(pid,aq,ar){
+  var seen={}, out=[], st=[[wrapC(aq),wrapC(ar)]];
+  seen[st[0][0]+'_'+st[0][1]]=1;
+  while(st.length){
+    var p=st.pop(); out.push(p);
+    for(var i=0;i<6;i++){
+      var nq=wrapC(p[0]+AX[i][0]), nr=wrapC(p[1]+AX[i][1]), nk=nq+'_'+nr;
+      if(seen[nk]) continue;
+      var c=G.cells[nk]; if(!c||c.o!==pid||building(c)) continue;
+      seen[nk]=1; st.push([nq,nr]);
+    }
+  }
+  return out;
+}
+/* the corrected walk for a band whose route no longer holds, or null if it is fine. Does not change the band. */
+function trekMend(tk,now){
+  var pid=tk.o, pp=arr(tk.path), dts=arr(tk.dt);
+  if(!pp.length||!dts.length) return null;
+  var pos=trekPos(tk,now); if(!pos||pos.i>=dts.length) return null;      // not on the road, or already there
+  var i=pos.i, f=pos.f, stand=(f<0.5?pp[i]:pp[i+1])||pp[i], bad=false, j;
+  if(trekIsCell(stand) && !trekCellOk(pid,stand)) bad=true;
+  for(j=i+1;j<pp.length && !bad;j++){ if(trekIsCell(pp[j]) && !trekCellOk(pid,pp[j])) bad=true; }
+  if(!bad) return null;
+  // where they can turn: finish the step they are on, or go back to the square they just left, whichever of those is still held
+  var opts=[];
+  if(trekIsCell(pp[i+1]) && trekCellOk(pid,pp[i+1])) opts.push({c:pp[i+1], lead:Math.round((1-f)*dts[i])});
+  if(trekIsCell(pp[i])   && trekCellOk(pid,pp[i]))   opts.push({c:pp[i],   lead:Math.round(f*dts[i])});
+  if(!opts.length){                                     // both ends are gone: they wade ashore onto the nearest ground of theirs
+    var bestd=1e9, bc=null;
+    for(var k in G.cells){ var cc=G.cells[k]; if(cc.o!==pid||building(cc)) continue; var pp2=k.split('_'), cq=parseInt(pp2[0],10), cr=parseInt(pp2[1],10), dd=hexDist(pos.q,pos.r,cq,cr); if(dd<bestd){ bestd=dd; bc=[cq,cr]; } }
+    if(!bc) return null;
+    opts.push({c:bc, lead:Math.round(bestd*TREK_MS_CELL)});
+  }
+  var to=tk.to, toOk=trekCellOk(pid,to), pick=null;
+  opts.forEach(function(o){
+    var dest=to, tp=toOk?trekPath(pid,o.c[0],o.c[1],to[0],to[1]):null, reached=!!tp;
+    if(!tp){                                           // the destination can't be reached from here: stop at the nearest ground they can reach
+      var reach=trekReach(pid,o.c[0],o.c[1]), bd=1e9;
+      reach.forEach(function(p){ var d=hexDist(to[0],to[1],p[0],p[1]); if(d<bd){ bd=d; dest=p; } });
+      tp=trekPath(pid,o.c[0],o.c[1],dest[0],dest[1]);
+    }
+    if(!tp) return;
+    var score=(reached?0:1e12)+o.lead+tp.ms;
+    if(!pick || score<pick.score) pick={score:score, lead:o.lead, tp:tp, dest:dest, reached:reached};
+  });
+  if(!pick) return null;
+  var r3=function(v){ return Math.round(v*1000)/1000; }, start=[r3(wrapC(pos.q)),r3(wrapC(pos.r))];
+  return {from:start, to:[wrapC(pick.dest[0]),wrapC(pick.dest[1])], t:now, eta:now+Math.max(60000,pick.lead+pick.tp.ms),
+          path:[start].concat(pick.tp.path), dt:[Math.max(1,pick.lead)].concat(pick.tp.dt), reached:pick.reached};
+}
+function guardTreks(){
+  if(!G||!G.treks||!G.cells||!Object.keys(G.cells).length||!boardFresh()) return 0;
+  var now=Date.now(), n=0;
+  Object.keys(G.treks).forEach(function(id){
+    var tk=G.treks[id]; if(!tk||!tk.path||!(tk.eta>now)||!tk.to) return;
+    if(trekMending[id] && now-trekMending[id]<8000) return;                       // a correction for this band is already on its way to the database
+    if(tk.o===ME && tk.rr) trekTell(id,tk);                                       // somebody else's screen turned my band back: tell me once
+    var fix; try{ fix=trekMend(tk,now); }catch(e){ fix=null; }
+    if(!fix) return;
+    trekMending[id]=now; n++;
+    tk.from=fix.from; tk.to=fix.to; tk.t=fix.t; tk.eta=fix.eta; tk.path=fix.path; tk.dt=fix.dt;
+    tk.rr=(tk.rr||0)+1; tk.rrs=fix.reached?'The way ahead was cut':'The way to their destination was cut';
+    if(selTrek===id) selTrek=null;
+    if(tk.o===ME) trekTell(id,tk);
+    putPath('/treks/'+id,tk);
+  });
+  return n;
+}
+function trekTell(id,tk){
+  if(trekToldRr[id+':'+tk.rr]) return;
+  trekToldRr[id+':'+tk.rr]=1;
+  var wl=tk.rrs||'A bridge or square on their way was lost';
+  setTimeout(function(){ say('<span class="bad"><b>Your band on the march was stopped.</b></span> '+esc(wl)+'. Soldiers can&rsquo;t walk on water: they turned back, and go on only over ground you still hold.'); },60);
+}
 /* ── the road on the map: a pale packed-earth track between the centres of neighbouring road squares ── */
 function drawRoads(roads,detail){
   if(!roads.length) return;
@@ -4193,8 +4304,10 @@ function settleTreks(){
     var spot=null, dc=G.cells[key(t.to[0],t.to[1])];
     if(dc && dc.o===ME && !building(dc)) spot=[t.to[0],t.to[1]];
     else {
-      var best=1e9;
-      for(var k in G.cells){ var cc=G.cells[k]; if(cc.o!==ME||building(cc)) continue; var p=k.split('_'), pq=parseInt(p[0],10), pr=parseInt(p[1],10), dd=hexDist(t.to[0],t.to[1],pq,pr); if(dd<best){ best=dd; spot=[pq,pr]; } }
+      var best=1e9, pool=null, pa=arr(t.path);
+      for(var pi=pa.length-1;pi>=0;pi--){ if(trekIsCell(pa[pi]) && trekCellOk(ME,pa[pi])){ pool=trekReach(ME,pa[pi][0],pa[pi][1]); break; } }   // ground they can actually walk to, not the far side of a river
+      if(pool && pool.length){ pool.forEach(function(pp3){ var d3=hexDist(t.to[0],t.to[1],pp3[0],pp3[1]); if(d3<best){ best=d3; spot=[pp3[0],pp3[1]]; } }); }
+      else for(var k in G.cells){ var cc=G.cells[k]; if(cc.o!==ME||building(cc)) continue; var p=k.split('_'), pq=parseInt(p[0],10), pr=parseInt(p[1],10), dd=hexDist(t.to[0],t.to[1],pq,pr); if(dd<best){ best=dd; spot=[pq,pr]; } }
     }
     delete G.treks[id]; gone.push(id);
     if(!spot) return;                                  // nowhere left to stand
@@ -6301,6 +6414,7 @@ function render(){
     settleMine();
     settleCaravans();
     settleHorses();
+    guardTreks();
     settleTreks();
     settleCrusades();
     settleCrusadeDues();
@@ -6312,6 +6426,7 @@ function render(){
     settleComet();
     settleComet2();
     settlePudding();
+    settleBridgeBounty();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -7702,6 +7817,10 @@ var NOTES=[
    html:'<p>If you <b>don&rsquo;t open the game for 3 days</b>, you start losing ground: <b>one square a day</b>, starting with the outermost.</p>'
      +'<p>For now <b>only bare squares</b> are taken. Anything built on a square keeps it safe: a castle, tower, wall, road, trebuchet, soldiers, or a castle going up, and your bridges too.</p>'
      +'<p>Opening the game stops it at once. Going away for a trip? Log in once every couple of days and you lose nothing.</p>', go:'Understood'},
+  {id:'nov15-bridge', eyebrow:'A fix', title:'Soldiers can no longer walk on water',
+   html:'<p>A sharp-eyed player named <b>Pudding</b> found a bug: if a band of soldiers set off across a bridge, and the bridge was <b>broken before they reached it</b>, they carried on regardless and crossed the empty river as though it were a road. Someone had been doing their best impression of a saint.</p>'
+     +'<p><b>That is fixed.</b> A band on the march now checks the ground ahead of it as it goes. If a bridge on its route is broken or taken, or any square on the way is lost, the band <b>turns back</b> to the nearest ground that is still yours and finds the fastest way round over what you hold. If there is no way round, it halts at the river&rsquo;s edge nearest to where it was going, and a message tells you so. Trebuchets on the march are held up the same way.</p>'
+     +'<p>For finding it, Pudding has been paid <b>10 marches</b>. Spotted something else that looks wrong? Say so, and the gods may be generous.</p>', go:'Understood'},
   {id:'nov14-strand', eyebrow:'A rule changed', title:'Grain does not teleport: cut-off soldiers starve',
    html:'<p>Until now, soldiers stranded deep in someone else&rsquo;s land (after a Trojan horse, say) ate from the grain in their home keep, however far away, so they could stand there forever. <b>That was a mistake.</b></p>'
      +'<p><b>The new rule:</b> soldiers are fed only while their square is joined to one of your standing castles by <b>unbroken ground of yours</b>. A band cut off from every castle has <b>one day of rations</b>, then <b>loses one man each tick</b> until the squares around it are joined back up. A cut-off band also no longer costs your home granary anything.</p>'
