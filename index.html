@@ -307,6 +307,14 @@ canvas{ display:block; width:100%; height:auto; touch-action:none; cursor:crossh
 .dip-b.on.dip-a{ background:#2f6b2a; color:#fff; border-color:#1d4a1a; }
 .dip-b.on.dip-n{ background:#6b5a3a; color:#fff; border-color:#4a3d25; }
 .dip-b.on.dip-e{ background:#a3210f; color:#fff; border-color:#5a0f05; }
+.led-tabs{ display:flex; gap:6px; margin:6px 0 8px; }
+.led-tab{ flex:1; min-height:36px; padding:4px 6px; border:1px solid rgba(90,60,20,.45); border-radius:6px; background:transparent; color:inherit; font:inherit; cursor:pointer; }
+.led-tab.on{ background:#6b4a1c; color:#fff; border-color:#3f2a0e; }
+.led-top{ font-size:14px; margin:2px 0 6px; padding:6px 8px; border:1px dashed rgba(90,60,20,.45); border-radius:6px; }
+.led-card{ border-top:1px solid rgba(90,60,20,.25); padding:7px 0 5px; }
+.led-card .led-h{ font-size:14px; margin-bottom:3px; }
+.led-line{ font-size:13px; padding-left:10px; }
+.led-me{ font-weight:bold; }
 .mapctl button{ width:30px; height:30px; padding:0; justify-content:center; font-family:var(--mono); opacity:.95; }
 .status{ padding:10px 12px; border-top:1px solid var(--rule); font-family:var(--mono); font-size:12px; color:var(--ink-2); min-height:40px; display:flex; align-items:center; }
 .status .mini{ padding:2px 8px; font-size:11px; margin:0 2px; }
@@ -636,6 +644,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
           <button id="calm" aria-label="Animations" title="Animations on/off">&#9654;</button>
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="dipbtn" aria-label="Diplomacy board: allies, neutrals and enemies" title="Diplomacy board: mark players as allies, neutral or enemies">&#9876;</button>
+          <button id="ledgerbtn" aria-label="War ledger: who took the most land, spoils and soldiers from whom" title="War ledger: who has taken the most land, stolen the most goods and killed the most soldiers, from whom">&#9760;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
           <button id="horsehelp" class="hide" aria-label="The Trojan horse: how it works and send one" title="The Trojan horse">&#128014;</button>
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
@@ -2485,6 +2494,7 @@ function absorbMine(v){                                // → true when v was an
     ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
     ['notes','cvGot'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
     if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
+    if(v.led) ledMerge(pl,v.led);
   }
   if(v.res) meBase=snapRes(v.res);
   meBaseX=snapX(v);                                    // what the database holds now, whichever way it went
@@ -2729,6 +2739,7 @@ function settleMine(){
     }
   });
   for(var v in pl.voids) if(now-pl.voids[v]>KEEP_MS+10*864e5){ delete pl.voids[v]; mine=true; }
+  if(!pl.led){ ledEnsure(pl); mine=true; }                 // first visit since the war ledger began: fold in the last week's moves before the log is tidied
   Object.keys(G.events||{}).forEach(function(id){
     var e=G.events[id]; if(e && e.pid===ME && now-e.t>EVENT_KEEP_MS){ delete G.events[id]; writes.push(['/events/'+id,null]); }
   });
@@ -3066,6 +3077,7 @@ function attackNow(q,r,band0,shown){
       var after=res.won?takeSpoils(prev,loserN):Promise.resolve({});
       return after.then(function(sp){
         if(hasGoods(sp)){ GOODS.forEach(function(g){ pl.res[g]=(pl.res[g]||0)+sp[g]; }); ev.sp=sp; ev.label='+'+goodsText(sp); }
+        ledRecord(prev,{l:res.won?1:0,k:kn.guard||0,d:res.lost,sp:sp});
         logMove('duel',q,r,[band.q,band.r],prev,res.lost,ev);
         if(collapsed) logMove('collapse',q,r,null,prev,0,{v:2,by:'duel'});
         if(hasGoods(sp)) logMove('spoils',q,r,null,prev,0,{v:2,sp:sp});
@@ -3412,6 +3424,7 @@ function breakRoadNow(q,r,band0,shown){
     return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
       if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=BREAK_ROAD_MARCH; throw {msg:'That square changed at the last moment. Nothing happened.'}; }
       pushCell(band.q,band.r); touched.forEach(function(g){ pushCell(g[0],g[1]); });
+      ledRecord(prev,{k:res.killed,d:res.lost});
       logMove('roadbreak',q,r,[band.q,band.r],prev,res.lost,{v:2,seed:seed,n:band.n,ln:L.p.map(function(x){ return Math.round(x*100); }),won:res.won?1:0,kl:res.killed});
       render(); pushMe();
       say(res.won?'<span class="good"><b>The road is broken.</b></span> '+(res.killed?'Its '+res.killed+' guard'+(res.killed>1?'s':'')+' fell. ':'')+(res.lost?'<span class="bad">'+res.lost+' of yours fell.</span> ':'')+'The square is still '+esc(nameOf(prev))+'&rsquo;s.'
@@ -5575,7 +5588,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD = 'nov8-ruins';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD = 'nov15-ledger';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -5791,6 +5804,115 @@ function openPlayerList(byJoin){
   });
 }
 document.getElementById('namesbtn').addEventListener('click',function(){ openPlayerList(false); });
+
+/* ═══ the war ledger ═══════════════════════════════════════════════════
+   A permanent tally of who has done what to whom, kept on each player's own record as pl.led = {t0, v:{victimId:{l,k,d,stone,timber,iron,grain}}}
+   (only ever written by the player it belongs to, so no one can overwrite anyone else's):
+     l = squares I have taken from them · k = their soldiers I have killed · d = my soldiers that fell attacking them · goods = what I carried off
+   A player's tally is first filled from their own moves of the last week (the move log keeps no more), then counted up from every fight after.
+   The board adds it up: soldiers X has killed of Y = X's k against Y plus Y's d against X (Y's soldiers that fell to X's defences). */
+function ledEnsure(pl){
+  if(pl.led && pl.led.v) return pl.led;
+  var led=pl.led={t0:Date.now(), v:{}};
+  Object.keys(G.events||{}).forEach(function(id){
+    var e=G.events[id]; if(!e || e.pid!==ME || !e.prev || e.prev===ME) return;
+    var v=led.v[e.prev]=led.v[e.prev]||{};
+    if(e.k==='duel'||e.k==='crusadestrike'){
+      if(e.won) v.l=(v.l||0)+1;
+      v.k=(v.k||0)+(e.k==='duel'?String(e.lt||'').slice(0,e.kl||0).split('g').length-1:(e.kl||0));
+      v.d=(v.d||0)+(e.loss||0);
+      if(e.k==='crusadestrike' && e.sp) GOODS.forEach(function(g){ if(e.sp[g]>0) v[g]=(v[g]||0)+e.sp[g]; });
+    } else if(e.k==='spoils'){
+      GOODS.forEach(function(g){ if(e.sp && e.sp[g]>0) v[g]=(v[g]||0)+e.sp[g]; });
+    } else if(e.k==='roadbreak'){
+      v.k=(v.k||0)+(e.kl||0); v.d=(v.d||0)+(e.loss||0);
+    }
+  });
+  return led;
+}
+function ledRecord(prev,o){
+  var pl=me(); if(!pl || !prev || prev===ME) return;
+  var v=ledEnsure(pl).v; v=v[prev]=v[prev]||{};
+  if(o.l) v.l=(v.l||0)+o.l;
+  if(o.k) v.k=(v.k||0)+o.k;
+  if(o.d) v.d=(v.d||0)+o.d;
+  if(o.sp) GOODS.forEach(function(g){ if(o.sp[g]>0) v[g]=(v[g]||0)+o.sp[g]; });
+}
+function ledMerge(pl,theirs){                           // counters only grow, so an older copy never beats a newer one: keep the larger of each
+  if(!theirs || !theirs.v) return;
+  var led=pl.led=pl.led||{t0:theirs.t0||Date.now(), v:{}};
+  if(theirs.t0 && theirs.t0<led.t0) led.t0=theirs.t0;
+  Object.keys(theirs.v).forEach(function(pid){
+    var a=led.v[pid]=led.v[pid]||{}, b=theirs.v[pid]||{};
+    ['l','k','d'].concat(GOODS).forEach(function(f){ if((b[f]||0)>(a[f]||0)) a[f]=b[f]; });
+  });
+}
+/* the whole realm's ledger as {attacker:{victim:{l,k,d,goods,total}}} for the three boards */
+function ledgerTable(view){
+  var ps=G.players, out={};
+  function goodsOf(v){ var g={}, n=0; GOODS.forEach(function(k){ if(v[k]>0){ g[k]=v[k]; n+=v[k]; } }); return {g:g,n:n}; }
+  Object.keys(ps).forEach(function(a){
+    var av=(ps[a].led&&ps[a].led.v)||{}, row={};
+    Object.keys(ps).forEach(function(b){
+      if(a===b) return;
+      var x=av[b]||{}, bv=((ps[b].led&&ps[b].led.v)||{})[a]||{}, n=0, g=null;
+      if(view==='land') n=x.l||0;
+      else if(view==='spoils'){ var gg=goodsOf(x); n=gg.n; g=gg.g; }
+      else n=(x.k||0)+(bv.d||0);
+      if(n>0) row[b]={n:n,g:g,lost:view==='kills'?(bv.k||0)+(x.d||0):0};
+    });
+    Object.keys(av).forEach(function(b){            // victims who have since left the game still count
+      if(ps[b]||b===a) return; var x=av[b], n=0, g=null;
+      if(view==='land') n=x.l||0; else if(view==='spoils'){ var gg=goodsOf(x); n=gg.n; g=gg.g; } else n=x.k||0;
+      if(n>0) row[b]={n:n,g:g,lost:view==='kills'?(x.d||0):0};
+    });
+    if(Object.keys(row).length) out[a]=row;
+  });
+  return out;
+}
+var LED_VIEWS={
+  land:{tab:'Land', title:'Who has taken land from whom', unit:function(n){ return n+' square'+(n>1?'s':''); }, verb:'took', obj:'from'},
+  spoils:{tab:'Spoils', title:'Who has stolen from whom', unit:function(n,g){ return goodsText(g||{}); }, verb:'carried off', obj:'from'},
+  kills:{tab:'Soldiers', title:'Who has killed whose soldiers', unit:function(n){ return n+' soldier'+(n>1?'s':''); }, verb:'killed', obj:'of'}
+};
+function ledgerHtml(view){
+  var V=LED_VIEWS[view], tab=ledgerTable(view), ps=G.players;
+  function nm(pid){ return pid===ME?'<span class="led-me">you</span>':esc(nameOf(pid)); }
+  var rows=Object.keys(tab).map(function(a){
+    var vs=Object.keys(tab[a]).sort(function(x,y){ return tab[a][y].n-tab[a][x].n; }), tot=vs.reduce(function(t,b){ return t+tab[a][b].n; },0);
+    return {a:a,vs:vs,tot:tot};
+  }).sort(function(x,y){ return y.tot-x.tot; });
+  if(!rows.length) return '<p class="muted">Nothing yet. Every fight from now on is counted here, and each player&rsquo;s moves of the past week are folded in the first time they open the game.</p>';
+  var best=null; rows.forEach(function(r){ r.vs.forEach(function(b){ if(!best||tab[r.a][b].n>best.n) best={a:r.a,b:b,n:tab[r.a][b].n,g:tab[r.a][b].g}; }); });
+  var top='<div class="led-top"><b>Fiercest feud:</b> '+nm(best.a)+' '+V.verb+' <b>'+V.unit(best.n,best.g)+'</b> '+(view==='kills'?'of ':'from ')+nm(best.b)+'.</div>';
+  return top+'<div class="dip-rows">'+rows.map(function(r){
+    var inT=tab[r.a], tg=view==='spoils'?goodsText(r.vs.reduce(function(g,b){ GOODS.forEach(function(k){ if(inT[b].g&&inT[b].g[k]) g[k]=(g[k]||0)+inT[b].g[k]; }); return g; },{})):V.unit(r.tot);
+    return '<div class="led-card"><div class="led-h">'+nm(r.a)+' '+V.verb+' <b>'+tg+'</b> in all</div>'
+      +r.vs.map(function(b){
+        var t=inT[b], victimMe=(b===ME);
+        return '<div class="led-line">'+(view==='kills'?'of ':'from ')+(victimMe?'<span class="bad">'+nm(b)+'</span>':nm(b))+': <b>'+V.unit(t.n,t.g)+'</b>'
+          +(view==='kills'&&t.lost?'<span class="muted"> &middot; lost '+t.lost+' of their own to them in return</span>':'')+'</div>';
+      }).join('')+'</div>';
+  }).join('')+'</div>';
+}
+function openLedger(view){
+  if(!G||!me()) return;
+  view=LED_VIEWS[view]?view:'land';
+  var tabs='<div class="led-tabs" role="tablist">'+Object.keys(LED_VIEWS).map(function(v){ return '<button type="button" class="led-tab'+(v===view?' on':'')+'" role="tab" data-v="'+v+'" aria-selected="'+(v===view)+'">'+LED_VIEWS[v].tab+'</button>'; }).join('')+'</div>';
+  var note='<p class="muted" style="font-size:11px;margin:6px 0 0">Counted from the fights each player has fought; crusade strikes are credited to the one who led them. Soldiers killed include the ones a player&rsquo;s defences brought down.</p>';
+  scrollDialog({eyebrow:'War ledger', title:'The reckoning of the realm', cancel:null,
+    html:tabs+'<div class="led-body">'+ledgerHtml(view)+'</div>'+note,
+    buttons:[{label:'Close',value:null,primary:true}],
+    onOpen:function(box){
+      box.addEventListener('click',function(ev){
+        var b=ev.target.closest('.led-tab'); if(!b) return;
+        var v=b.getAttribute('data-v');
+        [].slice.call(box.querySelectorAll('.led-tab')).forEach(function(x){ var on=x===b; x.classList.toggle('on',on); x.setAttribute('aria-selected',on); });
+        box.querySelector('.led-body').innerHTML=ledgerHtml(v);
+      });
+    }});
+}
+document.getElementById('ledgerbtn').addEventListener('click',function(){ openLedger('land'); });
 
 /* ═══ the Diplomacy board ═══════════════════════════════════════════════
    Pure bookkeeping, no rules attached. Each player marks every other player as an ally ('a'), an enemy ('e') or
@@ -7581,6 +7703,7 @@ function strikeNow(id,q,r,pool0,shown){
         patch['strikes/'+sid]={by:ME,q:q,r:r,t:now,seed:seed,won:res.won?1:0,pool:w,loss:loss};
         dbPatch('/marchland/'+gameCode+'/crusades/'+id,patch).then(bumpRev);
         for(var pk2 in patch){ var parts=pk2.split('/'), o=c; for(var j=0;j<parts.length-1;j++){ o[parts[j]]=o[parts[j]]||{}; o=o[parts[j]]; } o[parts[parts.length-1]]=patch[pk2]; }
+        ledRecord(prev,{l:res.won?1:0,k:kn.guard||0,d:res.lost,sp:sp});
         logMove('crusadestrike',q,r,[pool0[0].q,pool0[0].r],prev,res.lost,{v:2,cid:id,seed:seed,n:tot,ln:L.p.map(function(x){ return Math.round(x*100); }),won:res.won?1:0,kl:res.killed,pool:w,lsh:loss,pw:pw||null,pk:pk||null,pl:pk?plv:null,pg:pk?pg:null,sp:hasGoods(sp)?sp:null});
         render(); pushMe();
         say(res.won?'<span class="good"><b>The crusade takes the square.</b></span> Losses: '+Object.keys(loss).map(function(p){ return esc(nameOf(p))+' '+loss[p]; }).join(', ')+'.'+(bounty?' The bounty of '+bounty+' is shared.':'')+(hasGoods(sp)?' Spoils shared: '+goodsText(sp)+'.':'')
