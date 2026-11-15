@@ -2332,9 +2332,31 @@ function fieldOf(pid){ var n=0; for(var k in G.cells){ var c=G.cells[k]; if(c.o=
    ticks of rations, then loses one man a tick until the ground around it is joined up again (or it is brought home).
    Their own bread no longer costs the home granary, either. */
 var STRAND_GRACE_TICKS=6;                             // one day (a tick is four hours)
+/* Soldiers are fed on any square joined by unbroken own ground to a standing castle OR to a finished grain square
+   the owner holds (a farm they occupy). A farm feeds the men connected to it even with no castle at all. */
+function fedGround(pid,sup){
+  sup=sup||supplied(pid); var set={}, stack=[];
+  for(var k in sup){ set[k]=1; }
+  for(var k2 in G.cells){
+    var c=G.cells[k2]; if(c.o!==pid || building(c) || set[k2]) continue;
+    var p=k2.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
+    if(isFarmCell(c,q,r)){ set[k2]=1; stack.push([q,r]); }
+  }
+  for(var k3 in sup){ var p3=k3.split('_'); stack.push([parseInt(p3[0],10),parseInt(p3[1],10)]); }
+  while(stack.length){
+    var cur=stack.pop();
+    for(var i=0;i<6;i++){
+      var nq=cur[0]+AX[i][0], nr=cur[1]+AX[i][1], nk=key(nq,nr);
+      if(set[nk]) continue;
+      var n=G.cells[nk];
+      if(n && n.o===pid && !building(n)){ set[nk]=1; stack.push([nq,nr]); }
+    }
+  }
+  return set;
+}
 function strandedCells(pid,sup){
-  sup=sup||supplied(pid); var out=[];
-  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0 && !building(c) && !sup[k]) out.push(k); }
+  var fed=fedGround(pid,sup), out=[];
+  for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid && c.b>0 && !building(c) && !fed[k]) out.push(k); }
   return out;
 }
 function strandedMen(pid,sup){ var n=0; strandedCells(pid,sup).forEach(function(k){ n+=G.cells[k].b||0; }); return n; }
@@ -2398,7 +2420,7 @@ function catchUp(pid){
       if(gone0>gone){ var dz=pl.des&&!pl.des.seen?pl.des:(pl.des={n:0,t:0,seen:false}); dz.n+=gone0-gone; dz.t=Date.now(); }   // remembered, so the warning shows until it is read
     }
     // cut-off bands: a day of rations, then one man dies each tick until they are joined to a castle again
-    var sup0=R.supset, strK=strandedCells(pid,sup0), lostStr=0;
+    var sup0=fedGround(pid,R.supset), strK=strandedCells(pid,R.supset), lostStr=0;
     strK.forEach(function(sk){
       var sc=G.cells[sk]; sc.sv=(sc.sv||0)+1; touched[sk]=1;
       if(sc.sv>STRAND_GRACE_TICKS){ sc.b-=1; lostStr++; addGraves(sc,1); if(!(sc.b>0)){ delete sc.b; delete sc.sv; } }
@@ -4139,7 +4161,7 @@ function cellTitle(c){
   else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
-  if(c.o&&c.b>0){ sub.push('band of '+c.b); if(c.o===ME && !building(c) && !supplied(ME)[key(c.q,c.r)]){ var sv0=c.sv||0; sub.push(sv0>STRAND_GRACE_TICKS?'<span class="bad">cut off &mdash; starving, losing a man every tick</span>':'<span class="bad">cut off from every castle &mdash; starves in '+fmtDur((STRAND_GRACE_TICKS-sv0+1)*TICK_MS)+'</span>'); } }
+  if(c.o&&c.b>0){ sub.push('band of '+c.b); if(c.o===ME && !building(c) && !fedGround(ME)[key(c.q,c.r)]){ var sv0=c.sv||0; sub.push(sv0>STRAND_GRACE_TICKS?'<span class="bad">cut off &mdash; starving, losing a man every tick</span>':'<span class="bad">cut off from every castle and farm &mdash; starves in '+fmtDur((STRAND_GRACE_TICKS-sv0+1)*TICK_MS)+'</span>'); } }
   if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]+(c.wd?' (cracked)':''));
   if(c.o&&c.tb>0) sub.push(c.tb+' trebuchet'+(c.tb>1?'s':''));
   if(c.o&&c.rd) sub.push(roadUp(c)?'road ready in '+hoursLeft(c.rf):(liveRoads(c.o)[key(c.q,c.r)]?'live road':'dead road, cut off from every castle'));
@@ -9035,11 +9057,11 @@ function renderHungerAlert(){
     rows.push('<div class="ca-row"><span class="ca-head">Hungry men deserted</span></div><div class="ca-row"><span>Your grain ran out, and <b>'+pl.des.n+'</b> soldier'+(pl.des.n>1?'s':'')+' (or trebuchets) walked off. Keep your grain above zero, or more will go.</span> <button data-act="hgseen">Got it</button></div>');
   }
   if(pl.starved && !pl.starved.seen && pl.starved.n>0){
-    rows.push('<div class="ca-row"><span class="ca-head">Cut-off soldiers starved</span></div><div class="ca-row"><span><b>'+pl.starved.n+'</b> of your soldiers died of hunger, cut off from every castle. Join the ground around them back to a castle of yours (take the squares between), or they will keep dying.</span> <button data-act="svseen">Got it</button></div>');
+    rows.push('<div class="ca-row"><span class="ca-head">Cut-off soldiers starved</span></div><div class="ca-row"><span><b>'+pl.starved.n+'</b> of your soldiers died of hunger, cut off from every castle and grain square. Join the ground around them back to a castle or a grain square of yours (take the squares between), or they will keep dying.</span> <button data-act="svseen">Got it</button></div>');
   }
   if(R.stranded>0){
     var cutN=strandedCells(ME,R.supset).length;
-    rows.push('<div class="ca-row"><span class="ca-head">Soldiers cut off</span></div><div class="ca-row"><span><b>'+R.stranded+'</b> soldier'+(R.stranded>1?'s':'')+' in '+cutN+' band'+(cutN>1?'s':'')+' stand'+(cutN>1?'':'s')+' where no unbroken ground of yours reaches a castle. Grain does not travel: after a day of rations <b>one man dies each tick</b> until you claim the squares between and join them up again.</span></div>');
+    rows.push('<div class="ca-row"><span class="ca-head">Soldiers cut off</span></div><div class="ca-row"><span><b>'+R.stranded+'</b> soldier'+(R.stranded>1?'s':'')+' in '+cutN+' band'+(cutN>1?'s':'')+' stand'+(cutN>1?'':'s')+' where no unbroken ground of yours reaches a castle or a grain square. Grain does not travel: after a day of rations <b>one man dies each tick</b> until you claim the squares between and join them up again.</span></div>');
   }
   if(net<0){
     var ticks=gr/(-net), hrs=ticks*(TICK_MS/36e5);
