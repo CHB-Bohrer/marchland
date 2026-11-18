@@ -2010,6 +2010,22 @@ function settlePietro(){
   }).catch(function(){}).then(function(){ pietroing=false; });
   return true;
 }
+/* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
+   conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
+var chatterng=false;
+function settleChatter(){
+  if(!online||chatterng||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.chatter1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var now=Date.now(), rec0={t:now};
+  chatterng=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/chatter1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.chatter1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.chatter1=rec0; bumpRev().then(ok,fail);
+    plagueChat('The gods are tired of so much chatter. Each of you may speak twice per tick; every message after that costs '+CHAT_FEE+' stone, '+CHAT_FEE+' timber, '+CHAT_FEE+' iron and '+CHAT_FEE+' grain. Choose your words wisely.',now,'chatter1');
+  }).catch(function(){}).then(function(){ chatterng=false; });
+  return true;
+}
 function settleTurkey(){
   if(!online||turkeying||!G||!G.players||dirty||ELIM||!boardFresh()||G.turkeyhunt||!turkeyOpen()) return false;
   if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
@@ -2517,6 +2533,7 @@ function absorbMine(v){                                // → true when v was an
     }
     if((v.lastCollect||0)>(pl.lastCollect||0)) pl.lastCollect=v.lastCollect;
     ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
+    if(v.cq && (!pl.cq || v.cq.k>pl.cq.k || (v.cq.k===pl.cq.k && (v.cq.n||0)>(pl.cq.n||0)))) pl.cq=v.cq;   // chat messages this tick: the higher count wins
     ['notes','cvGot'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
     if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
     if(v.led) ledMerge(pl,v.led);
@@ -6879,6 +6896,7 @@ function render(){
     settleComet2();
     settlePudding();
     settleBridgeBounty();
+    settleChatter();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8253,6 +8271,11 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov18-chatter', eyebrow:'The gods have spoken', title:'The gods are tired of so much chatter',
+   html:'<p>The heavens are weary. Day and night the gods have listened to <b>idle gossip, banter and bellowing</b> drifting up from the chat bar, and they have had <b>quite enough</b>.</p>'
+     +'<p><b>From now on, each player may speak freely twice per tick</b> (a tick is four hours). After those two messages, the gods will hear you only if you pay: <b>10 stone, 10 timber, 10 iron and 10 grain</b> for every further message.</p>'
+     +'<p>The chat bar tells you how many free messages you have left, and the Send button shows the price once they are spent. Your free messages return with every new tick. The gods themselves, of course, may speak as often as they please.</p>'
+     +'<p>Choose your words wisely, warriors. Silence is cheap.</p>', go:'We hear you'},
   {id:'nov26-castlesurround', eyebrow:'A rule changed', title:'Castles: the straight line is gone',
    html:'<p><b>My apologies.</b> I thought the castle rule was only that a new castle had to be <i>connected</i> to your others. I had actually made it a <b>literal straight line</b> of your ground to another castle, and a playtester pointed out how brutal that is for new players, especially anyone squeezed between two kingdoms, who could end up building two to four castles just to place one where they wanted.</p>'
      +'<p><b>The new rule.</b> You may found a castle wherever <b>all six squares touching it are finished ground of yours</b> (a river square is fine). It then takes <b>a day to raise, like a bridge</b>, and nothing is paid until it stands. If an enemy takes any of those six squares, or the site itself, before it is done, <b>the building stops</b>. It still needs a farm joined to it and must stand seven cells clear of your other keeps.</p>'
@@ -9751,6 +9774,23 @@ setInterval(function(){                               // nothing done for a whil
    revision key: messages are fetched only when that key has moved. A hidden
    tab polls nothing. Messages older than 30 days are tidied away.          */
 var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
+/* The gods tire of chatter: each player gets CHAT_FREE messages per tick (the same 4-hour clock the harvest uses, counted
+   from the epoch so everyone shares the same window). Every message after that costs CHAT_FEE of each of the four
+   resources. The count is kept on the player's own record (pl.cq = {k: tick number, n: messages sent in it}) so a second
+   device or a cleared browser cannot reset it; the messages in the feed count too, whichever is higher wins. */
+var CHAT_FREE=2, CHAT_FEE=10;
+function chatTickNo(){ return Math.floor(Date.now()/TICK_MS); }
+function chatUsed(){
+  var k=chatTickNo(), pl=G&&me(), n=(pl&&pl.cq&&pl.cq.k===k)?(pl.cq.n||0):0, from=k*TICK_MS, f=0;
+  Object.keys(chat.msgs).forEach(function(id){ var m=chat.msgs[id]; if(m&&m.pid===ME&&m.t>=from&&!m.failed) f++; });
+  return Math.max(n,f);
+}
+function chatFeeHint(){
+  var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
+  var left=CHAT_FREE-chatUsed();
+  inp.placeholder=left>0?'Message everyone… ('+left+' free this tick)':'Message everyone… (costs '+CHAT_FEE+' of each resource)';
+  btn.textContent=left>0?'Send':'Send · '+CHAT_FEE+' each';
+}
 var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, toEnd:true};
 function chatUrl(sub,query){ return window.DB_URL.replace(/\/$/,'')+'/marchland/chat_'+GAME_CODE+sub+'.json'+(query||''); }
 function chatGet(sub,query){
@@ -9786,7 +9826,7 @@ function chatPreview(){
     +' <span class="muted">&middot; '+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span>';
 }
 function chatRender(){
-  chatPreview();
+  chatPreview(); chatFeeHint();
   if(!chat.open){ chatBadge(); return; }
   var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
@@ -9851,8 +9891,16 @@ function chatSend(){
   var inp=document.getElementById('chat-in'), txt=(inp.value||'').replace(/\s+/g,' ').trim().slice(0,CHAT_MAX);
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
+  var pl=me(), pay=chatUsed()>=CHAT_FREE;
+  if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
+    var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
+    if(lack.length){ chatNote('The gods are weary of chatter. Another message costs '+CHAT_FEE+' of every resource, and you are short of '+lack.join(', ')+'. Your free messages return next tick.'); return; }
+  }
   chat.lastSend=Date.now();
-  var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36);
+  var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36), kNo=chatTickNo();
+  pl.cq=(pl.cq&&pl.cq.k===kNo)?pl.cq:{k:kNo,n:0}; pl.cq.n=(pl.cq.n||0)+1;
+  if(pay){ GOODS.forEach(function(g){ pl.res[g]-=CHAT_FEE; }); render(); }
+  pushMe();
   var m={pid:ME, n:full(me()), t:t, m:txt};
   chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, pending:true};
   inp.value=''; chatNote(''); chat.toEnd=true; chatRender();
@@ -9861,6 +9909,12 @@ function chatSend(){
     return chatPut('/rev',t);
   }).then(function(){ chatRender(); chatPoll(true); }, function(){
     if(chat.msgs[id]){ chat.msgs[id].failed=true; }
+    var pl2=me();                                    // it never went out: give the offering and the free message back
+    if(pl2){
+      if(pl2.cq&&pl2.cq.k===kNo&&pl2.cq.n>0) pl2.cq.n--;
+      if(pay){ GOODS.forEach(function(g){ pl2.res[g]=(pl2.res[g]||0)+CHAT_FEE; }); render(); }
+      pushMe();
+    }
     chatRender();
     if(!inp.value) inp.value=txt;
     chatNote('That message did not send — check your connection and press Send again.');
@@ -9886,7 +9940,7 @@ function chatStart(){
   chatPoll(true);
   setTimeout(chatTidy,15000);
   setInterval(function(){ chat.tick++; if(chat.open || chat.tick%2===0) chatPoll(false); },5000);   // every 5 s with the history open, 10 s otherwise
-  setInterval(function(){ if(!document.hidden) chatPreview(); },30000);                              // keeps "2m ago" honest
+  setInterval(function(){ if(!document.hidden){ chatPreview(); chatFeeHint(); } },30000);            // keeps "2m ago" and the free-message count honest
 }
 document.getElementById('chat-toggle').addEventListener('click',function(){ chatToggle(!chat.open); });
 document.getElementById('chat-form').addEventListener('submit',function(e){ e.preventDefault(); chatSend(); });
