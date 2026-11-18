@@ -2090,6 +2090,53 @@ function settleIronGift(){
   }).catch(function(){}).then(function(){ irongifting=false; });
   return true;
 }
+/* ── Anna's second account ──  Anna made a second account ("sry acc new") to dodge the chat fee. Once (fixes/anna1, claimed with a
+   conditional write): the new account is burned (account gone, its squares wiped, like a removal) and comets fall on three of
+   Anna's own squares for 2 days (flags bn and cm, as with Kit and Soul Crusher). Announced in the chat; the scroll is 'nov18-anna'. */
+var annaing=false;
+function settleAnna(){
+  if(!online||annaing||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.anna1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var an=judgePids(['anna']); if(an.length!==1) return false;
+  var fk=judgePids(['sryaccnew']); if(fk.length>1) return false;
+  var apid=an[0], fpid=fk[0]||null, now=Date.now(), base='/marchland/'+gameCode, burnEnd=now+COMET_BURN_MS;
+  var hit=Object.keys(G.cells).filter(function(ck){
+    var cc=G.cells[ck]; return cc.o===apid && !cc.k && !building(cc) && !burning(cc,now);
+  }).sort(function(a,b){
+    var pa=a.split('_'), pb=b.split('_');
+    return artHash(parseInt(pa[0],10),parseInt(pa[1],10),779)-artHash(parseInt(pb[0],10),parseInt(pb[1],10),779);
+  }).slice(0,3);
+  var rec0={anna:apid,fake:fpid,burn:hit,burnEnd:burnEnd,t:now};
+  annaing=true;
+  dbPutIf(base+'/fixes/anna1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.anna1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.anna1=rec0;
+    var patch={'fixes/anna1':rec0}, mineOut=false, k, c;
+    hit.forEach(function(ck){ c=G.cells[ck]; if(!c||c.o!==apid) return; c.bn=burnEnd; c.cm=1; patch['cells/'+ck]=c; });
+    if(fpid){
+      G.fallen=G.fallen||{}; G.removed=G.removed||{};
+      for(k in G.cells){
+        c=G.cells[k]; if(c.o!==fpid) continue;
+        if(c.gv && c.gv.length){ G.cells[k]={o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}; patch['cells/'+k]=G.cells[k]; }
+        else { delete G.cells[k]; patch['cells/'+k]=null; }
+      }
+      Object.keys(G.caravans||{}).forEach(function(id){
+        var cv=G.caravans[id]; if(cv && (cv.to===fpid||cv.from===fpid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
+      });
+      patch['players/'+fpid]=null; patch['fallen/'+fpid]=now; G.fallen[fpid]=now;
+      patch['removed/'+fpid+'anna1']=now; G.removed[fpid+'anna1']=now;
+      if(fpid===ME) mineOut=true; else delete G.players[fpid];
+    }
+    patch['rev']=now; myRev=now; cellsGen++;
+    dbPatch(base,patch).then(ok,fail);
+    cometChat('The gods have seen what Anna did. She made a second account to slip past the chat fee, and the gods will not be tricked.',now,'anna1a');
+    cometChat('The false account is burned to ash, and great comets fall on three of Anna’s own squares. They burn for 2 days and give nothing until the fire dies.',now,'anna1b');
+    cometChat('One account to a warrior. The next comet may have your name on it.',now,'anna1c');
+    if(mineOut) showEliminated();
+  }).catch(function(){}).then(function(){ annaing=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -6984,6 +7031,7 @@ function render(){
     settleChatter();
     settleMonkeyBounty();
     settleIronGift();
+    settleAnna();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8368,6 +8416,10 @@ var NOTES=[
      +'<p>He was right. The rule that takes land from players who have been away was sometimes working from an <b>out-of-date copy of the board</b>. That meant it could take a square that a neighbour had <b>just claimed</b>, and could even count someone who had played that very day as absent.</p>'
      +'<p><b>That is fixed.</b> Before any land is taken from an absent player, the game now checks the live board: that the player really has been away for three days, and that the square is <b>still theirs</b>. A square you claim stays yours.</p>'
      +'<p>For finding it, Monkey has been paid <b>'+MONKEY_BOUNTY+' marches</b>. Well hunted! Spotted something else that looks wrong? Say so, and the gods may be generous.</p>', go:'Well done, Monkey'},
+  {id:'nov18-anna', eyebrow:'The gods are not fooled', title:'&#9732; A false account is burned',
+   html:'<p><b>Anna</b> made a second account, <b>&ldquo;sry acc new&rdquo;</b>, to get around the new chat rule.</p>'
+     +'<p><b>The gods saw.</b> The false account has been <b>burned to ash</b>, its squares wiped. Great <b>comets</b> have fallen on three of Anna&rsquo;s own squares, which burn for <b>2 days</b> and give nothing until the fire dies. Look for the comets still falling.</p>'
+     +'<p><b>One account to a warrior.</b> Mind the rules, all of you. The next comet may have your name on it.</p>', go:'The gods have spoken'},
   {id:'nov26-castlesurround', eyebrow:'A rule changed', title:'Castles: the straight line is gone',
    html:'<p><b>My apologies.</b> I thought the castle rule was only that a new castle had to be <i>connected</i> to your others. I had actually made it a <b>literal straight line</b> of your ground to another castle, and a playtester pointed out how brutal that is for new players, especially anyone squeezed between two kingdoms, who could end up building two to four castles just to place one where they wanted.</p>'
      +'<p><b>The new rule.</b> You may found a castle wherever <b>all six squares touching it are finished ground of yours</b> (a river square is fine). It then takes <b>a day to raise, like a bridge</b>, and nothing is paid until it stands. If an enemy takes any of those six squares, or the site itself, before it is done, <b>the building stops</b>. It still needs a farm joined to it and must stand seven cells clear of your other keeps.</p>'
