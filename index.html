@@ -8408,7 +8408,7 @@ var NOTES=[
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
   {id:'nov18-chatter', eyebrow:'The gods have spoken', title:'The gods are tired of so much chatter',
    html:'<p>The heavens are weary. Day and night the gods have listened to <b>idle gossip, banter and bellowing</b> drifting up from the chat bar, and they have had <b>quite enough</b>.</p>'
-     +'<p><b>From now on, each player may speak freely twice per tick</b> (a tick is four hours). After those two messages, the gods will hear you only if you pay: <b>10 stone, 10 timber, 10 iron and 10 grain</b> for every further message.</p>'
+     +'<p><b>From now on, each player may speak freely four times per tick</b> (a tick is four hours). After those four messages, the gods will hear you only if you pay: <b>10 stone, 10 timber, 10 iron and 10 grain</b> for every further message.</p>'
      +'<p>The chat bar tells you how many free messages you have left, and the Send button shows the price once they are spent. Your free messages return with every new tick. The gods themselves, of course, may speak as often as they please.</p>'
      +'<p>Choose your words wisely, warriors. Silence is cheap.</p>', go:'We hear you'},
   {id:'nov18-monkey', eyebrow:'A bug is slain', title:'Congratulations, Monkey!',
@@ -9922,7 +9922,7 @@ var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
    from the epoch so everyone shares the same window). Every message after that costs CHAT_FEE of each of the four
    resources. The count is kept on the player's own record (pl.cq = {k: tick number, n: messages sent in it}) so a second
    device or a cleared browser cannot reset it; the messages in the feed count too, whichever is higher wins. */
-var CHAT_FREE=2, CHAT_FEE=10;
+var CHAT_FREE=4, CHAT_FEE=10;
 function chatTickNo(){ return Math.floor(Date.now()/TICK_MS); }
 function chatUsed(){
   var k=chatTickNo(), pl=G&&me(), n=(pl&&pl.cq&&pl.cq.k===k)?(pl.cq.n||0):0, from=k*TICK_MS, f=0;
