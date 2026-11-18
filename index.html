@@ -2070,6 +2070,26 @@ function settleMonkeyBounty(){
   }).catch(function(){}).then(function(){ monkeying=false; });
   return true;
 }
+/* ── a gift of iron ──  1000 iron to Bohrer, once (fixes/iron1, claimed with a conditional write). */
+var IRON_GIFT=1000, irongifting=false;
+function settleIronGift(){
+  if(!online||irongifting||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.iron1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pid=pidFor('Bohrer'); if(!G.players[pid]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,n:IRON_GIFT,t:now};
+  irongifting=true;
+  dbPutIf(base+'/fixes/iron1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.iron1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.iron1=rec0;
+    var patch={'fixes/iron1':rec0,rev:now}, done=function(){ myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ me().res.iron=(me().res.iron||0)+IRON_GIFT; render(); pushMe(); done(); }
+    else dbGet(base+'/players/'+pid+'/res/iron').then(function(cur){
+      var next=(cur||0)+IRON_GIFT; patch['players/'+pid+'/res/iron']=next; G.players[pid].res.iron=next; return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ irongifting=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -6963,6 +6983,7 @@ function render(){
     settleBridgeBounty();
     settleChatter();
     settleMonkeyBounty();
+    settleIronGift();
     settlePietro();
     settleTurkey();
     settleRemovals();
