@@ -2756,6 +2756,10 @@ function applyRemote(remote){
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
   G.fallen=remote.fallen||{};
+  var rmine=remote.players[ME];                        // my PIN was changed (a reset): this saved sign-in is no longer good, so sign out and ask again
+  if(me() && rmine && rmine.pin && myPin && pinHash(ME,myPin)!==rmine.pin){
+    ELIM=true; try{ localStorage.removeItem('marchland.pin'); }catch(e){} location.reload(); return true;
+  }
   if(me() && G.fallen[ME] && !remote.players[ME]){ showEliminated(); return true; }   // someone's screen applied the elimination rule to me
   // adopt everyone else's record; keep my own, which only this tab edits
   var mine=me();
