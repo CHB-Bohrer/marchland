@@ -2095,6 +2095,26 @@ function settleIronGift(){
   }).catch(function(){}).then(function(){ irongifting=false; });
   return true;
 }
+/* ── a gift of iron ──  2000 more iron to Bohrer, once (fixes/iron2, claimed with a conditional write). */
+var IRON_GIFT2=2000, irongifting2=false;
+function settleIronGift2(){
+  if(!online||irongifting2||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.iron2)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pid=pidFor('Bohrer'); if(!G.players[pid]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,n:IRON_GIFT2,t:now};
+  irongifting2=true;
+  dbPutIf(base+'/fixes/iron2',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.iron2=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.iron2=rec0;
+    var patch={'fixes/iron2':rec0,rev:now}, done=function(){ myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ me().res.iron=(me().res.iron||0)+IRON_GIFT2; render(); pushMe(); done(); }
+    else dbGet(base+'/players/'+pid+'/res/iron').then(function(cur){
+      var next=(cur||0)+IRON_GIFT2; patch['players/'+pid+'/res/iron']=next; G.players[pid].res.iron=next; return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ irongifting2=false; });
+  return true;
+}
 /* ── Anna's second account ──  Anna made a second account ("sry acc new") to dodge the chat fee. Once (fixes/anna1, claimed with a
    conditional write): the new account is burned (account gone, its squares wiped, like a removal) and comets fall on three of
    Anna's own squares for 2 days (flags bn and cm, as with Kit and Soul Crusher). Announced in the chat; the scroll is 'nov18-anna'. */
@@ -7249,6 +7269,7 @@ function render(){
     settleChatter();
     settleMonkeyBounty();
     settleIronGift();
+    settleIronGift2();
     settleAnna();
     settlePinReset();
     settleGift2();
