@@ -2175,6 +2175,81 @@ function settleGift2(){
   }).catch(function(){}).then(function(){ gifting2=false; });
   return true;
 }
+/* ── the Titan ──  A giant comes down on Anna's land (she made a second account, then took another). Twice, a tick apart,
+   it eats HALF of the soldiers standing on her squares (field soldiers and garrisons; rounded down). It stays for 2 ticks.
+   Claimed once with conditional writes: G.titan (who and when), fixes/titan0 and fixes/titan1 (one per feeding). */
+var titanQ=[], titanning=false;
+function titanActive(){ var T=G&&G.titan; return !!T && Date.now()<T.start+2*TICK_MS; }
+function titanChat(m,now,tag){ cometChat(m,now,tag); }
+function titanEat(pid,i){
+  var list=Object.keys(G.cells).filter(function(k){ var c=G.cells[k]; return c.o===pid && ((c.b||0)+(c.g||0))>0; }), eaten=0;
+  function step(j){
+    if(j>=list.length) return Promise.resolve();
+    var p=list[j].split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), k=list[j];
+    return cellFresh(q,r).then(function(f){
+      var c=f.c; if(!c||c.o!==pid) return;
+      var eb=Math.floor((c.b||0)/2), eg=Math.floor((c.g||0)/2); if(!eb&&!eg) return;
+      var nc=JSON.parse(JSON.stringify(c)); nc.b=(c.b||0)-eb; nc.g=(c.g||0)-eg; if(!nc.b) delete nc.b;
+      return cellPutIf(q,r,nc,f.tag).then(function(w){ if(w){ eaten+=eb+eg; G.cells[k]=nc; cellsGen++; } });
+    }).then(function(){ return step(j+1); });
+  }
+  return step(0).then(function(){ return eaten; });
+}
+function settleTitan(){
+  if(!online||titanning||!G||!G.players||dirty||ELIM||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var base='/marchland/'+gameCode, now=Date.now(), T=G.titan;
+  if(!T){
+    var an=judgePids(['anna']); if(an.length!==1) return false;
+    var T0={pid:an[0],start:now};
+    titanning=true;
+    dbPutIf(base+'/titan',T0).then(function(x){
+      if(x.halted) return;
+      if(!x.ok){ if(x.v) G.titan=x.v; return; }
+      G.titan=T0; bumpRev().then(ok,fail); render();
+      titanChat('The ground shakes. A TITAN comes down from the mountains, and it is hungry. It walks toward the land of '+G.players[an[0]].name+'!',now,'titan0');
+    }).catch(function(){}).then(function(){ titanning=false; });
+    return true;
+  }
+  if(now>=T.start+2*TICK_MS+60000) return false;
+  for(var i=0;i<2;i++){
+    if(now<T.start+i*TICK_MS || (G.fixes&&G.fixes['titan'+i])) continue;
+    (function(i){
+      titanning=true;
+      var rec0={i:i,t:now};
+      dbPutIf(base+'/fixes/titan'+i,rec0).then(function(x){
+        if(x.halted) return;
+        if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes['titan'+i]=x.v; } return; }
+        G.fixes=G.fixes||{}; G.fixes['titan'+i]=rec0;
+        return titanEat(T.pid,i).then(function(n){
+          titanChat('The Titan feeds. It devours half of the soldiers on '+(G.players[T.pid]?G.players[T.pid].name:'Anna')+'’s land: '+n+' soldier'+(n===1?'':'s')+' gone.'+(i===0?' It will feed once more.':' It stalks back to the mountains.'),Date.now(),'titanfeed'+i);
+          render();
+        });
+      }).catch(function(){}).then(function(){ titanning=false; });
+    })(i);
+    return true;
+  }
+  return false;
+}
+/* a giant foot stamps down on a square with soldiers on it, with a shadow, dust and a shaking hex */
+function drawTitan(x,y,s,q,r,t){
+  if(s<9) return;
+  var per=5, u=(((t+artHash(wrapC(q),wrapC(r),901)*per)%per)+per)%per/per, down=.22;
+  ctx.save();
+  var sh=u<down?u/down:1;
+  ctx.globalAlpha=.25+.3*sh; ctx.fillStyle='#1d1410'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.5+0.35*sh),s*(0.3+0.2*sh),0,0,6.284); ctx.fill();   // its shadow
+  if(u<down){
+    var f=u/down, fy=y-s*3.2*(1-f)*(1-f), fx=x;
+    ctx.globalAlpha=1; ctx.fillStyle='#4a3a30'; ctx.strokeStyle='#241812'; ctx.lineWidth=Math.max(1,s*0.06);
+    ctx.beginPath(); ctx.ellipse(fx,fy,s*0.62,s*0.4,0,0,6.284); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#5b483c'; for(var i=-2;i<=2;i++){ ctx.beginPath(); ctx.ellipse(fx+i*s*0.24,fy-s*0.34,s*0.11,s*0.14,0,0,6.284); ctx.fill(); ctx.stroke(); }   // toes
+  } else {
+    var k=Math.min(1,(u-down)/0.3);
+    ctx.globalAlpha=(1-k)*.7; ctx.strokeStyle='#bfa98a'; ctx.lineWidth=Math.max(1.5,s*0.1); ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.5+1.4*k),s*(0.3+0.8*k),0,0,6.284); ctx.stroke();   // dust ring
+    ctx.globalAlpha=.55*(1-k*.6); ctx.fillStyle='#2a1d16'; ctx.beginPath(); ctx.ellipse(x,y+s*0.08,s*0.55,s*0.33,0,0,6.284); ctx.fill();   // a footprint
+  }
+  ctx.restore();
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -2771,7 +2846,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -6018,6 +6093,7 @@ function draw(){
     if(!vl) drawGraves(p[0],p[1],S,gravesOf(G.cells[key(q,r)]),q,r);
     if(c.o && (plagueMul(c.o)<1 || plague2Mul(key(q,r))<1)) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
+    if(G.titan && titanActive() && c.o===G.titan.pid && ((c.b||0)+(c.g||0))>0) titanQ.push([p[0],p[1],q,r]);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
@@ -6082,7 +6158,8 @@ function draw(){
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
   });
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
-  cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;   // comets fall over everything else
+  cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
+  titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); titanQ.length=0;   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
@@ -7076,6 +7153,7 @@ function render(){
     settleAnna();
     settlePinReset();
     settleGift2();
+    settleTitan();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8464,6 +8542,10 @@ var NOTES=[
    html:'<p><b>Anna</b> made a second account, <b>&ldquo;sry acc new&rdquo;</b>, to get around the new chat rule.</p>'
      +'<p><b>The gods saw.</b> The false account has been <b>burned to ash</b>, its squares wiped. Great <b>comets</b> have fallen on three of Anna&rsquo;s own squares, which burn for <b>2 days</b> and give nothing until the fire dies. Look for the comets still falling.</p>'
      +'<p><b>One account to a warrior.</b> Mind the rules, all of you. The next comet may have your name on it.</p>', go:'The gods have spoken'},
+  {id:'nov18-titan', eyebrow:'The ground shakes', title:'&#9968; A Titan walks the land',
+   html:'<p>The gods have little patience for <b>cheating</b>. <b>Anna</b> made a second account to dodge the chat rule, and has since taken yet another.</p>'
+     +'<p><b>A Titan has come down from the mountains.</b> For <b>2 ticks</b> it stalks Anna&rsquo;s land, and twice it feeds: each time it devours <b>half of the soldiers</b> standing on her squares. Look for its great foot stamping down.</p>'
+     +'<p>Her land stays hers, and so do her castles. Only the soldiers pay. <b>One account to a warrior</b>, all of you. The next Titan may come for you.</p>', go:'The gods have spoken'},
   {id:'nov26-castlesurround', eyebrow:'A rule changed', title:'Castles: the straight line is gone',
    html:'<p><b>My apologies.</b> I thought the castle rule was only that a new castle had to be <i>connected</i> to your others. I had actually made it a <b>literal straight line</b> of your ground to another castle, and a playtester pointed out how brutal that is for new players, especially anyone squeezed between two kingdoms, who could end up building two to four castles just to place one where they wanted.</p>'
      +'<p><b>The new rule.</b> You may found a castle wherever <b>all six squares touching it are finished ground of yours</b> (a river square is fine). It then takes <b>a day to raise, like a bridge</b>, and nothing is paid until it stands. If an enemy takes any of those six squares, or the site itself, before it is done, <b>the building stops</b>. It still needs a farm joined to it and must stand seven cells clear of your other keeps.</p>'
