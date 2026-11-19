@@ -2137,6 +2137,24 @@ function settleAnna(){
   }).catch(function(){}).then(function(){ annaing=false; });
   return true;
 }
+/* ── PIN reset ──  Chris asked for Elisa's PIN to be changed. Once (fixes/pin1, claimed with a conditional write) her stored
+   PIN hash is replaced. (Only the hash is kept here.) */
+var PIN_RESET_HASH='kpbxnao2jm5a', pinning=false;
+function settlePinReset(){
+  if(!online||pinning||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.pin1)) return false;
+  var pid=pidFor('Elisa'); if(!G.players[pid]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,t:now};
+  pinning=true;
+  dbPutIf(base+'/fixes/pin1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.pin1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.pin1=rec0;
+    G.players[pid].pin=PIN_RESET_HASH;
+    var patch={'fixes/pin1':rec0,rev:now}; patch['players/'+pid+'/pin']=PIN_RESET_HASH; myRev=now;
+    dbPatch(base,patch).then(ok,fail);
+  }).catch(function(){}).then(function(){ pinning=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -2647,7 +2665,7 @@ function pushAll(){
    is lower than the one this tab last saw, or whose last claim is older, was written back by a screen that slept
    with an old copy (or still runs the old page): nothing of it is folded in, and this tab writes the true record
    back over it at once. */
-var meTag=null, meBase=null, meBaseX=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp','lids'];
+var meTag=null, meBase=null, meBaseX=null, meBusy=null, meAgain=false, OTHERS_WRITE=['sp','lids','pin'];
 function snapRes(r){ var o={}; GOODS.forEach(function(k){ o[k]=(r&&r[k])||0; }); return o; }
 function snapX(v){ v=v||{}; return {sq:v.squares||0, col:v.collected||0, owed:v.owed||0, lc:v.lastCollect||0, wv:v.wv||0}; }
 function isRollback(v){ return !!(meBaseX && v && ((v.wv||0)<meBaseX.wv || (v.lastCollect||0)<meBaseX.lc)); }
@@ -7032,6 +7050,7 @@ function render(){
     settleMonkeyBounty();
     settleIronGift();
     settleAnna();
+    settlePinReset();
     settlePietro();
     settleTurkey();
     settleRemovals();
