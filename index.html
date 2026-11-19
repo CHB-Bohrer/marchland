@@ -2249,7 +2249,7 @@ function drawTitanBoss(list,s,t){
   list.sort(function(a,b){ return a[3]-b[3]||a[2]-b[2]; });
   var n=list.length, ph=t/TITAN_EAT, idx=Math.floor(ph)%n, u=ph-Math.floor(ph);
   var cx=0, cy=0, maxy=-1e9; list.forEach(function(e){ cx+=e[0]; cy+=e[1]; if(e[1]>maxy) maxy=e[1]; }); cx/=n; cy/=n;
-  var cur=list[idx], K=Math.max(s*1.5,14);
+  var cur=list[idx], K=Math.max(s*0.7,7);
   var ease=function(v){ return v<0?0:v>1?1:v*v*(3-2*v); };
   var bx=cx, by=cy-K*0.5;                                  // where he sits: right on top of her land, seen from the front
   var breathe=Math.sin(t*2)*0.05;
