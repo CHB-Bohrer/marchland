@@ -2245,11 +2245,11 @@ var TITAN_EAT=3.6;
 function titanPoly(pts,fill,stroke){ ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); if(stroke){ ctx.strokeStyle=stroke; ctx.stroke(); } }
 function drawTitanBoss(list,s,t){
   if(canvas.style.transform) canvas.style.transform='';
-  if(!list.length) return;
+  if(!list.length||s<6) return;
   list.sort(function(a,b){ return a[3]-b[3]||a[2]-b[2]; });
   var n=list.length, ph=t/TITAN_EAT, idx=Math.floor(ph)%n, u=ph-Math.floor(ph);
   var cx=0, cy=0, maxy=-1e9; list.forEach(function(e){ cx+=e[0]; cy+=e[1]; if(e[1]>maxy) maxy=e[1]; }); cx/=n; cy/=n;
-  var cur=list[idx], K=Math.max(s*0.7,7);
+  var cur=list[idx], K=s*0.4;                          // scales with the map: smaller when you zoom out, never a fixed size
   var ease=function(v){ return v<0?0:v>1?1:v*v*(3-2*v); };
   var bx=cx, by=cy-K*0.5;                                  // where he sits: right on top of her land, seen from the front
   var breathe=Math.sin(t*2)*0.05;
