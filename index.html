@@ -2207,7 +2207,7 @@ function settleTitan(){
       if(x.halted) return;
       if(!x.ok){ if(x.v) G.titan=x.v; return; }
       G.titan=T0; bumpRev().then(ok,fail); render();
-      titanChat('The ground shakes. A TITAN comes down from the mountains, and it is hungry. It walks toward the land of '+G.players[an[0]].name+'!',now,'titan0');
+      titanChat('The ground shakes. A TITAN comes down from the mountains, and it is hungry. It sits down upon the land of '+G.players[an[0]].name+' and begins to eat her soldiers!',now,'titan0');
     }).catch(function(){}).then(function(){ titanning=false; });
     return true;
   }
@@ -2222,7 +2222,7 @@ function settleTitan(){
         if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes['titan'+i]=x.v; } return; }
         G.fixes=G.fixes||{}; G.fixes['titan'+i]=rec0;
         return titanEat(T.pid,i).then(function(n){
-          titanChat('The Titan feeds. It devours half of the soldiers on '+(G.players[T.pid]?G.players[T.pid].name:'Anna')+'’s land: '+n+' soldier'+(n===1?'':'s')+' gone.'+(i===0?' It will feed once more.':' It stalks back to the mountains.'),Date.now(),'titanfeed'+i);
+          titanChat('The Titan feeds. It devours half of the soldiers on '+(G.players[T.pid]?G.players[T.pid].name:'Anna')+'’s land: '+n+' soldier'+(n===1?'':'s')+' gone.'+(i===0?' It will feed once more.':' It burps, gets up and wanders back to the mountains.'),Date.now(),'titanfeed'+i);
           render();
         });
       }).catch(function(){}).then(function(){ titanning=false; });
@@ -2231,23 +2231,94 @@ function settleTitan(){
   }
   return false;
 }
-/* a giant foot stamps down on a square with soldiers on it, with a shadow, dust and a shaking hex */
+/* a hungry red ring on every square of Anna's that still holds soldiers: the Titan has his eye on them */
 function drawTitan(x,y,s,q,r,t){
   if(s<9) return;
-  var per=5, u=(((t+artHash(wrapC(q),wrapC(r),901)*per)%per)+per)%per/per, down=.22;
-  ctx.save();
-  var sh=u<down?u/down:1;
-  ctx.globalAlpha=.25+.3*sh; ctx.fillStyle='#1d1410'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.5+0.35*sh),s*(0.3+0.2*sh),0,0,6.284); ctx.fill();   // its shadow
-  if(u<down){
-    var f=u/down, fy=y-s*3.2*(1-f)*(1-f), fx=x;
-    ctx.globalAlpha=1; ctx.fillStyle='#4a3a30'; ctx.strokeStyle='#241812'; ctx.lineWidth=Math.max(1,s*0.06);
-    ctx.beginPath(); ctx.ellipse(fx,fy,s*0.62,s*0.4,0,0,6.284); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#5b483c'; for(var i=-2;i<=2;i++){ ctx.beginPath(); ctx.ellipse(fx+i*s*0.24,fy-s*0.34,s*0.11,s*0.14,0,0,6.284); ctx.fill(); ctx.stroke(); }   // toes
-  } else {
-    var k=Math.min(1,(u-down)/0.3);
-    ctx.globalAlpha=(1-k)*.7; ctx.strokeStyle='#bfa98a'; ctx.lineWidth=Math.max(1.5,s*0.1); ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.5+1.4*k),s*(0.3+0.8*k),0,0,6.284); ctx.stroke();   // dust ring
-    ctx.globalAlpha=.55*(1-k*.6); ctx.fillStyle='#2a1d16'; ctx.beginPath(); ctx.ellipse(x,y+s*0.08,s*0.55,s*0.33,0,0,6.284); ctx.fill();   // a footprint
+  var u=(((t*0.8+artHash(wrapC(q),wrapC(r),920))%1)+1)%1;
+  ctx.save(); ctx.globalAlpha=.55*(1-u); ctx.strokeStyle='#ff5a2a'; ctx.lineWidth=Math.max(1.5,s*0.08);
+  ctx.beginPath(); ctx.ellipse(x,y+s*0.08,s*(0.3+0.5*u),s*(0.18+0.3*u),0,0,6.284); ctx.stroke(); ctx.restore();
+}
+/* the Titan: a vast stone giant who simply SITS on Anna's land and eats her soldiers. Over and over: his hand reaches down to a square,
+   plucks up a tiny soldier (legs kicking), lifts it to his mouth, chews with puffed cheeks and crumbs, swallows, burps, pats his belly,
+   and reaches for the next one. Drawn once per frame from the list of her squares that hold soldiers. */
+var TITAN_EAT=3.6;
+function titanPoly(pts,fill,stroke){ ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]); for(var i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]); ctx.closePath(); ctx.fillStyle=fill; ctx.fill(); if(stroke){ ctx.strokeStyle=stroke; ctx.stroke(); } }
+function drawTitanBoss(list,s,t){
+  if(canvas.style.transform) canvas.style.transform='';
+  if(!list.length) return;
+  list.sort(function(a,b){ return a[3]-b[3]||a[2]-b[2]; });
+  var n=list.length, ph=t/TITAN_EAT, idx=Math.floor(ph)%n, u=ph-Math.floor(ph);
+  var cx=0, cy=0, maxy=-1e9; list.forEach(function(e){ cx+=e[0]; cy+=e[1]; if(e[1]>maxy) maxy=e[1]; }); cx/=n; cy/=n;
+  var cur=list[idx], K=Math.max(s*1.5,14);
+  var ease=function(v){ return v<0?0:v>1?1:v*v*(3-2*v); };
+  var bx=cx, by=cy-K*0.5;                                  // where he sits: right on top of her land, seen from the front
+  var breathe=Math.sin(t*2)*0.05;
+  var shY=by-K*6.6+breathe*K, hy=shY-K*1.5, hx=bx;
+  var mouth=[hx, hy+K*0.42];
+  var shoulder=[bx+K*2.3,shY+K*0.5];
+  // hand: reach down (0-.3), grip (.3-.4), lift to mouth (.4-.65), chew (.65-.88), swallow and pat (.88-1)
+  var hand, carrying=false, kick=0;
+  if(u<0.3){ var a=ease(u/0.3); hand=[mouth[0]+(cur[0]-mouth[0])*a, mouth[1]+(cur[1]-mouth[1])*a]; }
+  else if(u<0.4){ hand=[cur[0],cur[1]]; carrying=true; }
+  else if(u<0.65){ var b=ease((u-0.4)/0.25); hand=[cur[0]+(mouth[0]+K*0.15-cur[0])*b, cur[1]+(mouth[1]+K*0.1-cur[1])*b]; carrying=true; }
+  else { hand=[mouth[0]+K*1.05,mouth[1]+K*0.9]; }
+  var chew=(u>=0.65&&u<0.88)?Math.abs(Math.sin((u-0.65)/0.23*6.283*3)):0;
+  var swallow=(u>=0.88&&u<1);
+  ctx.save(); ctx.lineJoin='round'; ctx.lineWidth=Math.max(1,K*0.07);
+  var stone='#4b3d34', dark='#2e241f', lit='#6a5849', rim='rgba(255,150,70,.55)';
+  ctx.globalAlpha=.4; ctx.fillStyle='#120a07'; ctx.beginPath(); ctx.ellipse(bx,by+K*0.1,K*3.6,K*0.8,0,0,6.284); ctx.fill();   // shadow on her land
+  ctx.globalAlpha=1;
+  // crossed legs: a wide stone base with two boots poking out in front
+  titanPoly([[bx-K*3.3,by],[bx-K*2.6,by-K*1.4],[bx+K*2.6,by-K*1.4],[bx+K*3.3,by],[bx+K*2.2,by+K*0.55],[bx-K*2.2,by+K*0.55]],stone,dark);
+  titanPoly([[bx-K*3.3,by],[bx-K*1.0,by-K*0.6],[bx-K*0.2,by+K*0.55],[bx-K*2.2,by+K*0.55]],lit,dark);
+  ctx.fillStyle=dark; ctx.beginPath(); ctx.ellipse(bx-K*1.3,by+K*0.5,K*1.1,K*0.5,0,0,6.284); ctx.fill(); ctx.beginPath(); ctx.ellipse(bx+K*1.3,by+K*0.5,K*1.1,K*0.5,0,0,6.284); ctx.fill();   // boots
+  // round, well-fed belly and chest
+  titanPoly([[bx-K*2.3,by-K*1.2],[bx+K*2.3,by-K*1.2],[bx+K*2.6,shY+K*0.9],[bx+K*2.0,shY-K*0.2],[bx-K*2.0,shY-K*0.2],[bx-K*2.6,shY+K*0.9]],stone,dark);
+  ctx.fillStyle=lit; ctx.beginPath(); ctx.ellipse(bx,by-K*2.1,K*2.0+(swallow?K*0.1:0),K*1.35+(swallow?K*0.1:0),0,0,6.284); ctx.fill(); ctx.stroke();   // belly
+  ctx.strokeStyle='rgba(20,10,5,.7)'; ctx.beginPath(); ctx.moveTo(bx-K*0.5,shY+K*0.2); ctx.lineTo(bx-K*0.3,shY+K*1.4); ctx.lineTo(bx+K*0.3,shY+K*2.2); ctx.stroke();   // cracked stone
+  ctx.strokeStyle=rim; ctx.beginPath(); ctx.moveTo(bx-K*2.6,shY+K*0.9); ctx.lineTo(bx-K*2.0,shY-K*0.2); ctx.lineTo(bx+K*2.0,shY-K*0.2); ctx.stroke();
+  // far arm rests on his knee
+  ctx.strokeStyle=dark; titanPoly([[bx-K*2.0,shY+K*0.2],[bx-K*2.6,shY+K*0.9],[bx-K*3.1,by-K*1.1],[bx-K*2.4,by-K*1.2]],lit,dark);
+  ctx.fillStyle=stone; ctx.beginPath(); ctx.arc(bx-K*2.8,by-K*1.0,K*0.45,0,6.284); ctx.fill(); ctx.stroke();
+  // head: horns, heavy brow, burning eyes, a mouth that opens for each soldier
+  titanPoly([[hx-K*0.7,hy-K*0.5],[hx-K*1.25,hy-K*1.9],[hx-K*0.2,hy-K*0.85]],dark,null);
+  titanPoly([[hx+K*0.7,hy-K*0.5],[hx+K*1.25,hy-K*1.9],[hx+K*0.2,hy-K*0.85]],dark,null);
+  var cheek=chew*K*0.12;
+  ctx.fillStyle=stone; ctx.strokeStyle=dark; ctx.beginPath(); ctx.ellipse(hx,hy,K*(0.95+cheek/K),K*1.05,0,0,6.284); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle='#1a1008'; ctx.lineWidth=Math.max(1.5,K*0.1); ctx.beginPath(); ctx.moveTo(hx-K*0.6,hy-K*0.36); ctx.lineTo(hx-K*0.1,hy-K*0.22); ctx.moveTo(hx+K*0.6,hy-K*0.36); ctx.lineTo(hx+K*0.1,hy-K*0.22); ctx.stroke();   // brow
+  ctx.lineWidth=Math.max(1,K*0.07);
+  var open=(u>=0.5&&u<0.68)?ease((u-0.5)/0.1):(u>=0.68&&u<0.88?0.15+0.35*chew:(swallow?0.3*(1-(u-0.88)/0.12):(u<0.3?0.05:0)));
+  ctx.fillStyle='#1a0a05'; ctx.beginPath(); ctx.ellipse(mouth[0],mouth[1]+K*0.05,K*0.45,K*(0.1+0.4*open),0,0,6.284); ctx.fill();
+  ctx.fillStyle='#d9d2c0'; if(open>0.2){ for(var m=-1;m<=1;m+=2){ ctx.beginPath(); ctx.moveTo(mouth[0]+m*K*0.3,mouth[1]-K*0.1); ctx.lineTo(mouth[0]+m*K*0.18,mouth[1]+K*0.12); ctx.lineTo(mouth[0]+m*K*0.38,mouth[1]+K*0.05); ctx.fill(); } }   // fangs
+  var glow=0.75+0.25*Math.sin(t*5); ctx.shadowColor='#ff7a1f'; ctx.shadowBlur=K*0.9*glow; ctx.fillStyle='#ffb347';
+  ctx.beginPath(); ctx.ellipse(hx-K*0.36,hy-K*0.02,K*0.17,K*(swallow?0.03:0.1),-0.2,0,6.284); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(hx+K*0.36,hy-K*0.02,K*0.17,K*(swallow?0.03:0.1),0.2,0,6.284); ctx.fill();
+  ctx.shadowBlur=0;
+  // the eating arm: shoulder to elbow to hand (the elbow swings out wide)
+  var el=[(shoulder[0]+hand[0])/2+K*0.7,(shoulder[1]+hand[1])/2+K*0.3];
+  ctx.lineCap='round'; ctx.strokeStyle=dark; ctx.lineWidth=K*0.95; ctx.beginPath(); ctx.moveTo(shoulder[0],shoulder[1]); ctx.lineTo(el[0],el[1]); ctx.lineTo(hand[0],hand[1]); ctx.stroke();
+  ctx.strokeStyle=lit; ctx.lineWidth=K*0.8; ctx.beginPath(); ctx.moveTo(shoulder[0],shoulder[1]); ctx.lineTo(el[0],el[1]); ctx.lineTo(hand[0],hand[1]); ctx.stroke();
+  ctx.lineCap='butt'; ctx.lineWidth=Math.max(1,K*0.07);
+  // the soldier in his fist: a tiny figure, legs and arms kicking
+  if(carrying){
+    var kk=Math.sin(t*24)*K*0.08;
+    ctx.strokeStyle='#e8e0cc'; ctx.fillStyle='#e8e0cc'; ctx.lineWidth=Math.max(1,K*0.05);
+    ctx.beginPath(); ctx.arc(hand[0],hand[1]-K*0.62,K*0.1,0,6.284); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(hand[0],hand[1]-K*0.5); ctx.lineTo(hand[0],hand[1]-K*0.2);
+    ctx.moveTo(hand[0],hand[1]-K*0.45); ctx.lineTo(hand[0]-K*0.2+kk,hand[1]-K*0.6); ctx.moveTo(hand[0],hand[1]-K*0.45); ctx.lineTo(hand[0]+K*0.2-kk,hand[1]-K*0.6);
+    ctx.moveTo(hand[0],hand[1]-K*0.2); ctx.lineTo(hand[0]-K*0.12+kk,hand[1]-K*0.02); ctx.moveTo(hand[0],hand[1]-K*0.2); ctx.lineTo(hand[0]+K*0.12-kk,hand[1]-K*0.02); ctx.stroke();
+    ctx.lineWidth=Math.max(1,K*0.07);
   }
+  ctx.fillStyle=stone; ctx.strokeStyle=dark; ctx.beginPath(); ctx.arc(hand[0],hand[1],K*(carrying?0.5:0.46),0,6.284); ctx.fill(); ctx.stroke();   // the fist
+  if(carrying){ ctx.beginPath(); ctx.moveTo(hand[0]-K*0.3,hand[1]-K*0.25); ctx.lineTo(hand[0]+K*0.3,hand[1]-K*0.25); ctx.stroke(); }
+  // chewing: crumbs and a little spray from the corner of his mouth
+  if(chew>0.3){ ctx.fillStyle='#cfc6b0'; for(var c2=0;c2<5;c2++){ var cp=((t*3+c2*0.37)%1); ctx.globalAlpha=(1-cp)*.8; ctx.beginPath(); ctx.arc(mouth[0]+(c2%2?1:-1)*K*(0.3+0.5*cp),mouth[1]+K*(0.3+1.1*cp),K*0.06,0,6.284); ctx.fill(); } ctx.globalAlpha=1; }
+  // swallow: a gulp ripples down, then a burp cloud and a pat on the belly
+  if(swallow){ var sk=(u-0.88)/0.12; ctx.globalAlpha=Math.sin(sk*3.14)*.55; ctx.fillStyle='#8c7a62';
+    for(var p=0;p<4;p++){ ctx.beginPath(); ctx.arc(mouth[0]+K*(0.7+0.5*sk)+p*K*0.25*sk,mouth[1]-K*0.15-sk*K*0.6*(0.6+0.2*p),K*(0.15+0.22*sk),0,6.284); ctx.fill(); }
+    ctx.globalAlpha=1; }
+  // the grabbed square flashes where the soldier was plucked from
+  if(u>=0.28&&u<0.5){ var fk=(u-0.28)/0.22; ctx.globalAlpha=(1-fk)*.8; ctx.strokeStyle='#ffd36a'; ctx.lineWidth=Math.max(1.5,K*0.1); ctx.beginPath(); ctx.ellipse(cur[0],cur[1]+K*0.1,K*(0.3+1.0*fk),K*(0.18+0.6*fk),0,0,6.284); ctx.stroke(); }
   ctx.restore();
 }
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
@@ -6159,7 +6230,8 @@ function draw(){
   });
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
-  titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); titanQ.length=0;   // the titan's foot comes down on top   // comets fall over everything else
+  titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); });
+  drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
@@ -8544,7 +8616,7 @@ var NOTES=[
      +'<p><b>One account to a warrior.</b> Mind the rules, all of you. The next comet may have your name on it.</p>', go:'The gods have spoken'},
   {id:'nov18-titan', eyebrow:'The ground shakes', title:'&#9968; A Titan walks the land',
    html:'<p>The gods have little patience for <b>cheating</b>. <b>Anna</b> made a second account to dodge the chat rule, and has since taken yet another.</p>'
-     +'<p><b>A Titan has come down from the mountains.</b> For <b>2 ticks</b> it stalks Anna&rsquo;s land, and twice it feeds: each time it devours <b>half of the soldiers</b> standing on her squares. Look for its great foot stamping down.</p>'
+     +'<p><b>A Titan has come down from the mountains.</b> For <b>2 ticks</b> it sits upon Anna&rsquo;s land, and twice it feeds: each time it devours <b>half of the soldiers</b> standing on her squares, sitting there and eating them like sweets. Look for the giant sitting there, plucking up her soldiers one at a time.</p>'
      +'<p>Her land stays hers, and so do her castles. Only the soldiers pay. <b>One account to a warrior</b>, all of you. The next Titan may come for you.</p>', go:'The gods have spoken'},
   {id:'nov26-castlesurround', eyebrow:'A rule changed', title:'Castles: the straight line is gone',
    html:'<p><b>My apologies.</b> I thought the castle rule was only that a new castle had to be <i>connected</i> to your others. I had actually made it a <b>literal straight line</b> of your ground to another castle, and a playtester pointed out how brutal that is for new players, especially anyone squeezed between two kingdoms, who could end up building two to four castles just to place one where they wanted.</p>'
