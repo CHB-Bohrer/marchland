@@ -2155,6 +2155,26 @@ function settlePinReset(){
   }).catch(function(){}).then(function(){ pinning=false; });
   return true;
 }
+/* ── a gift for Elisa ──  200 of every resource, once (fixes/gift2, claimed with a conditional write). */
+var GIFT2_N=200, gifting2=false;
+function settleGift2(){
+  if(!online||gifting2||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.gift2)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var pid=pidFor('Elisa'); if(!G.players[pid]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:pid,n:GIFT2_N,t:now};
+  gifting2=true;
+  dbPutIf(base+'/fixes/gift2',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.gift2=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.gift2=rec0;
+    var patch={'fixes/gift2':rec0,rev:now}, done=function(){ myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ GOODS.forEach(function(k){ me().res[k]=(me().res[k]||0)+GIFT2_N; }); render(); pushMe(); done(); }
+    else dbGet(base+'/players/'+pid+'/res').then(function(cur){
+      cur=cur||{}; GOODS.forEach(function(k){ var v=(cur[k]||0)+GIFT2_N; patch['players/'+pid+'/res/'+k]=v; G.players[pid].res[k]=v; }); return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ gifting2=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -7055,6 +7075,7 @@ function render(){
     settleIronGift();
     settleAnna();
     settlePinReset();
+    settleGift2();
     settlePietro();
     settleTurkey();
     settleRemovals();
