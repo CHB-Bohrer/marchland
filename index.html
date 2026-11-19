@@ -495,6 +495,9 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 .cb-in{ max-width:1000px; margin:0 auto; padding:0 16px; }
 .cb-feed{ max-height:min(46vh, 420px); overflow-y:auto; overscroll-behavior:contain; border-bottom:1px solid var(--rule); padding:4px 0; }
 .cb-feed .empty{ padding:12px 0; }
+.chat-top{ text-align:center; font-family:var(--mono); font-size:10.5px; color:var(--ink-2); padding:6px 0 2px; }
+.chat-older{ border:1px solid var(--rule); background:transparent; color:inherit; font:inherit; padding:3px 10px; border-radius:2px; cursor:pointer; }
+.chat-day{ text-align:center; font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-2); margin:10px 0 4px; }
 .cb-row{ display:flex; align-items:center; gap:10px; padding:8px 0; }
 .cb-last{ flex:1 1 42%; min-width:0; justify-content:flex-start; border:0; background:transparent; padding:7px 6px; text-align:left; gap:8px; font-size:13.5px; font-weight:400; border-radius:3px; }
 .cb-last:hover:not(:disabled){ border-color:transparent; background:var(--paper); }
@@ -10207,7 +10210,7 @@ function q36(t){ var s=Math.max(0,Math.floor(t)).toString(36); while(s.length<9)
 function chatSeenKey(){ return 'marchland.chatSeen.'+ME; }
 function chatList(){
   return Object.keys(chat.msgs).sort().map(function(k){ var m=chat.msgs[k]; m.id=k; return m; })
-    .filter(function(m){ return m && typeof m.m==='string' && m.t; }).slice(-CHAT_SHOW);
+    .filter(function(m){ return m && typeof m.m==='string' && m.t; });   // everything loaded so far: older messages load as you scroll up
 }
 function chatUnread(){ var n=0; chatList().forEach(function(m){ if(m.pid!==ME && m.t>chat.seen && !m.pending) n++; }); return n; }
 function chatMarkSeen(){
@@ -10233,11 +10236,12 @@ function chatRender(){
   if(!chat.open){ chatBadge(); return; }
   var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
-  if(!l.length) list.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it. Messages are kept for 30 days.</p>';
-  else list.innerHTML=l.map(function(m){
-    return '<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
+  if(!l.length) list.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it.</p>';
+  else list.innerHTML='<div class="chat-top">'+(chat.noMore?'The start of the chat':(chat.olderBusy?'Loading earlier messages…':'<button type="button" class="chat-older" data-older="1">Show earlier messages</button>'))+'</div>'+l.map(function(m,i){
+    var day=chatDay(m.t), sep=(i===0||chatDay(l[i-1].t)!==day)?'<div class="chat-day">'+day+'</div>':'';
+    return sep+'<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
       +esc(chatWho(m))+(m.pid===ME?' <span class="muted" style="font-weight:400">&mdash; you</span>':'')+hushBtn(m)
-      +'<span class="when">'+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span></div>'
+      +'<span class="when">'+(m.failed?'not sent':m.pending?'sending…':chatWhen(m.t))+'</span></div>'
       +'<div class="txt">'+esc(String(m.m).slice(0,CHAT_MAX))+'</div></div>';
   }).join('');
   if(atEnd||chat.toEnd){ feed.scrollTop=feed.scrollHeight; chat.toEnd=false; }
@@ -10261,8 +10265,7 @@ function chatNote(t){
 }
 function chatFetch(){
   return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+CHAT_SHOW).catch(function(){ return chatGet('/m'); }).then(function(d){
-    var fresh=[], old=Date.now()-CHAT_KEEP_MS;
-    Object.keys(chat.msgs).forEach(function(k){ if(chat.msgs[k].t<old) delete chat.msgs[k]; });
+    var fresh=[];
     if(d) Object.keys(d).forEach(function(k){
       var m=d[k]; if(!m||typeof m!=='object') return;
       if(!chat.msgs[k] || chat.msgs[k].pending){ if(!chat.msgs[k] && m.pid!==ME) fresh.push(m); chat.msgs[k]=m; }
@@ -10464,6 +10467,31 @@ function hushDetail(pid){
   });
 }
 document.getElementById('st-hush').addEventListener('click',function(){ openHush(); });
+/* the whole history: older messages are fetched a page at a time when you scroll near the top (or press the button) */
+function chatDay(t){
+  var d=new Date(t), n=new Date(), y=new Date(n.getFullYear(),n.getMonth(),n.getDate()-1);
+  if(d.toDateString()===n.toDateString()) return 'Today';
+  if(d.toDateString()===y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+}
+function chatWhen(t){ return Date.now()-t<6*36e5?since(t):new Date(t).toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'}); }
+function chatOlder(){
+  if(!chat.on||chat.olderBusy||chat.noMore) return;
+  var keys=Object.keys(chat.msgs).filter(function(k){ return !chat.msgs[k].pending; }).sort(), oldest=keys[0];
+  if(!oldest){ chat.noMore=true; chatRender(); return; }
+  chat.olderBusy=true; chatRender();
+  chatGet('/m','?orderBy=%22%24key%22&endAt=%22'+encodeURIComponent(oldest)+'%22&limitToLast='+(CHAT_SHOW+1)).catch(function(){ return chatGet('/m'); }).then(function(d){
+    var feed=document.getElementById('chat-feed'), h0=feed.scrollHeight, top0=feed.scrollTop, added=0;
+    if(d) Object.keys(d).forEach(function(k){ var m=d[k]; if(!m||typeof m!=='object'||chat.msgs[k]) return; chat.msgs[k]=m; added++; });
+    if(!added) chat.noMore=true;
+    chat.olderBusy=false; chatRender();
+    feed.scrollTop=top0+(feed.scrollHeight-h0);            // stay on the message you were reading
+  }).catch(function(){ chat.olderBusy=false; chatRender(); });
+}
+document.getElementById('chat-feed').addEventListener('scroll',function(){ if(chat.open && this.scrollTop<80) chatOlder(); },{passive:true});
+document.getElementById('chat-list').addEventListener('click',function(e){
+  var b=e.target.closest&&e.target.closest('[data-older]'); if(!b) return; e.preventDefault(); chatOlder();
+});
 function chatToggle(open){
   chat.open=open;
   document.getElementById('chat-feed').classList.toggle('hide',!open);
@@ -10481,7 +10509,7 @@ function chatStart(){
   document.body.classList.add('has-chatbar');
   chatRender(); chatMeasure();
   chatPoll(true);
-  setTimeout(chatTidy,15000);
+  // (old messages are no longer tidied away: the whole history stays, and loads as you scroll up)
   setInterval(function(){ chat.tick++; if(chat.open || chat.tick%2===0) chatPoll(false); },5000);   // every 5 s with the history open, 10 s otherwise
   setInterval(function(){ if(!document.hidden){ chatPreview(); chatFeeHint(); } },30000);            // keeps "2m ago" and the free-message count honest
 }
