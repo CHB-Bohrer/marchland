@@ -8470,12 +8470,14 @@ function runQuake(rehearsal){
     return new Promise(function(res){ var iv=setInterval(function(){ var left=Math.max(0,Math.ceil((t0+FZ-Date.now())/1000)), el=document.getElementById('qcount'); if(el) el.textContent=left; if(left<=0){ clearInterval(iv); res(); } },500); });
   }).then(function(){
     if(rehearsal) return dbGet(base);
-    tremble(true,'Downloading a full backup of the database&hellip;');
-    return fetch(dbUrl('/marchland'),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('backup HTTP '+r.status); return r.text(); }).then(function(txt){
+    // the backup that matters is the copy kept on the database (below); this file is only a convenience, so it is the board alone
+    // (not the whole database) and its link is kept alive for 10 minutes: a phone asks where to save it, and that takes time
+    tremble(true,'Saving a backup of the board to your device&hellip;');
+    return fetch(dbUrl(base),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('backup HTTP '+r.status); return r.text(); }).then(function(txt){
       try{ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'})); a.download='marchland-backup-'+gameCode+'-before-quake-'+stamp+'.json';
-        document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.parentNode.removeChild(a); },5000); }catch(e){}
+        document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); if(a.parentNode) a.parentNode.removeChild(a); },600000); }catch(e){}
       return dbGet(base);
-    });
+    }, function(){ return dbGet(base); });   // the file could not be fetched: carry on, the database copy is still made
   }).then(function(b){
     if(!b||!b.players) throw new Error('the board came back empty');
     var copy=JSON.parse(JSON.stringify(b));
@@ -8492,7 +8494,11 @@ function runQuake(rehearsal){
     }).then(function(){
       var paid=Object.keys(out.verdict.pay).map(function(pid){ return full(b.players[pid]||{name:'?'})+' ('+out.verdict.pay[pid]+' marches)'; });
       plagueChat('THE EARTH HAS SPLIT! A rift has torn the world from top to bottom and '+(QUAKE_K*WR).toLocaleString()+' new squares have risen from the fire. The new land is molten lava: nobody can claim it until it cools, the middle in about a day, the edges in about two. Every kingdom keeps every square it had.'+(paid.length?' The quake cut a few bare squares off from their castles; the gods have paid for them: '+paid.join(', ')+'.':''),now,'quake'+now);
-      QRUN=false; HALT=true; if(rehearsal){ tremble(false); window.marchlandQuakeResult={ok:true, at:now, paid:out.verdict.pay, rivers:plan.rivers}; return; } quakeReload();
+      QRUN=false; HALT=true; if(rehearsal){ tremble(false); window.marchlandQuakeResult={ok:true, at:now, paid:out.verdict.pay, rivers:plan.rivers}; return; }
+      // the steward's own page waits for a tap, so a backup file still being saved is not cut off by the reload
+      tremble(true,'The earth has split! A copy of the old world is kept on the database. <button type="button" id="qseen" class="go" style="margin-left:8px">See the new world</button>');
+      quakeSound.fade(1.5); document.body.classList.remove('qtremble');
+      var qs=document.getElementById('qseen'); if(qs) qs.onclick=function(){ location.reload(); };
     });
   }).catch(function(e){ return abort(e.message||String(e)); });
 }
