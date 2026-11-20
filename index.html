@@ -493,6 +493,12 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 .chatbar{ position:fixed; left:0; right:0; bottom:0; z-index:100001; background:var(--surface); border-top:1px solid var(--rule);
   box-shadow:0 -6px 20px rgba(0,0,0,.10); padding-bottom:env(safe-area-inset-bottom, 0px); }
 .cb-in{ max-width:1000px; margin:0 auto; padding:0 16px; }
+.cb-tabs{ border-bottom:1px solid var(--rule); padding:6px 0 0; }
+.cb-tabs .cb-in{ display:flex; align-items:flex-end; gap:4px; }
+.cb-tab{ border:1px solid var(--rule); border-bottom:0; background:transparent; color:var(--ink-2); font:600 12.5px/1 var(--sans,inherit); padding:7px 12px 6px; border-radius:3px 3px 0 0; cursor:pointer; }
+.cb-tab[aria-selected="true"]{ background:var(--paper,#f7f1e3); color:var(--ink); border-color:var(--ink-2); }
+.cb-tn{ display:inline-block; min-width:16px; padding:1px 5px; margin-left:4px; border-radius:8px; background:var(--p1); color:#fff; font:700 10px/1.3 var(--mono); text-align:center; }
+.cb-thint{ margin-left:auto; font-family:var(--mono); font-size:10px; color:var(--ink-2); padding-bottom:7px; }
 .cb-feed{ max-height:min(46vh, 420px); overflow-y:auto; overscroll-behavior:contain; border-bottom:1px solid var(--rule); padding:4px 0; }
 .cb-feed .empty{ padding:12px 0; }
 .chat-top{ text-align:center; font-family:var(--mono); font-size:10.5px; color:var(--ink-2); padding:6px 0 2px; }
@@ -936,6 +942,11 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 
 <!-- ── chat bar ───────────────────────────────────────────────────── -->
 <section id="chatbar" class="chatbar hide" aria-label="Chat with the other players">
+  <div class="cb-tabs hide" id="chat-tabs" role="tablist" aria-label="Chat rooms"><div class="cb-in">
+    <button type="button" role="tab" class="cb-tab" id="tab-war" data-room="war" aria-selected="true">&#9876; War <span class="cb-tn hide" id="tn-war"></span></button>
+    <button type="button" role="tab" class="cb-tab" id="tab-tav" data-room="tav" aria-selected="false">&#127866; Tavern <span class="cb-tn hide" id="tn-tav"></span></button>
+    <span class="cb-thint" id="chat-thint">The game</span>
+  </div></div>
   <div class="cb-feed hide" id="chat-feed" aria-live="polite"><div class="cb-in" id="chat-list"></div></div>
   <div class="cb-in">
     <div class="cb-row">
@@ -2566,6 +2577,21 @@ function settleMoveRafael(){
       plagueChat('The gods saw '+pl.name+' boxed in on every side, with no room to grow. A great hand lifted his kingdom and set it down in open country, far from everyone. Grow well.',now,'move1');
     });
   }).catch(function(){}).then(function(){ moving1=false; });
+  return true;
+}
+/* ── the Tavern opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
+var taverning=false;
+function settleTavern(){
+  if(!online||taverning||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.tavern1)) return false;
+  var now=Date.now(), rec0={t:now};
+  taverning=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/tavern1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.tavern1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.tavern1=rec0; bumpRev().then(ok,fail);
+    plagueChat('The gods have built a TAVERN. Open the chat and you will find two doors: ⚔ War, for the game, and 🍺 Tavern, for everything else.',now,'tav1a');
+    plagueChat('Talk of battles, alliances, trades and threats belongs in War. Gossip, jokes and pointless chatter belong in the Tavern, where you may babble as much as you please. Hush votes apply only in War.',now,'tav1b');
+  }).catch(function(){}).then(function(){ taverning=false; });
   return true;
 }
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
@@ -7510,6 +7536,7 @@ function render(){
     settleBless();
     settleBless2();
     settleMoveRafael();
+    settleTavern();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8885,6 +8912,13 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#127866; The Tavern is open',
+   html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built a <b>Tavern</b>.</p>'
+     +'<p>Open the chat and you will find <b>two rooms</b>:</p><ul>'
+     +'<li><b>&#9876; War</b> is for the game: battles, alliances, trades, threats and the words of the gods. Hush votes apply here.</li>'
+     +'<li><b>&#127866; Tavern</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in the Tavern, and even a hushed warrior may drink here.</li>'
+     +'<li>Each room shows its own count of new messages. The chat bar only lights up for new messages in <b>War</b>.</li>'
+     +'</ul><p>Keep the chatter in the Tavern, and the war in War.</p>', go:'Pull up a stool'},
   {id:'nov20-bless2', eyebrow:'The gods have spoken', title:'&#10022; The blessing is tempered',
    html:'<p><i>&ldquo;We watched the little ones feast&hellip; and perhaps we were too generous.&rdquo;</i></p>'
      +'<p><b>What changed</b></p><ul>'
@@ -10440,10 +10474,11 @@ function chatUsed(){
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
+  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
     inp.disabled=!!hl; btn.disabled=!!hl;
-    inp.placeholder=hl?'Hushed by the council. You may speak again in '+hushIn(hl)+'.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
+    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
     btn.textContent='Send'; return;
   }
   var left=CHAT_FREE-chatUsed();
@@ -10460,18 +10495,37 @@ function chatPut(sub,val){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 function q36(t){ var s=Math.max(0,Math.floor(t)).toString(36); while(s.length<9) s='0'+s; return s; }   // keys sort by time
-function chatSeenKey(){ return 'marchland.chatSeen.'+ME; }
-function chatList(){
+/* Two rooms: War (the game; the gods speak here, and hush votes apply) and the Tavern (everything else: chat freely, no
+   hush votes, and a hushed warrior may still drink here). A message's room is m.rm ('tav'); old messages are War.
+   The bar's badge and flash count only the War room, so the Tavern never drags anyone away from the game. */
+function msgRoom(m){ return (m&&m.rm==='tav')?'tav':'war'; }
+function chatSeenKey(room){ return 'marchland.chatSeen.'+((room||'war')==='tav'?'tav.':'')+ME; }
+function chatSeenOf(room){ return room==='tav'?chat.seenTav:chat.seen; }
+function chatList(room){
+  room=room||chat.room||'war';
   return Object.keys(chat.msgs).sort().map(function(k){ var m=chat.msgs[k]; m.id=k; return m; })
-    .filter(function(m){ return m && typeof m.m==='string' && m.t; });   // everything loaded so far: older messages load as you scroll up
+    .filter(function(m){ return m && typeof m.m==='string' && m.t && msgRoom(m)===room; });   // everything loaded so far: older messages load as you scroll up
 }
-function chatUnread(){ var n=0; chatList().forEach(function(m){ if(m.pid!==ME && m.t>chat.seen && !m.pending) n++; }); return n; }
+function chatUnread(room){ room=room||'war'; var n=0, seen=chatSeenOf(room); chatList(room).forEach(function(m){ if(m.pid!==ME && m.t>seen && !m.pending) n++; }); return n; }
 function chatMarkSeen(){
-  var l=chatList(), t=l.length?l[l.length-1].t:0;
-  if(t>chat.seen){ chat.seen=t; try{ localStorage.setItem(chatSeenKey(),String(t)); }catch(e){} }
+  var room=chat.room||'war', l=chatList(room), t=l.length?l[l.length-1].t:0;
+  if(t>chatSeenOf(room)){ if(room==='tav') chat.seenTav=t; else chat.seen=t; try{ localStorage.setItem(chatSeenKey(room),String(t)); }catch(e){} }
+}
+function chatTabs(){
+  ['war','tav'].forEach(function(r){
+    var on=(chat.room||'war')===r, b=document.getElementById('tab-'+r), n=(chat.open&&on)?0:chatUnread(r), e=document.getElementById('tn-'+r);
+    b.setAttribute('aria-selected',String(on)); e.textContent=n>9?'9+':String(n); e.classList.toggle('hide',!n);
+  });
+  document.getElementById('chat-thint').textContent=(chat.room==='tav')?'Chat about anything':'The game';
+}
+function chatRoom(r){
+  if(r!=='tav') r='war'; if(chat.room===r) return;
+  chat.room=r; try{ localStorage.setItem('marchland.chatRoom.'+ME,r); }catch(e){}
+  chat.toEnd=true; chatNote(''); chatRender();
 }
 function chatBadge(){
-  var n=chat.open?0:chatUnread(), b=document.getElementById('chat-badge');
+  chatTabs();
+  var n=(chat.open&&chat.room!=='tav')?0:chatUnread('war'), b=document.getElementById('chat-badge');
   b.textContent=n>9?'9+':String(n); b.classList.toggle('hide',!n);
   document.getElementById('chat-toggle').setAttribute('aria-label',(chat.open?'Hide':'Show')+' the chat history'+(n?', '+n+' new message'+(n>1?'s':''):''));
 }
@@ -10479,9 +10533,9 @@ function chatWho(m){ var p=G&&G.players[m.pid]; return p?full(p):(m.n||'someone'
 /* the bar always shows the newest message; the history opens above it */
 function chatPreview(){
   var l=chatList(), m=l[l.length-1], el=document.getElementById('chat-preview');
-  if(!m){ el.innerHTML='<span class="muted">No messages yet &mdash; say hello to everyone on the board</span>'; return; }
+  if(!m){ el.innerHTML='<span class="muted">'+(chat.room==='tav'?'The Tavern is quiet &mdash; pull up a stool':'No messages yet &mdash; say hello to everyone on the board')+'</span>'; return; }
   var txt=String(m.m).slice(0,CHAT_MAX);
-  el.innerHTML='<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
+  el.innerHTML=(chat.room==='tav'?'<span aria-hidden="true">&#127866;</span> ':'')+'<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
     +' <span class="muted">&middot; '+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span>';
 }
 function chatRender(){
@@ -10489,7 +10543,7 @@ function chatRender(){
   if(!chat.open){ chatBadge(); return; }
   var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
-  if(!l.length) list.innerHTML='<p class="muted empty">No messages yet. Say hello &mdash; everyone on the board will see it.</p>';
+  if(!l.length) list.innerHTML='<p class="muted empty">'+(chat.room==='tav'?'The Tavern is quiet. Talk about anything you like here &mdash; it stays out of the War room.':'No messages yet. Say hello &mdash; everyone on the board will see it.')+'</p>';
   else list.innerHTML='<div class="chat-top">'+(chat.noMore?'The start of the chat':(chat.olderBusy?'Loading earlier messages…':'<button type="button" class="chat-older" data-older="1">Show earlier messages</button>'))+'</div>'+l.map(function(m,i){
     var day=chatDay(m.t), sep=(i===0||chatDay(l[i-1].t)!==day)?'<div class="chat-day">'+day+'</div>':'';
     return sep+'<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
@@ -10509,7 +10563,8 @@ function chatFlash(){                                 // a new message from some
 function chatMeasure(){
   var bar=document.getElementById('chatbar'), feed=document.getElementById('chat-feed');
   if(bar.classList.contains('hide')) return;
-  var h=bar.offsetHeight-(feed.classList.contains('hide')?0:feed.offsetHeight);
+  var tabs=document.getElementById('chat-tabs');
+  var h=bar.offsetHeight-(feed.classList.contains('hide')?0:feed.offsetHeight)-(tabs.classList.contains('hide')?0:tabs.offsetHeight);
   document.documentElement.style.setProperty('--cbh',h+'px');
 }
 function chatNote(t){
@@ -10517,7 +10572,7 @@ function chatNote(t){
   n.textContent=t||''; n.classList.toggle('hide',!t); chatMeasure();
 }
 function chatFetch(){
-  return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+CHAT_SHOW).catch(function(){ return chatGet('/m'); }).then(function(d){
+  return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+(CHAT_SHOW*2)).catch(function(){ return chatGet('/m'); }).then(function(d){
     var fresh=[];
     if(d) Object.keys(d).forEach(function(k){
       var m=d[k]; if(!m||typeof m!=='object') return;
@@ -10536,7 +10591,7 @@ function chatPoll(force){
       var fresh=x[0];
       chat.rev=rev; chat.busy=false;
       chatRender();
-      if(fresh.some(function(m){ return m.t>chat.seen; })) chatFlash();
+      if(fresh.some(function(m){ return msgRoom(m)==='war' && m.t>chat.seen; })) chatFlash();
     });
   }).catch(function(){ chat.busy=false; });
 }
@@ -10551,7 +10606,8 @@ function chatSend(){
   var inp=document.getElementById('chat-in'), txt=(inp.value||'').replace(/\s+/g,' ').trim().slice(0,CHAT_MAX);
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
-  if(hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you. You may speak again in '+hushIn(hushLeft(ME))+'.'); return; }
+  var room=chat.room==='tav'?'tav':'war';
+  if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
   var pl=me(), pay=!hushOn() && chatUsed()>=CHAT_FREE;     // (the old chat fee: replaced by hush votes once they begin)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
     var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
@@ -10563,7 +10619,8 @@ function chatSend(){
   if(pay){ GOODS.forEach(function(g){ pl.res[g]-=CHAT_FEE; }); render(); }
   pushMe();
   var m={pid:ME, n:full(me()), t:t, m:txt};
-  chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, pending:true};
+  if(room==='tav') m.rm='tav';
+  chat.msgs[id]={pid:ME, n:m.n, t:t, m:txt, rm:m.rm, pending:true};
   inp.value=''; chatNote(''); chat.toEnd=true; chatRender();
   chatPut('/m/'+id,m).then(function(){
     chat.msgs[id]=m;
@@ -10616,7 +10673,7 @@ function hushEarned(pid){
 function hushStart(pid){ var p=G.players[pid]; return (p && (!p.joined || Date.now()-p.joined>=HUSH_AGE))?HUSH_START:0; }
 function hushVotes(pid){ if(!hushOn()||!G.players[pid]) return 0; return Math.max(0,hushStart(pid)+hushEarned(pid)-hushSpent(pid)); }
 function hushBtn(m){
-  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]) return '';
+  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||msgRoom(m)==='tav') return '';
   var nm=esc(G.players[m.pid].name), locked=hushLeft(m.pid);
   if(locked) return '<span class="hushed">hushed</span>';
   var mine=!!hushRecent(m.pid)[ME], st=isSteward()?'<span class="hush-n">'+Object.keys(hushRecent(m.pid)).length+'/'+HUSH_NEED+'</span>':'';
@@ -10748,6 +10805,7 @@ document.getElementById('chat-list').addEventListener('click',function(e){
 function chatToggle(open){
   chat.open=open;
   document.getElementById('chat-feed').classList.toggle('hide',!open);
+  document.getElementById('chat-tabs').classList.toggle('hide',!open);
   document.getElementById('chat-toggle').setAttribute('aria-expanded',String(open));
   document.getElementById('chat-caret').innerHTML=open?'&#9660; hide':'&#9650; all';
   if(open){ chat.toEnd=true; chatRender(); chatPoll(true); }
@@ -10758,6 +10816,9 @@ function chatStart(){
   chat.on=true;
   var s=0; try{ s=parseInt(localStorage.getItem(chatSeenKey())||'0',10)||0; }catch(e){}
   chat.seen=s||Date.now()-864e5;                      // first time here: the last day counts as new
+  var st=0; try{ st=parseInt(localStorage.getItem(chatSeenKey('tav'))||'0',10)||0; }catch(e){}
+  chat.seenTav=st||Date.now();                        // the Tavern is new: nothing in it counts as unread yet
+  try{ chat.room=localStorage.getItem('marchland.chatRoom.'+ME)==='tav'?'tav':'war'; }catch(e){ chat.room='war'; }
   document.getElementById('chatbar').classList.remove('hide');
   document.body.classList.add('has-chatbar');
   chatRender(); chatMeasure();
@@ -10767,6 +10828,7 @@ function chatStart(){
   setInterval(function(){ if(!document.hidden){ chatPreview(); chatFeeHint(); } },30000);            // keeps "2m ago" and the free-message count honest
 }
 document.getElementById('chat-toggle').addEventListener('click',function(){ chatToggle(!chat.open); });
+document.getElementById('chat-tabs').addEventListener('click',function(e){ var b=e.target.closest&&e.target.closest('[data-room]'); if(b) chatRoom(b.getAttribute('data-room')); });
 document.getElementById('chat-form').addEventListener('submit',function(e){ e.preventDefault(); chatSend(); });
 document.addEventListener('keydown',function(e){ if(e.key==='Escape' && chat.open) chatToggle(false); });
 document.addEventListener('visibilitychange',function(){ if(!document.hidden && chat.on) chatPoll(false); });
