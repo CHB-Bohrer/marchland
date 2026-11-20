@@ -8454,11 +8454,12 @@ function openQuake(){
           +'<tr><td>Squares cleared and paid back</td><td>'+(paid.length?paid.join('<br>'):'none')+'</td></tr></table>'
           +'<p>When you press the button, every open board freezes and trembles for a minute, a full backup is downloaded and another kept on the database, the gods look again (the borders may have moved), and only if it is still safe does the world split. Everyone sees the quake the next time they open the game.</p>',
         cancel:false, buttons:[{label:'Not yet',value:false},{label:'&#127755; Split the earth',value:true,primary:true}]
-      }).then(function(res){ if(!res.value){ quakeBusy=false; say('Nothing was written. The earth is quiet.'); return; } return runQuake(); });
+      }).then(function(res){ if(!res.value){ quakeBusy=false; say('Nothing was written. The earth is quiet.'); return; } return runQuake(false,plan); });
     }).catch(function(e){ quakeBusy=false; nope('<span class="bad">The earthquake stopped</span> ('+esc(e.message||String(e))+'). Nothing was written.'); });
   },60);
 }
-function runQuake(rehearsal){
+function runQuake(rehearsal,plan0){
+  var QUAKE_LATE_MS=10*60000;                // other screens give up on a freeze after 15 minutes: never write anywhere near that
   var base='/marchland/'+gameCode, t0=Date.now(), stamp=new Date().toISOString().replace(/[:.]/g,'-'), FZ=rehearsal?8000:QUAKE_FREEZE_MS;
   QRUN=true; QFREEZE=true;
   function abort(why){
@@ -8483,12 +8484,18 @@ function runQuake(rehearsal){
     var copy=JSON.parse(JSON.stringify(b));
     tidyBoard(b); b.cells=b.cells||{};
     tremble(true,'The gods look again along the crack&hellip;');
-    var plan=quakePlan(b);
+    // first, the very crack the steward was shown, checked again on the board as it is now (quick even on a phone);
+    // only if the borders moved so that it no longer passes is a new one sought
+    var plan=null;
+    if(plan0){ var v0=quakeVerdict(b,plan0,Date.now()); if(v0.ok){ plan=plan0; plan.verdict=v0; } }
+    if(!plan) plan=quakePlan(b);
     if(!plan||!plan.verdict.ok) return abort('the borders moved during the freeze and no safe crack is left');
+    if(Date.now()-t0>QUAKE_LATE_MS) return abort('it took too long, and the other boards would soon have stopped waiting');
     var now=Date.now(), out=quakePatch(b,plan,now);
     if(!out.verdict.ok) return abort('the second look found a problem');
     tremble(true,'Keeping a copy of the old world on the database&hellip;');
     return qRaw('PUT','/marchland/backup_'+gameCode+'_before_quake_'+now,copy).then(function(){
+      if(Date.now()-t0>QUAKE_LATE_MS) throw new Error('it took too long, and the other boards would soon have stopped waiting');
       tremble(true,'&#127755; The earth splits&hellip;');
       return qRaw('PATCH',base,out.patch);
     }).then(function(){
