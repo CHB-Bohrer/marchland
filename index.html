@@ -539,6 +539,19 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
   .cb-last{ flex:1 1 100%; padding:5px 2px; }
   .cb-form{ flex:1 1 100%; }
 }
+
+/* ── the earthquake ── */
+@keyframes qshake{0%{transform:translate(0,0)}20%{transform:translate(-3px,1px) rotate(-.25deg)}40%{transform:translate(3px,-2px) rotate(.25deg)}60%{transform:translate(-2px,-2px)}80%{transform:translate(2px,2px) rotate(.15deg)}100%{transform:translate(0,0)}}
+body.qtremble #game, body.qtremble #join-panel{animation:qshake .16s linear infinite}
+body.qafter #game{animation:qshake .2s linear 8}
+#qfreeze{position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:9998;background:#2A0E06;color:#FFE3B0;border:2px solid #FF6A1A;border-radius:10px;padding:10px 16px;font:600 15px/1.4 system-ui,sans-serif;box-shadow:0 0 28px rgba(255,106,26,.65);max-width:92vw;text-align:center}
+#qcine{position:fixed;inset:0;z-index:9999;background:#120806;transition:opacity .5s}
+#qcine.out{opacity:0}
+#qcine canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#qcine .qcap{position:absolute;left:4%;right:4%;bottom:15%;text-align:center;color:#FFE9C2;font:800 clamp(24px,6.4vw,58px)/1.1 Georgia,'Times New Roman',serif;text-shadow:0 0 22px #FF5A10,0 0 6px #FF3A00,0 3px 0 #000;letter-spacing:.03em;opacity:0;transition:opacity .45s;pointer-events:none}
+#qcine .qsub{position:absolute;left:6%;right:6%;bottom:8%;text-align:center;color:#F3D3A8;font:600 clamp(14px,3.6vw,22px)/1.35 system-ui,sans-serif;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .45s;pointer-events:none}
+#qcine .qskip{position:absolute;right:14px;top:14px;color:#E9CBA8;font:600 14px system-ui,sans-serif;background:rgba(0,0,0,.45);border:1px solid #7A4A30;border-radius:9px;padding:7px 12px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){ body.qtremble #game, body.qafter #game{animation:none} }
 </style>
 </head>
 <body>
@@ -718,7 +731,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
       <div class="pad">
         <h2>Steward</h2>
         <p class="muted" id="steward-status"></p>
-        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button><button type="button" id="st-turkey">Turkey photos</button><button type="button" id="st-hush">Hush votes</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button><button type="button" id="st-turkey">Turkey photos</button><button type="button" id="st-hush">Hush votes</button><button type="button" id="st-quake">&#127755; Earthquake&hellip;</button></div>
       </div>
     </div>
 
@@ -968,10 +981,16 @@ var TICK_MS=4*60*60*1000, MAX_TICKS=18;         // harvest accrues offline: 6 ti
 var AX=[[1,0],[1,-1],[0,-1],[-1,0],[-1,1],[0,1]];
 var PLAIN=0,FOREST=1,QUARRY=2,IRON=3,FARM=4,RIVER=5;
 /* The world wraps: walk off one edge and you come back on the opposite one.
-   Coordinates are kept in [-HALF, HALF) so boards from before the wrap keep
-   their keys unchanged. */
-var WORLD=120, HALF=60;
-function wrapC(x){ return ((x+HALF)%WORLD+WORLD)%WORLD-HALF; }
+   Coordinates are kept in [-HQ, HQ) and [-HR, HR) so boards from before the wrap keep their keys unchanged.
+   The world can grow. An earthquake opens a rift that winds from the top of the world to the bottom and pushes
+   everything east of it aside, and new land rises in the gap (see QUAKES). What a square IS (farm, forest,
+   river...) never changes: every square remembers where it stood in the world as it was first made, 120 by 120
+   (its origin), and its ground is worked out there. Land a rift made has ground of its own. */
+var OW=120, OH=60;                                  // the world as it was first made
+function oWrap(x){ return ((x+OH)%OW+OW)%OW-OH; }
+var WQ=120, WR=120, HQ=60, HR=60, RIFTS=[], WORLD_EPOCH=0;   // the world as it is now: read from the board (meta/world) by setWorld
+function wrapQ(x){ return ((x+HQ)%WQ+WQ)%WQ-HQ; }
+function wrapR(x){ return ((x+HR)%WR+WR)%WR-HR; }
 var YIELD={}; YIELD[FOREST]={r:'timber',n:2}; YIELD[QUARRY]={r:'stone',n:2};
 YIELD[IRON]={r:'iron',n:1}; YIELD[FARM]={r:'grain',n:3};
 var TOWER='tower', CASTLE='castle', ROMAN=['','I','II','III'];
@@ -996,30 +1015,39 @@ SPEC[CASTLE]={range:[0,1,1,2],volley:[0,1,2,3],gar:[0,1,3,6],cost:{timber:80,sto
    a fixed list, so the fifth player gets their own ground instead of spawning on
    top of the fourth. Six seats per ring, each ring 18 cells further out. */
 var SEAT_GAP=27;                                    // tuned so no two keeps sit closer than 18 cells
-function seatFor(n){
+function seatAt(n,wq,wr){
   if(n===0) return {q:0,r:0};
   var i=n-1, ring=Math.floor(i/6)+1, idx=i%6;
   var ang=idx*Math.PI/3 + (ring%2?Math.PI/6:0);
   var d=SEAT_GAP*ring, x=d*Math.cos(ang), y=d*Math.sin(ang);
   var h=cubeRound(Math.sqrt(3)/3*x - y/3, 2/3*y);
-  return {q:wrapC(h[0]), r:wrapC(h[1])};
+  return {q:wq(h[0]), r:wr(h[1])};
 }
+function seatFor(n){ return seatAt(n,wrapQ,wrapR); }
 
 /* ═══ helpers ══════════════════════════════════════════════════════════ */
-function key(q,r){ return wrapC(q)+'_'+wrapC(r); }
-function hexDist(aq,ar,bq,br){             // shortest way round the wrapped world
-  var dq=wrapC(aq-bq), dr=wrapC(ar-br), best=1e9;
+function key(q,r){ return wrapQ(q)+'_'+wrapR(r); }
+function oHexDist(aq,ar,bq,br){            // the same, in the world as it was first made (for the rivers, which never move)
+  var dq=oWrap(aq-bq), dr=oWrap(ar-br), best=1e9;
   for(var a=-1;a<=1;a++) for(var b=-1;b<=1;b++){
-    var x=dq+a*WORLD, y=dr+b*WORLD, d=(Math.abs(x)+Math.abs(x+y)+Math.abs(y))/2;
+    var x=dq+a*OW, y=dr+b*OW, d=(Math.abs(x)+Math.abs(x+y)+Math.abs(y))/2;
+    if(d<best) best=d;
+  }
+  return best;
+}
+function hexDist(aq,ar,bq,br){             // shortest way round the wrapped world
+  var dq=wrapQ(aq-bq), dr=wrapR(ar-br), best=1e9;
+  for(var a=-1;a<=1;a++) for(var b=-1;b<=1;b++){
+    var x=dq+a*WQ, y=dr+b*WR, d=(Math.abs(x)+Math.abs(x+y)+Math.abs(y))/2;
     if(d<best) best=d;
   }
   return best;
 }
 /* the copy of (q,r) nearest to (nq,nr) on the endless tiled plane — for drawing */
 function nearCopy(q,r,nq,nr){
-  var dq=wrapC(q-nq), dr=wrapC(r-nr), best=null, bd=1e9;
+  var dq=wrapQ(q-nq), dr=wrapR(r-nr), best=null, bd=1e9;
   for(var a=-1;a<=1;a++) for(var b=-1;b<=1;b++){
-    var x=dq+a*WORLD, y=dr+b*WORLD, d=(Math.abs(x)+Math.abs(x+y)+Math.abs(y))/2;
+    var x=dq+a*WQ, y=dr+b*WR, d=(Math.abs(x)+Math.abs(x+y)+Math.abs(y))/2;
     if(d<bd){ bd=d; best=[nq+x,nr+y]; }
   }
   return best;
@@ -1034,7 +1062,7 @@ function hash2(a,b){ var h=Math.imul(a,374761393)^Math.imul(b,668265263); h=Math
 /* value noise whose lattice repeats exactly once per world, so terrain and
    rivers run seamlessly across the wrap */
 function noise(q,r,s,seed){
-  var L=Math.max(1,Math.round(WORLD/s)), sc=WORLD/L;
+  var L=Math.max(1,Math.round(OW/s)), sc=OW/L;
   var x=q/sc+seed,y=r/sc-seed,x0=Math.floor(x),y0=Math.floor(y),fx=x-x0,fy=y-y0;
   fx=fx*fx*(3-2*fx); fy=fy*fy*(3-2*fy);
   function w(i){ return ((i%L)+L)%L; }
@@ -1042,8 +1070,8 @@ function noise(q,r,s,seed){
   return (a*(1-fx)+b*fx)*(1-fy)+(c*(1-fx)+d*fx)*fy;
 }
 function fbm(q,r,s,seed){ return 0.65*noise(q,r,s,seed)+0.35*noise(q,r,s/2.3,seed+37); }
-function terrainAt(q,r){
-  q=wrapC(q); r=wrapC(r);
+function oTerrainAt(q,r){                 // the ground of the world as it was first made
+  q=oWrap(q); r=oWrap(r);
   var f=fbm(q,r,6,11),a=fbm(q,r,5,73),s=fbm(q,r,3.5,129),i=fbm(q,r,3,201);
   if(s>0.66&&s>=f&&s>=a) return QUARRY;
   if(i>0.70&&i>=f&&i>=a) return IRON;
@@ -1059,25 +1087,70 @@ function terrainAt(q,r){
    The ring around every seat is kept dry so nobody starts in the water.
    Held river cells are bridges; see building() for one still going up.  */
 var RIVER_S=14, RIVER_SEED=5.37, riverH={}, riverMemo={}, riverN=0, DRY=[];
-for(var di=0;di<48;di++) DRY.push(seatFor(di));
+for(var di=0;di<48;di++) DRY.push(seatAt(di,oWrap,oWrap));      // the first world's seats, where the rivers were kept away
 function riverHeight(q,r){
-  q=wrapC(q); r=wrapC(r);
+  q=oWrap(q); r=oWrap(r);
   var k=q+'_'+r, h=riverH[k];
   if(h===undefined){ h=riverH[k]=0.62*noise(q,r,RIVER_S,RIVER_SEED)+0.38*noise(q,r,RIVER_S/2.7,RIVER_SEED+19); }
   return h;
 }
-function riverAt(q,r){
-  q=wrapC(q); r=wrapC(r);
+function oRiverAt(q,r){                   // a river in the world as it was first made
+  q=oWrap(q); r=oWrap(r);
   var k=q+'_'+r, v=riverMemo[k];
   if(v!==undefined) return v;
   if(++riverN>200000){ riverMemo={}; riverH={}; riverN=0; }
   v=false;
   if(riverHeight(q,r)>=0.5){
     for(var i=0;i<6;i++) if(riverHeight(q+AX[i][0],r+AX[i][1])<0.5){ v=true; break; }
-    if(v) for(var j=0;j<DRY.length;j++) if(hexDist(q,r,DRY[j].q,DRY[j].r)<=1){ v=false; break; }
+    if(v) for(var j=0;j<DRY.length;j++) if(oHexDist(q,r,DRY[j].q,DRY[j].r)<=1){ v=false; break; }
   }
   return (riverMemo[k]=v);
 }
+/* ═══ quakes: the world grows ═════════════════════════════════════════
+   Each rift on the board (meta/world/rifts, oldest first) is {k, t, path, rv}: k new columns, opened at time t,
+   along a crack given row by row (path[r+60] = the column after which the crack runs in row r, in the world as it
+   was just before that rift). In row r the squares that stood at (c-n, c] keep their place and the k new
+   squares sit at c+1..c+k; everything further east moved k to the right. rv lists the new squares ("j_r") that are
+   river: rivers the crack cut are carried across the new land. */
+var originMemo={};
+function originOf(q,r){                   // where this square stood before any quake: {q,r} for old ground, {s,j,r} for land rift s made
+  q=wrapQ(q); r=wrapR(r);
+  var k=q+'_'+r, o=originMemo[k]; if(o) return o;
+  var cq=q, P=WQ;
+  for(var i=RIFTS.length-1;i>=0;i--){
+    var R=RIFTS[i], n=P-R.k, c=R.path[r+HR], lo=c-n+1, p=lo+(((cq-lo)%P)+P)%P;
+    if(p>c){ o={s:i, j:p-c, r:r}; break; }
+    cq=((p+n/2)%n+n)%n-n/2; P=n;
+  }
+  if(!o) o={q:cq, r:r};
+  return (originMemo[k]=o);
+}
+function riftTerrain(o){                  // fresh ground from the fire: a little richer in stone and iron than the old world
+  var q=o.j*1.7+300+o.s*97, r=o.r;
+  var f=fbm(q,r,6,511), a=fbm(q,r,5,577), s=fbm(q,r,3.5,619), i=fbm(q,r,3,683);
+  if(s>0.62&&s>=f&&s>=a) return QUARRY;
+  if(i>0.62&&i>=f&&i>=a) return IRON;
+  if(f>0.58&&f>=a) return FOREST;
+  if(a>0.54) return FARM;
+  return PLAIN;
+}
+function terrainAt(q,r){ var o=originOf(q,r); return o.s!=null ? riftTerrain(o) : oTerrainAt(o.q,o.r); }
+function riverAt(q,r){ var o=originOf(q,r); return o.s!=null ? !!RIFTS[o.s].rv[o.j+'_'+o.r] : oRiverAt(o.q,o.r); }
+/* The new land is born as lava. It cools from the middle of the rift outwards: the middle a day after the quake,
+   the edges beside the old kingdoms a day after that. Nobody can claim or cross it while it burns. */
+var LAVA_MID_MS=24*36e5, LAVA_EDGE_MS=48*36e5, LAVA_GLOW_MS=6*36e5;
+function riftCoolAt(o){ var R=RIFTS[o.s], half=(R.k+1)/2, f=Math.abs(o.j-half)/Math.max(1,half-1); return R.t+LAVA_MID_MS+(LAVA_EDGE_MS-LAVA_MID_MS)*Math.min(1,f); }
+function moltenAt(q,r,at){ if(!RIFTS.length) return false; var o=originOf(q,r); return o.s!=null && (at||Date.now())<riftCoolAt(o); }
+function riftSquare(q,r){ if(!RIFTS.length) return null; var o=originOf(q,r); return o.s!=null?o:null; }
+function anyMolten(at){ var t=at||Date.now(); for(var i=0;i<RIFTS.length;i++) if(t<RIFTS[i].t+LAVA_EDGE_MS) return true; return false; }
+function setWorld(b){                     // read the world's size and rifts off a board
+  var w=(b&&b.meta&&b.meta.world)||null, list=(w&&w.rifts)?(Array.isArray(w.rifts)?w.rifts:Object.keys(w.rifts).sort().map(function(k){ return w.rifts[k]; })):[];
+  RIFTS=list.filter(Boolean).map(function(R){ var p=Array.isArray(R.path)?R.path:Object.keys(R.path).sort(function(a,b){ return a-b; }).map(function(k){ return R.path[k]; });
+    return {k:R.k|0, t:R.t||0, path:p, rv:R.rv||{}, id:R.id||''}; });
+  WQ=OW; RIFTS.forEach(function(R){ WQ+=R.k; }); HQ=WQ/2; WR=OW; HR=OH;
+  originMemo={}; WORLD_EPOCH=RIFTS.length;
+}
+
 function groundAt(q,r){ return riverAt(q,r)?RIVER:terrainAt(q,r); }
 function squaresFor(km){ return Math.max(1,Math.round(5*Math.sqrt(Math.max(0,km)))); }
 function since(ts){
@@ -1103,8 +1176,9 @@ var lastWrite=0;                                    // a pull that started befor
 var ELIM=false;                                     // set when this tab's own player has been eliminated: nothing more is written for them
 var PLOCK=false;                                    // set when this player must find a sponsor before playing on: nothing more is written for them
 var HALT=false;                                     // set when the board has moved on to a newer version than this page: nothing more is written
+var QFREEZE=false;                                  // set while the steward's earthquake is under way: nothing at all is written until the world has moved
 function dbPut(path,val){
-  if(ELIM||HALT||PLOCK) return Promise.resolve(null); // an eliminated player's tab must never write itself back onto the board
+  if(ELIM||HALT||PLOCK||QFREEZE) return Promise.resolve(null); // an eliminated player's tab must never write itself back onto the board
   if(!online){ try{ localStorage.setItem(LOCAL_KEY,JSON.stringify(val)); }catch(e){} return Promise.resolve(val); }
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
@@ -1113,7 +1187,7 @@ function dbPut(path,val){
 }
 /* several paths in one request: {"cells/3_4":null,"players/abc":null,...} relative to the path given */
 function dbPatch(path,obj){
-  if(ELIM||HALT||PLOCK) return Promise.resolve(null);
+  if(ELIM||HALT||PLOCK||QFREEZE) return Promise.resolve(null);
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
     {method:'PATCH',body:JSON.stringify(obj),headers:{'Content-Type':'application/json'}})
@@ -1127,7 +1201,7 @@ function dbGetTag(path){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); var t=r.headers.get('ETag'); return r.json().then(function(v){ return {v:v,tag:t}; }); });
 }
 function dbPutIf(path,val,tag){
-  if(ELIM||HALT||PLOCK) return Promise.resolve({ok:false,halted:true});
+  if(ELIM||HALT||PLOCK||QFREEZE) return Promise.resolve({ok:false,halted:true});
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',{method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json','if-match':tag||'null_etag','X-Firebase-ETag':'true'}})
     .then(function(r){
@@ -1228,12 +1302,12 @@ function isFarmCell(c,q,r){ return !!c && !building(c) && (c.f?groundAt(q,r):ter
    unbroken stretch of the owner's own ground (the same ground that carries supply). The farm does not
    have to touch the castle, but a castle never stands on a grain square itself. */
 function castleFed(q,r,pid){
-  q=wrapC(q); r=wrapC(r);
+  q=wrapQ(q); r=wrapR(r);
   var seen={}, stack=[[q,r]]; seen[key(q,r)]=1;
   while(stack.length){
     var cur=stack.pop();
     for(var i=0;i<6;i++){
-      var nq=wrapC(cur[0]+AX[i][0]), nr=wrapC(cur[1]+AX[i][1]), nk=key(nq,nr);
+      var nq=wrapQ(cur[0]+AX[i][0]), nr=wrapR(cur[1]+AX[i][1]), nk=key(nq,nr);
       if(seen[nk]) continue; seen[nk]=1;
       var n=G.cells[nk]; if(!n || n.o!==pid || building(n)) continue;
       if(isFarmCell(n,nq,nr)) return true;
@@ -1266,7 +1340,7 @@ var REMOVED_KEEPS={'30_45':'p1xlplnb'};
 function settleCastles(){
   if(!G||!boardFresh()) return 0;
   var now=Date.now(), changed=0;
-  for(var rk in REMOVED_KEEPS){
+  if(!RIFTS.length) for(var rk in REMOVED_KEEPS){        // (squares are named as they stood before any quake; after one, old screens are stopped anyway)
     var rc=G.cells[rk];
     if(rc && rc.k===CASTLE && rc.o===REMOVED_KEEPS[rk]){
       var rp=rk.split('_'); delete G.cells[rk]; pushCell(parseInt(rp[0],10),parseInt(rp[1],10)); changed++;
@@ -1309,7 +1383,7 @@ function settleCastles(){
     var sp=sk.split('_'), sq=parseInt(sp[0],10), sr=parseInt(sp[1],10), so=sc.cbo;
     var live=so && sc.o===so && !sc.k && G.players && G.players[so];
     if(live){ for(var si=0;si<6;si++){
-      var nq=wrapC(sq+AX[si][0]), nr=wrapC(sr+AX[si][1]);
+      var nq=wrapQ(sq+AX[si][0]), nr=wrapR(sr+AX[si][1]);
       if(groundAt(nq,nr)===RIVER) continue;
       var sn=G.cells[key(nq,nr)]; if(!sn || sn.o!==so || building(sn)){ live=false; break; }
     } }
@@ -1634,6 +1708,7 @@ function undoWrap(label,q,r,fn){
   return out;
 }
 function spendMarch(q,r){
+  if(G && moltenAt(q,r)) return nope(lavaWhy(q,r));
   var pl=me(), c=G&&pl?cellOf(q,r):null;
   // empty land that would really be claimed asks first (a stray tap while scrolling or zooming used to spend a march at once);
   // anything that would be refused, and every attack (it has its own scroll), goes straight through so the reason shows
@@ -1653,7 +1728,9 @@ function spendMarch(q,r){
 var claimAsking=false;
 function buildTreb(q,r){ return undoWrap('Trebuchet built',q,r,function(){ return buildTreb0(q,r); }); }
 function buildRoad(q,r){ return undoWrap('Road started',q,r,function(){ return buildRoad0(q,r); }); }
-function bridge(q,r){ return undoWrap('Bridge started',q,r,function(){ return bridge0(q,r); }); }
+function bridge(q,r){ if(G && moltenAt(q,r)) return nope(lavaWhy(q,r)); return undoWrap('Bridge started',q,r,function(){ return bridge0(q,r); }); }
+function lavaWhy(q,r){ var o=riftSquare(q,r), left=o?riftCoolAt(o)-Date.now():0;
+  return '<span class="bad">That is molten lava.</span> Nobody can claim or cross it until it cools, in about '+(left>36e5?Math.ceil(left/36e5)+' hours':Math.max(1,Math.ceil(left/60000))+' minutes')+'. The middle of the rift cools first, the edges last.'; }
 function build(q,r,kind){ return undoWrap(kind===CASTLE?'Castle founded':'Tower raised',q,r,function(){ return build0(q,r,kind); }); }
 function upgrade(q,r){ return undoWrap('Upgrade',q,r,function(){ return upgrade0(q,r); }); }
 function wall(q,r){ return undoWrap('Wall built',q,r,function(){ return wall0(q,r); }); }
@@ -1942,13 +2019,13 @@ function settleComet2(){
 /* a comet streaks down onto a struck square every few seconds (each square on its own beat); a scorched crater stays between falls */
 function drawComet(x,y,s,q,r,t){
   if(s<9) return;
-  var per=8, u=(((t+artHash(wrapC(q),wrapC(r),555)*per)%per)+per)%per/per, FALL=.16, FLASH=.28;
+  var per=8, u=(((t+artHash(wrapQ(q),wrapR(r),555)*per)%per)+per)%per/per, FALL=.16, FLASH=.28;
   ctx.save();
   ctx.globalAlpha=.5; ctx.fillStyle='#2B140E'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.42,s*0.24,0,0,6.284); ctx.fill();   // crater
   ctx.globalAlpha=.8; ctx.strokeStyle='#5A2A16'; ctx.lineWidth=Math.max(1,s*0.05); ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.42,s*0.24,0,0,6.284); ctx.stroke();   // its raised rim
   ctx.globalAlpha=.55+.25*Math.sin(t*5+q*1.7+r); ctx.fillStyle='#FF9A3C'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.2,s*0.11,0,0,6.284); ctx.fill();   // glowing core
   ctx.fillStyle='#FFE08A'; ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*0.09,s*0.05,0,0,6.284); ctx.fill();
-  for(var cs=0;cs<3;cs++){ var cu=(((t*0.25+cs/3+artHash(wrapC(q),wrapC(r),560+cs))%1)+1)%1; ctx.globalAlpha=0.3*(1-cu)*Math.min(1,cu*5); ctx.fillStyle='#3A322E'; ctx.beginPath(); ctx.arc(x+cu*s*0.3+Math.sin(cu*5+cs)*s*0.06,y-cu*s*1.2,s*(0.07+0.18*cu),0,6.284); ctx.fill(); }   // smoke off the crater
+  for(var cs=0;cs<3;cs++){ var cu=(((t*0.25+cs/3+artHash(wrapQ(q),wrapR(r),560+cs))%1)+1)%1; ctx.globalAlpha=0.3*(1-cu)*Math.min(1,cu*5); ctx.fillStyle='#3A322E'; ctx.beginPath(); ctx.arc(x+cu*s*0.3+Math.sin(cu*5+cs)*s*0.06,y-cu*s*1.2,s*(0.07+0.18*cu),0,6.284); ctx.fill(); }   // smoke off the crater
   if(u<FALL){
     var f=u/FALL, ex=s*2.6, ey=s*5.2, hx=x+ex*(1-f), hy=y-ey*(1-f), tx=hx+ex*0.55, ty=hy-ey*0.55;
     var g=ctx.createLinearGradient(hx,hy,tx,ty); g.addColorStop(0,'rgba(255,236,160,.95)'); g.addColorStop(.45,'rgba(255,120,30,.55)'); g.addColorStop(1,'rgba(200,40,10,0)');
@@ -1961,7 +2038,7 @@ function drawComet(x,y,s,q,r,t){
     ctx.globalAlpha=(1-k)*.85; ctx.fillStyle='#FFE9A8'; ctx.beginPath(); ctx.arc(x,y,s*(0.3+0.9*k),0,6.284); ctx.fill();
     ctx.globalAlpha=(1-k)*.9; ctx.strokeStyle='#FF7A1F'; ctx.lineWidth=Math.max(1.5,s*0.1); ctx.beginPath(); ctx.ellipse(x,y+s*0.1,s*(0.3+1.3*k),s*(0.18+0.7*k),0,0,6.284); ctx.stroke();
     ctx.fillStyle='#FFB347';
-    for(var i=0;i<6;i++){ var a=i*1.047+artHash(wrapC(q),wrapC(r),600+i)*0.8; ctx.beginPath(); ctx.arc(x+Math.cos(a)*s*1.1*k,y-Math.abs(Math.sin(a))*s*1.2*k+s*0.3*k*k,Math.max(1,s*0.07),0,6.284); ctx.fill(); }
+    for(var i=0;i<6;i++){ var a=i*1.047+artHash(wrapQ(q),wrapR(r),600+i)*0.8; ctx.beginPath(); ctx.arc(x+Math.cos(a)*s*1.1*k,y-Math.abs(Math.sin(a))*s*1.2*k+s*0.3*k*k,Math.max(1,s*0.07),0,6.284); ctx.fill(); }
   }
   ctx.restore();
 }
@@ -2047,7 +2124,7 @@ function settlePietro(){
     var men=(c.b||0)+(c.g||0), tb=c.tb||0, tr=(c.tr||[]).slice(0,tb);
     if(men||tb){                                         // Bohrer's soldiers and trebuchets fall back to a square of his beside it
       for(var i=0;i<6;i++){
-        var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[key(nq,nr)];
+        var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), n=G.cells[key(nq,nr)];
         if(!n||n.o!==boh||building(n)||groundAt(nq,nr)===RIVER) continue;
         n=cellOf(nq,nr); if(men) n.b=(n.b||0)+men;
         if(tb){ var ntr=(n.tr||[]).slice(0,n.tb||0); while(ntr.length<(n.tb||0)) ntr.push(0); while(tr.length<tb) tr.push(0); n.tb=(n.tb||0)+tb; n.tr=ntr.concat(tr); }
@@ -2277,7 +2354,7 @@ function settleTitan(){
 /* a hungry red ring on every square of Anna's that still holds soldiers: the Titan has his eye on them */
 function drawTitan(x,y,s,q,r,t){
   if(s<9) return;
-  var u=(((t*0.8+artHash(wrapC(q),wrapC(r),920))%1)+1)%1;
+  var u=(((t*0.8+artHash(wrapQ(q),wrapR(r),920))%1)+1)%1;
   ctx.save(); ctx.globalAlpha=.55*(1-u); ctx.strokeStyle='#ff5a2a'; ctx.lineWidth=Math.max(1.5,s*0.08);
   ctx.beginPath(); ctx.ellipse(x,y+s*0.08,s*(0.3+0.5*u),s*(0.18+0.3*u),0,0,6.284); ctx.stroke(); ctx.restore();
 }
@@ -2455,7 +2532,7 @@ function drawOneTurkey(X,Y,z,dir,walk,peck,fan,t,farm,talk){
 /* the swarm on one of Keybler's squares: a few loose feathers, and two turkeys (three on a farm) strutting about */
 function drawTurkeys(x,y,s,q,r,t,farm){
   if(s<9) return;
-  var hq=wrapC(q), hr=wrapC(r), i;
+  var hq=wrapQ(q), hr=wrapR(r), i;
   ctx.save(); ctx.fillStyle='#e8d8b0'; ctx.strokeStyle='#5b3519'; ctx.lineWidth=Math.max(0.6,s*0.02);
   for(i=0;i<3;i++){ var fa=artHash(hq,hr,980+i)*6.28, fx=x+(artHash(hq,hr,985+i)-0.5)*s*1.1, fy=y+(artHash(hq,hr,990+i)-0.5)*s*0.7;
     ctx.save(); ctx.translate(fx,fy); ctx.rotate(fa); ctx.globalAlpha=.75; ctx.beginPath(); ctx.ellipse(0,0,s*0.09,s*0.03,0,0,6.284); ctx.fill(); ctx.stroke(); ctx.restore(); }
@@ -2533,15 +2610,15 @@ function settleBless2(){
    else's land, castle or ruin. He keeps his resources, marches and soldiers (they wait at the new keep). */
 var MOVE1_PID='p1ki376y', moving1=false;
 function openestSpot(pid){
-  var N=WORLD*WORLD, D=new Int32Array(N).fill(-1), Q=new Int32Array(N), h=0, t=0, k, c, i;
-  var ix=function(q,r){ return (wrapC(q)+HALF)*WORLD+(wrapC(r)+HALF); };
+  var N=WQ*WR, D=new Int32Array(N).fill(-1), Q=new Int32Array(N), h=0, t=0, k, c, i;
+  var ix=function(q,r){ return (wrapQ(q)+HQ)*WR+(wrapR(r)+HR); };
   for(k in G.cells){ c=G.cells[k]; if(!c) continue;
     if((c.o&&c.o!==pid) || (c.k&&c.o!==pid) || (c.gv&&c.gv.length)){ var p=k.split('_'), j=ix(parseInt(p[0],10),parseInt(p[1],10)); if(D[j]<0){ D[j]=0; Q[t++]=j; } } }
   if(!t) return null;
-  while(h<t){ var j0=Q[h++], q0=Math.floor(j0/WORLD)-HALF, r0=j0%WORLD-HALF;
+  while(h<t){ var j0=Q[h++], q0=Math.floor(j0/WR)-HQ, r0=j0%WR-HR;
     for(i=0;i<6;i++){ var j1=ix(q0+AX[i][0],r0+AX[i][1]); if(D[j1]<0){ D[j1]=D[j0]+1; Q[t++]=j1; } } }
   var best=null, bd=-1;
-  for(var j=0;j<N;j++){ var q=Math.floor(j/WORLD)-HALF, r=j%WORLD-HALF; if(D[j]>bd && !riverAt(q,r)){ bd=D[j]; best={q:q,r:r,d:D[j]}; } }
+  for(var j=0;j<N;j++){ var q=Math.floor(j/WR)-HQ, r=j%WR-HR; if(D[j]>bd && !riverAt(q,r) && !moltenAt(q,r)){ bd=D[j]; best={q:q,r:r,d:D[j]}; } }
   return best;
 }
 function settleMoveRafael(){
@@ -2808,7 +2885,7 @@ function cellsOf(pid){ var n=0; for(var k in G.cells){ if(G.cells[k].o===pid) n+
    If the board is busy the clear radius shrinks a step at a time, but a spot that holds ANY
    owned square at the keep itself, or on the first ring around it, is never used. */
 function seatClear(s,rad){
-  if(riverAt(s.q,s.r)) return false;
+  if(riverAt(s.q,s.r) || moltenAt(s.q,s.r)) return false;
   for(var p in G.players){ var o=G.players[p]; if(o && o.q!=null && hexDist(s.q,s.r,o.q,o.r)<Math.max(rad,6)) return false; }
   for(var k in G.cells){
     var c=G.cells[k]; if(!c.o && !c.k && !c.gv) continue;
@@ -2817,9 +2894,16 @@ function seatClear(s,rad){
   }
   return true;
 }
+function riftSeats(){                     // the cooled middle of each rift, every few rows: new land for new players
+  var out=[]; if(!RIFTS.length) return out;
+  for(var q=-HQ;q<HQ;q++) for(var r=-HR;r<HR;r+=3){ var o=riftSquare(q,r); if(!o) continue; var mid=(RIFTS[o.s].k+1)/2;
+    if(Math.abs(o.j-mid)<=1 && !moltenAt(q,r) && !riverAt(q,r)) out.push({q:q,r:r}); }
+  return out;
+}
 function findStartSpot(){
-  var radii=[8,6,4,2,1];
+  var radii=[8,6,4,2,1], rs=riftSeats();
   for(var ri=0;ri<radii.length;ri++){
+    for(var m=0;m<rs.length;m++) if(seatClear(rs[m],Math.min(radii[ri],5))) return rs[m];
     for(var n=0;n<400;n++){
       var s=seatFor(n);
       if(seatClear(s,radii[ri])) return s;
@@ -2840,7 +2924,7 @@ function seedPlayer(pid,name){
     var cur=q.shift(),k=key(cur[0],cur[1]);
     if(seen[k]) continue; seen[k]=1;
     var c=cellOf(cur[0],cur[1]);
-    if(c.o || c.t===RIVER) continue;                 // nobody starts on a river
+    if(c.o || c.t===RIVER || moltenAt(cur[0],cur[1])) continue;   // nobody starts on a river, or on lava
     c.o=pid; writeCell(cur[0],cur[1],c); placed++;
     for(var i=0;i<6;i++){ if(hash2(cur[0]*(seat+3),cur[1]+i)>0.25) q.push([cur[0]+AX[i][0],cur[1]+AX[i][1]]); }
   }
@@ -3211,6 +3295,7 @@ function putPath(sub,val){
 function othersOf(players){ var o={}; for(var p in players) if(p!==ME) o[p]=players[p]; return o; }
 function applyRemote(remote){
   if(!remote||!remote.players) return false;
+  if(quakeWatch(remote)) return true;                  // the world itself has moved (or is about to): nothing of this copy is applied
   var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}]);
   G.cells=remote.cells||{}; tidyBoard(G); cellsGen++;
   G.claims=remote.claims||{};
@@ -3980,7 +4065,7 @@ function liveRoads(pid){
   while(stack.length){
     var cur=stack.pop();
     for(var i=0;i<6;i++){
-      var nq=wrapC(cur[0]+AX[i][0]), nr=wrapC(cur[1]+AX[i][1]), nk=nq+'_'+nr;
+      var nq=wrapQ(cur[0]+AX[i][0]), nr=wrapR(cur[1]+AX[i][1]), nk=nq+'_'+nr;
       if(set[nk]) continue;
       var n=G.cells[nk];
       if(n && n.o===pid && roadSq(n,nq,nr,now)){ set[nk]=1; stack.push([nq,nr]); }
@@ -3998,7 +4083,7 @@ function touchesLive(q,r,pid){                        // (name kept) does finish
 var roadHint=null;
 function hintRoads(q,r){
   var keys=[];
-  for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), c=G.cells[nq+'_'+nr]; if(c && c.o===ME && !building(c) && groundAt(nq,nr)!==RIVER) keys.push([nq,nr]); }
+  for(var i=0;i<6;i++){ var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), c=G.cells[nq+'_'+nr]; if(c && c.o===ME && !building(c) && groundAt(nq,nr)!==RIVER) keys.push([nq,nr]); }
   roadHint=keys.length?{cells:keys, until:clock()+7}:null;
   if(roadHint) coachKickHint();
   return keys.length;
@@ -4110,7 +4195,7 @@ function breakRoadNow(q,r,band0,shown){
    step three. Ties go the same way every time (the earlier-found square first, neighbours in a fixed
    order), and the route is stored on the walk, so every screen shows the same road. */
 function trekPath(pid,aq,ar,bq,br){
-  aq=wrapC(aq); ar=wrapC(ar); bq=wrapC(bq); br=wrapC(br);
+  aq=wrapQ(aq); ar=wrapR(ar); bq=wrapQ(bq); br=wrapR(br);
   var L=liveRoads(pid), start=aq+'_'+ar, goal=bq+'_'+br, dist={}, prevK={}, seq=0, heap=[], done={};
   function push(d,k,q,r){ heap.push({d:d,s:seq++,k:k,q:q,r:r}); var i=heap.length-1; while(i>0){ var pi=(i-1)>>1; if(less(heap[i],heap[pi])){ var t=heap[i]; heap[i]=heap[pi]; heap[pi]=t; i=pi; } else break; } }
   function less(a,b){ return a.d<b.d || (a.d===b.d && a.s<b.s); }
@@ -4120,7 +4205,7 @@ function trekPath(pid,aq,ar,bq,br){
     var cur=pop(); if(done[cur.k]) continue; done[cur.k]=1;
     if(cur.k===goal) break;
     for(var i=0;i<6;i++){
-      var nq=wrapC(cur.q+AX[i][0]), nr=wrapC(cur.r+AX[i][1]), nk=nq+'_'+nr;
+      var nq=wrapQ(cur.q+AX[i][0]), nr=wrapR(cur.r+AX[i][1]), nk=nq+'_'+nr;
       if(done[nk]) continue;
       var c=G.cells[nk]; if(!c || c.o!==pid || building(c)) continue;
       var step=(L[cur.k]&&L[nk])?ROAD_STEP_MS:TREK_MS_CELL, nd=cur.d+step;
@@ -4161,12 +4246,12 @@ function trekIsCell(p){ return p && p[0]===Math.round(p[0]) && p[1]===Math.round
 function trekCellOk(pid,p){ var c=G.cells[key(p[0],p[1])]; return !!(c && c.o===pid && !building(c)); }
 /* every square of pid's that can be reached from (aq,ar) over pid's own finished ground, rivers only where there is a bridge */
 function trekReach(pid,aq,ar){
-  var seen={}, out=[], st=[[wrapC(aq),wrapC(ar)]];
+  var seen={}, out=[], st=[[wrapQ(aq),wrapR(ar)]];
   seen[st[0][0]+'_'+st[0][1]]=1;
   while(st.length){
     var p=st.pop(); out.push(p);
     for(var i=0;i<6;i++){
-      var nq=wrapC(p[0]+AX[i][0]), nr=wrapC(p[1]+AX[i][1]), nk=nq+'_'+nr;
+      var nq=wrapQ(p[0]+AX[i][0]), nr=wrapR(p[1]+AX[i][1]), nk=nq+'_'+nr;
       if(seen[nk]) continue;
       var c=G.cells[nk]; if(!c||c.o!==pid||building(c)) continue;
       seen[nk]=1; st.push([nq,nr]);
@@ -4206,8 +4291,8 @@ function trekMend(tk,now){
     if(!pick || score<pick.score) pick={score:score, lead:o.lead, tp:tp, dest:dest, reached:reached};
   });
   if(!pick) return null;
-  var r3=function(v){ return Math.round(v*1000)/1000; }, start=[r3(wrapC(pos.q)),r3(wrapC(pos.r))];
-  return {from:start, to:[wrapC(pick.dest[0]),wrapC(pick.dest[1])], t:now, eta:now+Math.max(60000,pick.lead+pick.tp.ms),
+  var r3=function(v){ return Math.round(v*1000)/1000; }, start=[r3(wrapQ(pos.q)),r3(wrapR(pos.r))];
+  return {from:start, to:[wrapQ(pick.dest[0]),wrapR(pick.dest[1])], t:now, eta:now+Math.max(60000,pick.lead+pick.tp.ms),
           path:[start].concat(pick.tp.path), dt:[Math.max(1,pick.lead)].concat(pick.tp.dt), reached:pick.reached};
 }
 function guardTreks(){
@@ -4243,7 +4328,7 @@ function drawRoads(roads,detail){
     var c=e[0], p=e[1], q=c.q, r=c.r, o=c.o, live=liveRoads(o)[key(q,r)], up=roadUp(c,now), nb=0;
     var alpha=up?0.6:(live?0.95:0.38);
     for(var i=0;i<6;i++){
-      var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), n=G.cells[nq+'_'+nr];
+      var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), n=G.cells[nq+'_'+nr];
       if(!n || n.o!==o || !(n.rd || (n.k===CASTLE&&!isRuin(n)) || (groundAt(nq,nr)===RIVER&&!building(n)))) continue;
       nb++;
       var pair=[key(q,r),nq+'_'+nr].sort().join('|'); if(done[pair]) continue; done[pair]=1;
@@ -4260,7 +4345,7 @@ function drawRoads(roads,detail){
     }
     if(!live && !up && !thin && S>=16){                               // a dead road grows over
       ctx.globalAlpha=0.7; ctx.strokeStyle=NAT.grass; ctx.lineWidth=Math.max(0.8,S*0.03);
-      for(var w=0;w<3;w++){ var wx=p.x+(artHash(wrapC(q),wrapC(r),300+w)-0.5)*S*0.6, wy=p.y+(artHash(wrapC(q),wrapC(r),310+w)-0.5)*S*0.3, wh=S*0.1;
+      for(var w=0;w<3;w++){ var wx=p.x+(artHash(wrapQ(q),wrapR(r),300+w)-0.5)*S*0.6, wy=p.y+(artHash(wrapQ(q),wrapR(r),310+w)-0.5)*S*0.3, wh=S*0.1;
         ctx.beginPath(); ctx.moveTo(wx-wh*0.4,wy-wh); ctx.lineTo(wx,wy); ctx.lineTo(wx+wh*0.4,wy-wh); ctx.moveTo(wx,wy); ctx.lineTo(wx,wy-wh*1.1); ctx.stroke(); }
     }
   });
@@ -4320,9 +4405,9 @@ function myCastleCells(pid){
 var CASTLE_BUILD_MS=BRIDGE_MS;
 function castleSurrounded(q,r,pid){
   if(!myCastleCells(pid).length) return true;
-  q=wrapC(q); r=wrapC(r);
+  q=wrapQ(q); r=wrapR(r);
   for(var i=0;i<6;i++){
-    var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]);
+    var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]);
     if(groundAt(nq,nr)===RIVER) continue;
     var n=G.cells[key(nq,nr)];
     if(!n || n.o!==pid || building(n)) return false;
@@ -4366,7 +4451,7 @@ function build0(q,r,kind){
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
-    if(isFarmCell(c,wrapC(q),wrapC(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, linked by your own land to a farm (&equiv;) you hold.');
+    if(isFarmCell(c,wrapQ(q),wrapR(r))) return nope('<span class="bad">A castle can&rsquo;t stand on a grain square.</span> Build it on other ground, linked by your own land to a farm (&equiv;) you hold.');
     if(!castleFed(q,r,ME)) return nope('<span class="bad">A castle needs a grain square connected to it.</span> This cell is not joined by unbroken ground of yours to a farm (&equiv;) you hold &mdash; a castle cut off from every farm would starve and fall within 5 days.');
     if(!castleSurrounded(q,r,ME)) return nope('<span class="bad">A castle needs all six squares around it to be yours.</span> Every square touching this one must be finished ground you hold (a river square is fine). Claim the missing squares first.');
     var near=myCastleCells(ME).concat(pendingCastles(ME)).filter(function(p){ return hexDist(q,r,p[0],p[1])<CASTLE_SPACING; });
@@ -4579,7 +4664,7 @@ function moveClick(q,r){
   if(!tp) return nope('<span class="bad">No way through.</span> There is no unbroken path of your own ground between here and there.');
   // the walk costs no marches; the men leave the cell now, follow the fastest way, and step onto the far one when the time is up
   var oq=sel.q, or=sel.r, now=Date.now(), ms=Math.max(60000,tp.ms), id=ME+'-'+now.toString(36), d=tp.path.length-1;
-  var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapC(oq),wrapC(or)], to:[wrapC(q),wrapC(r)], path:tp.path, dt:tp.dt};
+  var tk={o:ME, n:send, t:now, eta:now+ms, from:[wrapQ(oq),wrapR(or)], to:[wrapQ(q),wrapR(r)], path:tp.path, dt:tp.dt};
   if(sendt){ var trs=arr(from.tr).slice(0,nt); while(trs.length<nt) trs.push(0); tk.tb=sendt; tk.tr=trs.slice(0,sendt); from.tr=trs.slice(sendt); from.tb=nt-sendt; if(!from.tb){ delete from.tb; delete from.tr; } }
   G.treks=G.treks||{}; G.treks[id]=tk;
   from.b-=send; if(!from.b) delete from.b;
@@ -4645,8 +4730,8 @@ function redirectTrek(q,r){
     if(!pick || o.lead+tp.ms<pick.ms) pick={ms:o.lead+tp.ms, lead:o.lead, tp:tp};
   });
   if(!pick) return nope('<span class="bad">No way through.</span> There is no unbroken path of your own ground from where they are to there.');
-  var ms=Math.max(60000,pick.ms), start=[r3(wrapC(pos.q)),r3(wrapC(pos.r))];
-  tk.from=start; tk.to=[wrapC(q),wrapC(r)]; tk.t=now; tk.eta=now+ms;
+  var ms=Math.max(60000,pick.ms), start=[r3(wrapQ(pos.q)),r3(wrapR(pos.r))];
+  tk.from=start; tk.to=[wrapQ(q),wrapR(r)]; tk.t=now; tk.eta=now+ms;
   tk.path=[start].concat(pick.tp.path); tk.dt=[Math.max(1,pick.lead)].concat(pick.tp.dt);
   selTrek=null; draw();
   putPath('/treks/'+id,tk);
@@ -4874,7 +4959,7 @@ function cellActions(q,r){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).concat(pendingCastles(ME)).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
-        var cwhy=isFarmCell(c,wrapC(q),wrapC(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleSurrounded(q,r,ME)?'Needs all six squares around it to be yours':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
+        var cwhy=isFarmCell(c,wrapQ(q),wrapR(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleSurrounded(q,r,ME)?'Needs all six squares around it to be yours':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
       }
       if((c.w||0)>0) A('Tear down a wall course',refundLine(demolishRefund(c,'wall',q,r)),function(){ tearDown(q,r,'wall'); });
@@ -5117,7 +5202,7 @@ function defaultSpend(c,part,q,r,players){
   if(part!=='k' || !c.k) return out;
   var l=c.l||1;
   if(c.k===TOWER){ var m=l*(l+1)/2; for(k in SPEC[TOWER].cost) out[k]=SPEC[TOWER].cost[k]*m; return out; }   // level L cost the base price times 1+2+…+L
-  var pl=(players||(G&&G.players)||{})[c.o], home=!!pl && wrapC(pl.q)===wrapC(q) && wrapC(pl.r)===wrapC(r);
+  var pl=(players||(G&&G.players)||{})[c.o], home=!!pl && wrapQ(pl.q)===wrapQ(q) && wrapR(pl.r)===wrapR(r);
   if(!home) for(k in SECOND_CASTLE) out[k]=SECOND_CASTLE[k];                      // the keep everyone starts with was free
   for(L=2;L<=l;L++) for(k in SPEC[CASTLE].cost) out[k]=(out[k]||0)+SPEC[CASTLE].cost[k]*L;
   return out;
@@ -6012,6 +6097,33 @@ function setZoom(next){                              // zoom about the middle of
   var mid=fromScreen(W/2,H/2);
   S=next; centreOn(mid[0],mid[1]);
 }
+/* ── lava ──  A rift square is molten until it cools (riftCoolAt), then a dark crust that smokes for a few hours. */
+function lavaState(q,r){ var o=riftSquare(q,r); if(!o) return 0; var t=Date.now(), cool=riftCoolAt(o); return t<cool?2:(t<cool+LAVA_GLOW_MS?1:0); }
+function drawLava(x,y,s,q,r,t){
+  var hq=wrapQ(q), hr=wrapR(r), h1=artHash(hq,hr,701), h2=artHash(hq,hr,702), pul=0.5+0.5*Math.sin(t*(1.1+h1)+h2*6.3);
+  ctx.save(); hexPath(x,y,s*0.99);
+  var g=ctx.createRadialGradient(x+(h1-0.5)*s*0.5,y+(h2-0.5)*s*0.5,s*0.08,x,y,s*1.05);
+  g.addColorStop(0,pul>0.6?'#FFE08A':'#FFB43A'); g.addColorStop(0.45,'#FF6A12'); g.addColorStop(1,'#A8200A');
+  ctx.fillStyle=g; ctx.fill();
+  if(s>=7){ ctx.clip();                                  // plates of cooling crust drifting on the melt, their seams glowing
+    for(var i=0;i<3;i++){ var a=artHash(hq,hr,710+i)*6.283+t*0.05*(i%2?1:-1), rr=s*(0.18+artHash(hq,hr,720+i)*0.42), px=x+Math.cos(a)*rr, py=y+Math.sin(a)*rr*0.85, pr=s*(0.26+0.14*artHash(hq,hr,730+i));
+      ctx.beginPath(); for(var v=0;v<6;v++){ var va=v*1.047+artHash(hq,hr,750+i*7+v)*0.7, vr=pr*(0.7+0.5*artHash(hq,hr,760+i*7+v)); v?ctx.lineTo(px+Math.cos(va)*vr,py+Math.sin(va)*vr):ctx.moveTo(px+Math.cos(va)*vr,py+Math.sin(va)*vr); } ctx.closePath();
+      ctx.globalAlpha=0.62; ctx.fillStyle=i%2?'#4A1C0C':'#5A240E'; ctx.fill();
+      ctx.globalAlpha=0.45+0.4*pul; ctx.strokeStyle=pul>0.7?'#FFF1B0':'#FFC24A'; ctx.lineWidth=Math.max(0.7,s*0.045); ctx.stroke(); }
+    if(!REDUCE){ var u=((t*0.5+h1)%1); ctx.globalAlpha=0.8*(1-u); ctx.fillStyle='#FFD36B';   // an ember rising
+      ctx.beginPath(); ctx.arc(x+(h2-0.5)*s*0.8+Math.sin(u*6+h1*9)*s*0.12,y-u*s*1.2,Math.max(0.8,s*0.06),0,6.284); ctx.fill(); }
+  }
+  ctx.restore();
+}
+function drawCrust(x,y,s,q,r,t){
+  var o=riftSquare(q,r), f=o?Math.max(0,1-(Date.now()-riftCoolAt(o))/LAVA_GLOW_MS):0, hq=wrapQ(q), hr=wrapR(r);
+  ctx.save(); hexPath(x,y,s*0.95); ctx.globalAlpha=0.25+0.5*f; ctx.fillStyle='#2E2622'; ctx.fill();
+  if(s>=9){ ctx.clip(); ctx.globalAlpha=0.6*f*(0.6+0.4*Math.sin(t*2+artHash(hq,hr,740)*6)); ctx.strokeStyle='#FF6A1A'; ctx.lineWidth=Math.max(0.7,s*0.04);
+    ctx.beginPath(); ctx.moveTo(x-s*0.5,y); ctx.lineTo(x,y+s*0.2*(artHash(hq,hr,741)-0.5)); ctx.lineTo(x+s*0.5,y-s*0.1); ctx.stroke();
+    if(!REDUCE){ var u=((t*0.25+artHash(hq,hr,742))%1); ctx.globalAlpha=0.35*f*(1-u); ctx.fillStyle='#8A8078';
+      ctx.beginPath(); ctx.arc(x+u*s*0.3,y-u*s*1.1,s*(0.12+u*0.3),0,6.284); ctx.fill(); } }
+  ctx.restore();
+}
 function hexPath(cx,cy,s){ ctx.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180,x=cx+s*Math.cos(a),y=cy+s*Math.sin(a); i?ctx.lineTo(x,y):ctx.moveTo(x,y); } ctx.closePath(); }
 function colorFor(pid){ return pColor(pid); }
 function mark(t,cx,cy,s,col){
@@ -6087,7 +6199,7 @@ function drawGraves(x,y,s,n,q,r){
   var m=Math.min(n,8), ks=s*(s>=18?0.17:0.15);
   ctx.save(); ctx.lineCap='round';
   for(var i=0;i<m;i++){
-    var gx=x+(artHash(wrapC(q),wrapC(r),90+i)-0.5)*s*1.3, gy=y+s*(-0.12+artHash(wrapC(q),wrapC(r),120+i)*0.5);
+    var gx=x+(artHash(wrapQ(q),wrapR(r),90+i)-0.5)*s*1.3, gy=y+s*(-0.12+artHash(wrapQ(q),wrapR(r),120+i)*0.5);
     ctx.globalAlpha=.3; ctx.fillStyle='#14100A'; ctx.beginPath(); ctx.ellipse(gx+ks*0.2,gy+ks*1.2,ks*1.05,ks*0.3,0,0,6.284); ctx.fill();
     if(s>=16){ ctx.globalAlpha=.75; ctx.fillStyle=NAT.soil2; ctx.beginPath(); ctx.ellipse(gx,gy+ks*1.1,ks*0.7,ks*0.26,0,Math.PI,0); ctx.fill(); }   // the turned earth of the grave
     ctx.globalAlpha=.9; ctx.strokeStyle='rgba(20,16,10,.7)'; ctx.lineWidth=Math.max(2.6,s*0.1);
@@ -6101,7 +6213,7 @@ function drawGraves(x,y,s,n,q,r){
 /* the plague: a sickly green haze and a few drifting spores over the plagued land */
 function drawPlague(x,y,s,q,r,t){
   if(s<9) return;
-  var hq=wrapC(q), hr=wrapC(r), tt=t||0, pul=0.5+0.5*Math.sin(tt*1.3+artHash(hq,hr,240)*6);
+  var hq=wrapQ(q), hr=wrapR(r), tt=t||0, pul=0.5+0.5*Math.sin(tt*1.3+artHash(hq,hr,240)*6);
   ctx.save();
   var gr=ctx.createRadialGradient(x,y+s*0.05,0,x,y+s*0.05,s*0.72);
   gr.addColorStop(0,'rgba(127,168,58,'+(0.34+0.12*pul).toFixed(3)+')'); gr.addColorStop(0.6,'rgba(110,150,50,0.16)'); gr.addColorStop(1,'rgba(110,150,50,0)');
@@ -6121,7 +6233,7 @@ function drawPlague(x,y,s,q,r,t){
 }
 function drawBlaze(x,y,s,q,r,t,big){
   if(s<9) return;
-  var hq=wrapC(q), hr=wrapC(r), tt=t||0, n=big?(s>=18?7:4):(s>=18?3:2), gs=big?1.9:1;
+  var hq=wrapQ(q), hr=wrapR(r), tt=t||0, n=big?(s>=18?7:4):(s>=18?3:2), gs=big?1.9:1;
   var pul=0.75+0.25*Math.sin(tt*6+artHash(hq,hr,205)*6)*Math.sin(tt*3.7);
   ctx.save();
   ctx.globalAlpha=big?.5:.34; ctx.fillStyle='#2E170E'; ctx.beginPath(); ctx.ellipse(x,y+s*0.12,s*(big?0.6:0.44),s*(big?0.36:0.26),0,0,6.284); ctx.fill();   // scorched earth
@@ -6236,20 +6348,20 @@ var RN_TWO=[
   function(a,b){ return rnPoss(a)+' Moat, '+rnPoss(b)+' Problem'; }
 ];
 function rnBuildChunks(){                           // the stretches themselves: each river is walked cell by cell from one end and cut into stretches of about 22 cells
-  var seen={}, out=[], CH=22, dist=function(a,b){ var dq=wrapC(b[0]-a[0]), dr=wrapC(b[1]-a[1]); return (Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2; };
-  for(var q0=-HALF;q0<HALF;q0++) for(var r0=-HALF;r0<HALF;r0++){
+  var seen={}, out=[], CH=22, dist=function(a,b){ var dq=wrapQ(b[0]-a[0]), dr=wrapR(b[1]-a[1]); return (Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2; };
+  for(var q0=-HQ;q0<HQ;q0++) for(var r0=-HR;r0<HR;r0++){
     if(seen[q0+'_'+r0] || !riverAt(q0,r0)) continue;
     var comp=[], qu=[[q0,r0]]; seen[q0+'_'+r0]=1;                         // every cell of this connected river
     for(var h=0;h<qu.length;h++){
       var c0=qu[h]; comp.push(c0);
       for(var i=0;i<6;i++){
-        var nq=wrapC(c0[0]+AX[i][0]), nr=wrapC(c0[1]+AX[i][1]), nk=nq+'_'+nr;
+        var nq=wrapQ(c0[0]+AX[i][0]), nr=wrapR(c0[1]+AX[i][1]), nk=nq+'_'+nr;
         if(!seen[nk] && riverAt(nq,nr)){ seen[nk]=1; qu.push([nq,nr]); }
       }
     }
     var left={}; comp.forEach(function(c){ left[c[0]+'_'+c[1]]=c; });
     var nLeft=comp.length;
-    var degOf=function(c){ var d=0; for(var i=0;i<6;i++){ if(left[wrapC(c[0]+AX[i][0])+'_'+wrapC(c[1]+AX[i][1])]) d++; } return d; };
+    var degOf=function(c){ var d=0; for(var i=0;i<6;i++){ if(left[wrapQ(c[0]+AX[i][0])+'_'+wrapR(c[1]+AX[i][1])]) d++; } return d; };
     while(nLeft>0){
       var start=null, sd=9; comp.forEach(function(c){ if(!left[c[0]+'_'+c[1]]) return; var d=degOf(c); if(d<sd){ sd=d; start=c; } });   // begin at an end of what remains
       var walk=[start], prev=null, cur=start; delete left[start[0]+'_'+start[1]]; nLeft--;
@@ -6258,7 +6370,7 @@ function rnBuildChunks(){                           // the stretches themselves:
         for(var k in left){
           var c=left[k], d=dist(cur,c); if(d>2) continue;
           var score=d*10;
-          if(prev){ var v1=[wrapC(cur[0]-prev[0]),wrapC(cur[1]-prev[1])], v2=[wrapC(c[0]-cur[0]),wrapC(c[1]-cur[1])], dot=(v1[0]*v2[0]+v1[1]*v2[1]+(v1[0]*v2[1]+v1[1]*v2[0])/2)/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1); score-=dot; }   // among equals, keep going the way we were going
+          if(prev){ var v1=[wrapQ(cur[0]-prev[0]),wrapR(cur[1]-prev[1])], v2=[wrapQ(c[0]-cur[0]),wrapR(c[1]-cur[1])], dot=(v1[0]*v2[0]+v1[1]*v2[1]+(v1[0]*v2[1]+v1[1]*v2[0])/2)/(Math.hypot(v1[0],v1[1])*Math.hypot(v2[0],v2[1])||1); score-=dot; }   // among equals, keep going the way we were going
           if(score<bs){ bs=score; best=c; }
         }
         if(!best) break;
@@ -6269,7 +6381,7 @@ function rnBuildChunks(){                           // the stretches themselves:
       if(groups.length>1 && groups[groups.length-1].length<8){ var tail=groups.pop(); groups[groups.length-1]=groups[groups.length-1].concat(tail); }
       groups.forEach(function(cells){
         if(cells.length<6) return;
-        var mid=cells[Math.floor(cells.length/2)], offs=cells.map(function(c){ return [wrapC(c[0]-mid[0]),wrapC(c[1]-mid[1])]; });   // offsets from the middle cell, in order along the river
+        var mid=cells[Math.floor(cells.length/2)], offs=cells.map(function(c){ return [wrapQ(c[0]-mid[0]),wrapR(c[1]-mid[1])]; });   // offsets from the middle cell, in order along the river
         var path=offs.map(function(o,i){
           var a0=Math.max(0,i-1), a1=Math.min(offs.length-1,i+1), sq=0, sr=0, n=0;
           for(var j=a0;j<=a1;j++){ sq+=offs[j][0]; sr+=offs[j][1]; n++; }
@@ -6290,9 +6402,12 @@ function rnRefresh(){
   if(!G) return;
   rnInit();
   rnAt=Date.now(); rnNames=[]; rnById={};
-  var used={}, given=G.rivnames||{};
+  var used={}, given=G.rivnames||{}, ids={}, adopt={};
+  rnChunks.forEach(function(ch){ ids[ch.id]=1; });
+  Object.keys(given).forEach(function(id){             // a quake can cut a river into stretches differently: a paid name stays with the stretch its square is in
+    if(ids[id]) return; var i=rnIndex[id]; if(i!=null && !given[rnChunks[i].id] && !adopt[rnChunks[i].id]) adopt[rnChunks[i].id]=given[id]; });
   rnChunks.forEach(function(ch){
-    var gv=given[ch.id];
+    var gv=given[ch.id]||adopt[ch.id];
     if(gv && gv.n){ rnNames.push({aq:ch.aq, ar:ch.ar, ang:ch.ang, path:ch.path, text:gv.n, w:99, custom:true}); rnById[ch.id]=gv.n; return; }   // a name somebody paid a march for
     var tally={};
     ch.cells.forEach(function(c){
@@ -6324,7 +6439,7 @@ function riverHold(ch){                              // {mine, claimed}: squares
   ch.cells.forEach(function(c){
     for(var dq=-3;dq<=3;dq++) for(var dr=-3;dr<=3;dr++){
       if((Math.abs(dq)+Math.abs(dr)+Math.abs(dq+dr))/2>3) continue;
-      var nq=wrapC(c[0]+dq), nr=wrapC(c[1]+dr), k=nq+'_'+nr;
+      var nq=wrapQ(c[0]+dq), nr=wrapR(c[1]+dr), k=nq+'_'+nr;
       if(seen[k]) continue; seen[k]=1;
       var cc=G.cells[k]; if(!cc || !cc.o || !G.players[cc.o] || riverAt(nq,nr)) continue;
       claimed++; if(cc.o===ME) mine++;
@@ -6434,7 +6549,10 @@ function draw(){
     var c=cellOf(q,r), vl=veilOf(key(q,r),now);
     if(vl) c={o:vl.o,w:vl.w||0,k:vl.k||null,l:vl.l||0,g:vl.g||0,d:0,q:q,r:r,t:c.t};    // as it was until its animation arrives
     var col=colorFor(c.o), wet=c.t===RIVER;
-    if(S>=12) stampTerrain(ctx,'g'+c.t,p[0],p[1],S,Math.floor(artHash(wrapC(q),wrapC(r),2)*3));   // the ground itself, under everything
+    var lav=RIFTS.length?lavaState(q,r):0;
+    if(lav===2){ drawLava(p[0],p[1],S,q,r,now); continue; }                                       // molten: nothing else is here yet
+    if(S>=12) stampTerrain(ctx,'g'+c.t,p[0],p[1],S,Math.floor(artHash(wrapQ(q),wrapR(r),2)*3));   // the ground itself, under everything
+    if(lav===1) drawCrust(p[0],p[1],S,q,r,now);                                                    // freshly cooled: dark and still smoking
     hexPath(p[0],p[1],S*0.94);
     if(S<12 && c.t!==PLAIN){ ctx.fillStyle=NAT.ground[c.t][0]; ctx.fill(); }                     // from far off, a flat wash of the same colour
     var cut = !vl && c.o===ME && !sup[key(q,r)] && !building(c);
@@ -6444,7 +6562,7 @@ function draw(){
       for(var k=-2;k<=2;k++){ ctx.moveTo(p[0]-S+k*S*.45,p[1]+S); ctx.lineTo(p[0]+S+k*S*.45,p[1]-S); }
       ctx.stroke(); ctx.restore();
     }
-    if(haveMarch&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='menu' || mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&(c.o?nextToMine(q,r):touchesLiveSet(q,r,myLive))){
+    if(haveMarch&&!lav&&c.o!==ME&&(!c.k||c.k===TOWER)&&(mode==='menu' || mode==='claim'&&!(wet&&!c.o) || mode==='bridge'&&wet&&!c.o)&&(c.o?nextToMine(q,r):touchesLiveSet(q,r,myLive))){
       ctx.save(); ctx.setLineDash([2,3]); ctx.strokeStyle=pColor(ME); ctx.globalAlpha=.8; ctx.lineWidth=1.3;
       hexPath(p[0],p[1],S*0.78); ctx.stroke(); ctx.restore();
       if(glowOn){ ctx.save(); ctx.globalAlpha=0.14+0.16*(0.5+0.5*Math.sin(now*4.5)); ctx.fillStyle=pColor(ME); hexPath(p[0],p[1],S*0.9); ctx.fill(); ctx.restore(); }
@@ -6453,7 +6571,7 @@ function draw(){
     ctx.lineWidth=c.o&&detail?1.8:1; ctx.globalAlpha=c.o?.9:.28;
     ctx.strokeStyle=c.o?col:T['--rule']; ctx.stroke(); ctx.globalAlpha=1;
     if(detail){
-      var vr=Math.floor(artHash(wrapC(q),wrapC(r),1)*3);
+      var vr=Math.floor(artHash(wrapQ(q),wrapR(r),1)*3);
       if(wet){ if(c.o) spans.push([c,p,col]); else if(!amb) stampTerrain(ctx,5,p[0],p[1],S,vr); }   // with animations on, open water is drawn moving (ambWater)
       else if(!c.k && (c.t!==PLAIN || S>=18)){
         if(!c.o) ctx.globalAlpha=.62;                  // unclaimed ground recedes; held ground reads at full strength
@@ -6480,7 +6598,7 @@ function draw(){
         if(!cut && !vl && !c.k && (c.t===QUARRY||c.t===IRON)) works.push([c.t,p,q,r]);
         if(!cut && !vl && !c.k && !(c.b>0) && YIELD[c.t]) folk.push([c.t,p,q,r,col]);      // someone at work on every supplied field
       } else if(!c.k){
-        var wh=artHash(wrapC(q),wrapC(r),71);                                            // a few sheep and deer on land nobody holds
+        var wh=artHash(wrapQ(q),wrapR(r),71);                                            // a few sheep and deer on land nobody holds
         if(c.t===PLAIN && wh<0.09) wild.push(['sheep',p,q,r]); else if(c.t===FOREST && wh<0.08) wild.push(['deer',p,q,r]);
       }
     }
@@ -6633,8 +6751,8 @@ function claimEvent(id){                             // a claim, seen as a move:
     n:Math.min(6,Math.max(2,Math.round((c.got||0)/3))), label:'+'+(c.got||0)+' marches'};
 }
 function logMove(k,q,r,from,prev,loss,extra){
-  var t=Date.now(), id=ME+'-'+t.toString(36), ev={pid:ME,k:k,q:wrapC(q),r:wrapC(r),t:t};
-  if(from){ ev.fq=wrapC(from[0]); ev.fr=wrapC(from[1]); }
+  var t=Date.now(), id=ME+'-'+t.toString(36), ev={pid:ME,k:k,q:wrapQ(q),r:wrapR(r),t:t};
+  if(from){ ev.fq=wrapQ(from[0]); ev.fr=wrapR(from[1]); }
   if(prev) ev.prev=prev;
   if(loss) ev.loss=loss;
   if(extra) for(var x in extra) if(extra[x]!=null) ev[x]=extra[x];
@@ -6644,7 +6762,7 @@ function logMove(k,q,r,from,prev,loss,extra){
   play(ev);
   coach.nopes=0;
   if(coach.following){
-    var took=coach.target && coach.target.q===wrapC(q) && coach.target.r===wrapC(r);
+    var took=coach.target && coach.target.q===wrapQ(q) && coach.target.r===wrapR(r);
     coach.target=null;
     if(took) setTimeout(function(){ renderCoach(); var p=coach.plan; if(p && p.key==='march') coachShow('stuck'); else coach.following=false; },1300);   // they took the idea: offer another
     else coach.following=false;                       // they chose their own move, so they know what they are doing: the idea bubble goes away
@@ -6971,7 +7089,7 @@ function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hid
 function ambLoop(ts){
   ambRaf=0;
   if(!ambWanted()) return;
-  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S))){ ambLast=ts; draw(); }   // the move and pointer loops draw every frame anyway
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S) || anyMolten())){ ambLast=ts; draw(); }   // lava keeps moving at any zoom   // the move and pointer loops draw every frame anyway
   ambRaf=requestAnimationFrame(ambLoop);
 }
 function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
@@ -6994,7 +7112,7 @@ function ambSmoke(){ return NAT_DARK ? '170,176,172' : '96,96,90'; }
 var flowMemo={}, flowN=0, PXDIR=[[1,0],[0.5,-0.866],[-0.5,-0.866],[-1,0],[-0.5,0.866],[0.5,0.866]];
 var EDGE_ANG=[0,-60,-120,180,120,60];
 function flowAt(q,r){
-  q=wrapC(q); r=wrapC(r);
+  q=wrapQ(q); r=wrapR(r);
   var k=q+'_'+r, f=flowMemo[k];
   if(f) return f;
   if(++flowN>20000){ flowMemo={}; flowN=0; }
@@ -7006,7 +7124,7 @@ function flowAt(q,r){
 var WAVE_K=2*Math.PI/0.42, WAVE_W=2.2;              // ripple length (in cell radii) and how fast they run
 function ambWater(g,w,now){
   var s=S, cx=w[0][0], cy=w[0][1], q=w[1], r=w[2], fl=flowAt(q,r), fx=fl[0], fy=fl[1], nx=-fy, ny=fx;
-  var wp=hexPx(q,r), along=(wp[0]*fx+wp[1]*fy)/s, hq=wrapC(q), hr=wrapC(r);
+  var wp=hexPx(q,r), along=(wp[0]*fx+wp[1]*fy)/s, hq=wrapQ(q), hr=wrapR(r);
   g.globalAlpha=0.05+0.06*(0.5+0.5*Math.sin(along*1.1-now*1.4));   // swells of light sweeping down the river
   g.fillStyle=NAT.wave; g.beginPath();
   for(var hi=0;hi<6;hi++){ var ha=(60*hi-30)*Math.PI/180; hi?g.lineTo(cx+s*0.94*Math.cos(ha),cy+s*0.94*Math.sin(ha)):g.moveTo(cx+s*0.94*Math.cos(ha),cy+s*0.94*Math.sin(ha)); }
@@ -7106,7 +7224,7 @@ function ambFolk(g,folk,now){
   var h=Math.max(7,s*0.42);
   g.save();
   folk.forEach(function(f){
-    var t=f[0], cx=f[1][0], cy=f[1][1], q=wrapC(f[2]), r=wrapC(f[3]), col=f[4], hh=artHash(q,r,81);
+    var t=f[0], cx=f[1][0], cy=f[1][1], q=wrapQ(f[2]), r=wrapR(f[3]), col=f[4], hh=artHash(q,r,81);
     if(t===FARM){
       var u=(now*0.08+hh*7)%2, tri=u<1?u:2-u;
       artPerson(g,cx+(-0.3+0.6*tri)*s,cy+s*0.3,h,col,{face:u<1?1:-1, ph:now*6+hh*9, folk:true});
@@ -7128,7 +7246,7 @@ function ambWild(g,wild,now){
   var s=S; if(s<16) return;
   g.save(); g.lineCap='round';
   wild.forEach(function(w){
-    var cx=w[1][0], cy=w[1][1], q=wrapC(w[2]), r=wrapC(w[3]);
+    var cx=w[1][0], cy=w[1][1], q=wrapQ(w[2]), r=wrapR(w[3]);
     if(w[0]==='sheep'){
       var n=2+Math.floor(artHash(q,r,88)*3);
       for(var i=0;i<n;i++){
@@ -7176,7 +7294,7 @@ function nextRiverCell(q,r,pq,pr){
   for(var i=0;i<6;i++){
     var nq=q+AX[i][0], nr=r+AX[i][1];
     if(!riverAt(nq,nr)) continue;
-    if(pq!=null && wrapC(nq)===wrapC(pq) && wrapC(nr)===wrapC(pr)) continue;
+    if(pq!=null && wrapQ(nq)===wrapQ(pq) && wrapR(nr)===wrapR(pr)) continue;
     var d=PXDIR[i][0]*fl[0]+PXDIR[i][1]*fl[1];
     if(d>bd){ bd=d; best=[nq,nr]; }
   }
@@ -7229,7 +7347,7 @@ function ambGround(g,waters,works,now){
   ambBoats(g,waters,now);
   g.globalAlpha=1;
   works.forEach(function(w){
-    var cx=w[1][0], cy=w[1][1], q=wrapC(w[2]), r=wrapC(w[3]), h=artHash(q,r,31);
+    var cx=w[1][0], cy=w[1][1], q=wrapQ(w[2]), r=wrapR(w[3]), h=artHash(q,r,31);
     if(w[0]===QUARRY){                                // chips of stone and dust as the masons cut
       var k=((now+h*7)%3.4)/1.2;
       artDust(g,cx+s*(0.05+0.2*h),cy+s*0.22,s*0.3,k);
@@ -7251,7 +7369,7 @@ function ambKeeps(g,builds,now){
   var s=S, sm=ambSmoke();
   g.save();
   builds.forEach(function(e){
-    var c=e[0], cx=e[1][0], cy=e[1][1]-s*0.06, h=artHash(wrapC(c.q),wrapC(c.r),41);
+    var c=e[0], cx=e[1][0], cy=e[1][1]-s*0.06, h=artHash(wrapQ(c.q),wrapR(c.r),41);
     if(!(c.g>0) && c.k!==TOWER) return;               // an empty keep is cold and dark (a tower needs nobody inside now)
     var f=0.72+0.28*Math.sin(now*11+h*30)*Math.sin(now*6.7+h*13);
     if(c.k===CASTLE){
@@ -7361,7 +7479,7 @@ function harvestGround(g,farms,opens,now){
   var s=S, mv=harvestMoves();
   g.save();
   farms.forEach(function(f){
-    var q=wrapC(f[1]), r=wrapC(f[2]), h=artHash(q,r,401), x=f[0][0]+(artHash(q,r,402)-0.5)*s*0.5, y=f[0][1]+s*(0.28+artHash(q,r,403)*0.12);
+    var q=wrapQ(f[1]), r=wrapR(f[2]), h=artHash(q,r,401), x=f[0][0]+(artHash(q,r,402)-0.5)*s*0.5, y=f[0][1]+s*(0.28+artHash(q,r,403)*0.12);
     var sw=mv?Math.sin(now*1.3+artHash(q,r,406)*6)*0.05:0;           // the corn and the sheaves sway in the breeze
     if(h<0.45) hvPumpkin(g,x,y,s*0.11);
     else { g.save(); g.translate(x,y); g.rotate(sw); if(h<0.75) hvCorn(g,0,0,s*0.42); else hvSheaf(g,0,0,s*0.36); g.restore(); }
@@ -7369,7 +7487,7 @@ function harvestGround(g,farms,opens,now){
     if(artHash(q,r,405)<0.14) hvScarecrow(g,f[0][0]-s*0.28,f[0][1]+s*0.3,s*0.5,sw*1.6);   // now and then a scarecrow keeps watch
   });
   opens.forEach(function(o){                                       // turkeys wander the open ground all November, more of them on Thanksgiving Day
-    var q=wrapC(o[1]), r=wrapC(o[2]); if(artHash(q,r,411)>(st==='day'?0.26:0.16)) return;
+    var q=wrapQ(o[1]), r=wrapR(o[2]); if(artHash(q,r,411)>(st==='day'?0.26:0.16)) return;
     var ph=mv?now*0.1+artHash(q,r,412)*9:artHash(q,r,412)*9, x=o[0][0]+Math.sin(ph)*s*0.38, y=o[0][1]+s*0.2+Math.cos(ph*0.7)*s*0.06;
     hvTurkey(g,x,y,s*0.17,Math.cos(ph)>=0?1:-1,mv?Math.sin(now*3+q)>0.6:false);
     if(mv && S>=20 && Math.floor(now/2.5+artHash(q,r,413)*20)%7===0){                // now and then one gobbles
@@ -7431,9 +7549,9 @@ function harvestKeeps(g,builds,now){
     var tx=cx+s*0.31*rs, ty=cy+s*0.36*rs, tw=s*0.13*rs;                           // a little feast table: a roast on a platter, steaming
     g.fillStyle='#7A4C26'; g.fillRect(tx-tw,ty,tw*2,s*0.02); g.fillRect(tx-tw*0.8,ty+s*0.02,s*0.015,s*0.05*rs); g.fillRect(tx+tw*0.8-s*0.015,ty+s*0.02,s*0.015,s*0.05*rs);
     blob(g,tx,ty-s*0.012,tw*0.55,s*0.03*rs,'#E8E0CC'); blob(g,tx,ty-s*0.03,tw*0.42,s*0.028*rs,'#A8591F'); blob(g,tx-tw*0.3,ty-s*0.05,s*0.014,s*0.014,'#C4661A'); blob(g,tx+tw*0.32,ty-s*0.05,s*0.014,s*0.014,'#D9B13A');
-    if(mv) for(var sk=0;sk<2;sk++){ var su=((now*0.4+sk*0.5+artHash(wrapC(c.q),wrapC(c.r),422))%1); g.strokeStyle='rgba(235,230,220,'+(0.5*(1-su)).toFixed(3)+')'; g.lineWidth=Math.max(0.8,s*0.012);
+    if(mv) for(var sk=0;sk<2;sk++){ var su=((now*0.4+sk*0.5+artHash(wrapQ(c.q),wrapR(c.r),422))%1); g.strokeStyle='rgba(235,230,220,'+(0.5*(1-su)).toFixed(3)+')'; g.lineWidth=Math.max(0.8,s*0.012);
       g.beginPath(); g.moveTo(tx+(sk?0.4:-0.4)*tw*0.5,ty-s*0.06); g.quadraticCurveTo(tx+Math.sin(su*6+sk)*s*0.03,ty-s*0.06-su*s*0.1,tx+(sk?0.4:-0.4)*tw*0.5+Math.sin(su*5)*s*0.03,ty-s*0.06-su*s*0.2); g.stroke(); }
-    if(mv) for(var k=0;k<3;k++){ var u=((now*0.25+k/3+artHash(wrapC(c.q),wrapC(c.r),421))%1), sx=cx+s*0.22*rs+Math.sin(u*5)*s*0.04, sy=cy-s*0.45*rs-u*s*0.6;
+    if(mv) for(var k=0;k<3;k++){ var u=((now*0.25+k/3+artHash(wrapQ(c.q),wrapR(c.r),421))%1), sx=cx+s*0.22*rs+Math.sin(u*5)*s*0.04, sy=cy-s*0.45*rs-u*s*0.6;
       g.fillStyle='rgba(150,140,128,'+(0.35*(1-u)).toFixed(3)+')'; g.beginPath(); g.arc(sx,sy,s*(0.03+0.06*u),0,6.284); g.fill(); }
   });
   g.restore();
@@ -7815,7 +7933,7 @@ function endPointer(ev){
     dragFrom=null;
     if(wasDragging && !moved && G && me() && replaying){ endReplay(); dragged=false; return; }
     if(wasDragging && !moved && G && me()){
-      var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top); h=[wrapC(h[0]),wrapC(h[1])];
+      var b=canvas.getBoundingClientRect(), h=fromScreen(ev.clientX-b.left,ev.clientY-b.top); h=[wrapQ(h[0]),wrapR(h[1])];
       lastTap={x:ev.clientX-b.left, y:ev.clientY-b.top, t:Date.now()};      // so a refusal can mark the spot
       if(mode==='menu') menuTap(ev.clientX-b.left,ev.clientY-b.top,h[0],h[1]);
       else if(mode==='claim') spendMarch(h[0],h[1]);
@@ -7942,7 +8060,7 @@ document.getElementById('claims-more').addEventListener('click',function(){ show
    older code than the board refuses to play and asks for a reload. */
 var STEWARDS={p16vnclj:1};                            // Bohrer
 function isSteward(pid){ return !!STEWARDS[pid==null?ME:pid]; }
-var DATA_V=4;                                         // the newest board layout this code understands
+var DATA_V=5;                                         // the newest board layout this code understands (5: the world can grow, meta/world)
 function migMeta(b){ return (b&&b.meta&&b.meta.migration)||{}; }
 function boardVersion(b){ return migMeta(b).v||0; }
 function migrationPending(b){ var st=migMeta(b).steps||{}; return MIGRATIONS.filter(function(s){ return s.stage<=DATA_V && !st[s.id]; }); }
@@ -7999,6 +8117,491 @@ var MIGRATIONS=[
     return {n:n, patch:patch};
   }}
 ];
+/* ═══ the earthquake ══════════════════════════════════════════════════════
+   The steward opens a rift (QUAKE_K new columns). A crack is found that winds from the top of the world to the
+   bottom through wild land and between rival kingdoms, as far as it can from anyone's own ground; everything east
+   of it moves QUAKE_K squares further east, and the gap fills with lava that cools into new land.
+   The crack is scored row by row: cutting between two squares of the same kingdom costs a great deal (far more
+   beside a building or soldiers), parting rivals costs a little, open ground almost nothing, and a band on the
+   march may never be cut. It never crosses a river on a sideways step (there the two sides slide past each
+   other instead of parting, and the river could not be carried across); where it does cross a river, the river
+   runs straight across the new land in that row, so no river gains a gap.
+   Before anything is written the quake is played out on a copy of the board with the game's own rules: every
+   castle must keep its farm, no band may be left unfed, no river barrier may open or close. Any bare square that
+   would be left without supply is cleared, and its owner is paid that many marches and QUAKE_PAY_EXTRA more.
+   If a crack would cut off anything but bare squares, the links it cut are ruled out and another is sought. */
+var QUAKE_K=20, QUAKE_PAY_EXTRA=10, QUAKE_FREEZE_MS=60000, QUAKE_SAME=400, QUAKE_MAXD=12, QRUN=false;
+function qBuilt(c,q,r){ return !!(c && (c.k || c.w>0 || c.g>0 || c.b>0 || c.f || c.tb>0 || c.rd || c.cb || (c.o && riverAt(q,r)))); }   // anything more than bare ground (a held river square is a bridge)
+function quakeGrid(b){                     // the board as flat arrays in the world as it is now
+  var n=WQ, N=WQ*WR, O=new Int32Array(N).fill(-1), S=new Uint8Array(N), R=new Uint8Array(N), codes={}, names=[], nc=0;
+  var I=function(q,r){ return (((q+HQ)%n+n)%n)*WR+(((r+HR)%WR+WR)%WR); };
+  for(var q=-HQ;q<HQ;q++) for(var r=-HR;r<HR;r++){ if(riverAt(q,r)) R[I(q,r)]=1; }
+  Object.keys(b.cells||{}).forEach(function(k){
+    var c=b.cells[k]; if(!c) return; var p=k.split('_'), i=I(parseInt(p[0],10),parseInt(p[1],10));
+    if(c.o){ if(codes[c.o]==null){ codes[c.o]=nc++; names.push(c.o); } O[i]=codes[c.o]; }
+    if(qBuilt(c,parseInt(p[0],10),parseInt(p[1],10))) S[i]=1;
+  });
+  var T={};                                  // links a band on the march walks over: never cut
+  Object.keys(b.treks||{}).forEach(function(id){ var t=b.treks[id]; if(!t||!(t.eta>Date.now())) return; var pp=arr(t.path||[]);
+    for(var j=0;j+1<pp.length;j++){ var a=I(Math.round(pp[j][0]),Math.round(pp[j][1])), c=I(Math.round(pp[j+1][0]),Math.round(pp[j+1][1])); T[a<c?a+'-'+c:c+'-'+a]=1; } });
+  return {n:n, O:O, S:S, R:R, T:T, I:I, names:names};
+}
+function quakeCrack(g,ban){                 // the cheapest crack, row by row (dynamic programming over where it crosses each row)
+  var n=g.n, INF=1e12, MAXD=QUAKE_MAXD, ND=2*MAXD+1, O=g.O, S=g.S, R=g.R, I=g.I, m=function(x){ return ((x%n)+n)%n; };
+  function pc(i,j){ var pk=i<j?i+'-'+j:j+'-'+i; if(ban[pk]||g.T[pk]) return INF;
+    var oa=O[i], ob=O[j], c=0.02;
+    if(oa>=0&&oa===ob) c+=QUAKE_SAME*((S[i]||S[j])?6:1);
+    if(R[i]&&R[j]) c+=4;
+    if(oa>=0&&ob>=0&&oa!==ob) c+=3; else if(oa>=0||ob>=0) c+=0.3;
+    if(S[i]||S[j]) c+=2;
+    return c; }
+  function vPairs(a,b,r,f){ var q; for(q=b+1;q<=a;q++) f(I(q,r),I(q,r+1)); for(q=b+2;q<=a;q++) f(I(q,r),I(q-1,r+1)); for(q=a+1;q<=b;q++) f(I(q,r),I(q,r+1)); for(q=a+1;q<=b+1;q++) f(I(q,r),I(q-1,r+1)); }
+  var Tc=new Float64Array(n*WR*ND);
+  for(var ri=0;ri<WR;ri++) for(var ai=0;ai<n;ai++) for(var d=-MAXD;d<=MAXD;d++){
+    var c=0, riv=false, r=ri-HR, a=ai-HQ, b=a+d;
+    vPairs(a,b,r,function(i,j){ if(c<INF){ c+=pc(i,j); if(R[i]&&R[j]) riv=true; } });
+    if(d!==0 && riv) c=INF;
+    if(c<INF) c+=pc(I(b,r+1),I(b+1,r+1));
+    Tc[(ri*n+ai)*ND+d+MAXD]=c;
+  }
+  var best={cost:INF};
+  for(var s=-HQ;s<HQ;s++){
+    var c0=pc(I(s,-HR),I(s+1,-HR)); if(c0>=INF) continue;
+    var dp=new Map([[s,c0]]), from=[];
+    for(var ri=0;ri<WR;ri++){ var nx=new Map(), bk=new Map(), last=(ri===WR-1);
+      dp.forEach(function(ca,a){ for(var d=-MAXD;d<=MAXD;d++){ var b=a+d; if(last&&b!==s) continue;
+        var t=Tc[(ri*n+m(a+HQ))*ND+d+MAXD]; if(t>=INF) continue; var c=ca+t, ex=nx.get(b); if(ex===undefined||c<ex){ nx.set(b,c); bk.set(b,a); } } });
+      from.push(bk); dp=nx; }
+    var end=dp.get(s);
+    if(end!==undefined&&end<best.cost){ var path=[s], cur=s; for(var j=from.length-1;j>=0;j--){ cur=from[j].get(cur); path.unshift(cur); } path.pop(); best={cost:end,path:path}; }
+  }
+  if(!(best.cost<INF)) return null;
+  var rv={}, rivers=0;                       // the rivers it cuts run straight across the new land in their row
+  for(var r=-HR;r<HR;r++){ var c=best.path[r+HR], pv=best.path[((r-1+HR)%WR+WR)%WR];
+    var cut=(R[I(c,r)]&&R[I(c+1,r)]) || (pv===c && R[I(c,r)]&&R[I(c+1,r-1)]);
+    if(cut){ rivers++; for(var j=1;j<=QUAKE_K;j++) rv[j+'_'+r]=1; } }
+  return {path:best.path, rv:rv, rivers:rivers, cost:best.cost};
+}
+/* where a square of the world as it is now stands once the rift is open */
+function quakeMover(path,K){
+  var n=WQ, P=WQ+K, HP=P/2;
+  function mv(q,r){ var rr=((r+HR)%WR+WR)%WR-HR, c=path[rr+HR], lo=c-n+1, p=lo+(((q-lo)%n)+n)%n; return [((p+HP)%P+P)%P-HP, rr]; }
+  mv.key=function(k){ var p=String(k).split('_'), a=mv(parseInt(p[0],10),parseInt(p[1],10)); return a[0]+'_'+a[1]; };
+  mv.pt=function(pt){                      // a point that may sit between squares (a band on the march): moved with the square it is nearest
+    if(!pt||pt.length<2) return pt; var h=cubeRound(+pt[0],+pt[1]), a=mv(h[0],h[1]), dq=((a[0]-h[0])%P+P)%P; if(dq>HP) dq-=P;
+    return [Math.round((+pt[0]+dq)*1000)/1000, +pt[1]]; };
+  return mv;
+}
+function quakeMoved(b,plan,now){           // the whole board as it will be after the quake (b is not changed)
+  var K=QUAKE_K, mv=quakeMover(plan.path,K), out=JSON.parse(JSON.stringify(b)), KEYRE=/^-?\d+_-?\d+$/;
+  var pair=function(p){ if(!Array.isArray(p)||p.length!==2) return p; var a=mv(p[0],p[1]); return [a[0],a[1]]; };
+  var cells={}; Object.keys(b.cells||{}).forEach(function(k){ var c=JSON.parse(JSON.stringify(b.cells[k])), nk=mv.key(k), p=nk.split('_');
+    if(c.q!=null){ c.q=parseInt(p[0],10); c.r=parseInt(p[1],10); } cells[nk]=c; });
+  out.cells=cells;
+  Object.keys(out.players||{}).forEach(function(pid){ var pl=out.players[pid]; if(pl&&pl.q!=null&&pl.r!=null){ var a=mv(pl.q,pl.r); pl.q=a[0]; pl.r=a[1]; } });
+  Object.keys(out.treks||{}).forEach(function(id){ var t=out.treks[id]; if(!t) return;
+    if(t.from) t.from=mv.pt(arr(t.from)); if(t.to) t.to=pair(arr(t.to)); if(t.path) t.path=arr(t.path).map(function(p){ return pair(arr(p)); }); });
+  Object.keys(out.caravans||{}).forEach(function(id){ var v=out.caravans[id]; if(!v) return;
+    if(v.fq!=null&&v.fr!=null){ var a=mv(v.fq,v.fr); v.fq=a[0]; v.fr=a[1]; }
+    if(v.tq!=null&&v.tr!=null){ var t2=mv(v.tq,v.tr); v.tq=t2[0]; v.tr=t2[1]; }
+    if(v.end&&v.end.q!=null){ var e=mv(v.end.q,v.end.r); v.end.q=e[0]; v.end.r=e[1]; } });
+  Object.keys(out.events||{}).forEach(function(id){ var e=out.events[id]; if(!e) return;
+    if(e.q!=null&&e.r!=null){ var a=mv(e.q,e.r); e.q=a[0]; e.r=a[1]; }
+    if(e.fq!=null&&e.fr!=null){ var f=mv(e.fq,e.fr); e.fq=f[0]; e.fr=f[1]; }
+    if(Array.isArray(e.ln)) e.ln=pair(e.ln); });
+  Object.keys(out.crusades||{}).forEach(function(id){ var c=out.crusades[id]; if(!c||!c.strikes) return;
+    Object.keys(c.strikes).forEach(function(sid){ var st=c.strikes[sid]; if(st&&st.q!=null){ var a=mv(st.q,st.r); st.q=a[0]; st.r=a[1]; } }); });
+  ['comet','comet2','judge','plague'].forEach(function(nm){ var x=out[nm]; if(x&&x.burn) x.burn=arr(x.burn).map(function(k){ return KEYRE.test(k)?mv.key(k):k; }); });
+  if(out.plague2&&out.plague2.cells) out.plague2.cells=arr(out.plague2.cells).map(function(k){ return KEYRE.test(k)?mv.key(k):k; });
+  (function walk(o){ if(!o||typeof o!=='object') return;    // old one-time fixes that kept squares or [q,r] places
+    Object.keys(o).forEach(function(k){ var v=o[k];
+      if(typeof v==='string'&&KEYRE.test(v)) o[k]=mv.key(v);
+      else if(Array.isArray(v)&&v.length===2&&Number.isInteger(v[0])&&Number.isInteger(v[1])&&Math.abs(v[0])<=HQ+2&&Math.abs(v[1])<=HR+2) o[k]=pair(v);
+      else walk(v); }); })(out.fixes);
+  if(out.rivnames){ var rn={}; Object.keys(out.rivnames).forEach(function(k){ rn[KEYRE.test(k)?mv.key(k):k]=out.rivnames[k]; }); out.rivnames=rn; }
+  out.meta=out.meta||{}; out.meta.world=out.meta.world||{};
+  var rifts=(out.meta.world.rifts?arr(out.meta.world.rifts):[]).slice();
+  rifts.push({id:'q'+rifts.length+'-'+now.toString(36), k:K, t:now, path:plan.path.slice(), rv:plan.rv, by:ME||''});
+  out.meta.world.rifts=rifts;
+  return {board:out, mv:mv};
+}
+/* the game's own verdict on a board: who is supplied, which castles reach a farm, which bands are fed.
+   Runs with the given board and world in place of the real ones, then puts them back. */
+function quakeJudge(b,worldOf){
+  var keepG=G, keepW={WQ:WQ,HQ:HQ,WR:WR,HR:HR,RIFTS:RIFTS,E:WORLD_EPOCH,om:originMemo};
+  try{
+    G=b; setWorld(worldOf); cellsGen++;
+    var out={sup:{}, fed:{}, unfed:{}, castles:{}};
+    Object.keys(b.players||{}).forEach(function(pid){
+      var sup=supplied(pid); out.sup[pid]=sup;
+      strandedCells(pid,sup).forEach(function(k){ out.unfed[k]=pid; });
+    });
+    Object.keys(b.cells).forEach(function(k){ var c=b.cells[k]; if(!c||c.k!==CASTLE||!c.o||isRuin(c)) return; var p=k.split('_'); out.castles[k]=castleFed(parseInt(p[0],10),parseInt(p[1],10),c.o); });
+    // river regions: which land squares can reach which without crossing water
+    var id={}, nreg=0;
+    for(var q=-HQ;q<HQ;q++) for(var r=-HR;r<HR;r++){ var k0=key(q,r); if(id[k0]!=null||riverAt(q,r)) continue; id[k0]=nreg; var st=[[q,r]];
+      while(st.length){ var cur=st.pop(); for(var i=0;i<6;i++){ var nq=wrapQ(cur[0]+AX[i][0]), nr=wrapR(cur[1]+AX[i][1]), nk=nq+'_'+nr; if(id[nk]==null&&!riverAt(nq,nr)){ id[nk]=nreg; st.push([nq,nr]); } } } nreg++; }
+    out.region=id; out.regions=nreg;
+    return out;
+  } finally { G=keepG; WQ=keepW.WQ; HQ=keepW.HQ; WR=keepW.WR; HR=keepW.HR; RIFTS=keepW.RIFTS; WORLD_EPOCH=keepW.E; originMemo=keepW.om; cellsGen++; }
+}
+function quakeVerdict(b,plan,now){         // play the quake out on a copy and say whether it is safe
+  var moved=quakeMoved(b,plan,now), A=quakeJudge(b,b), B=quakeJudge(moved.board,moved.board), mv=moved.mv, bad=[], release={}, pay={};
+  var cut={}, P=WQ+QUAKE_K, HP=P/2, wP=function(x){ return ((x+HP)%P+P)%P-HP; };   // pairs of squares of one kingdom that no longer touch
+  Object.keys(b.cells).forEach(function(k){ var c=b.cells[k]; if(!c||!c.o) return; var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), a=mv(q,r);
+    for(var i=0;i<3;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=b.cells[key(nq,nr)]; if(!n||n.o!==c.o) continue; var bq=mv(nq,nr);
+      if(bq[0]!==wP(a[0]+AX[i][0]) || bq[1]!==wrapR(a[1]+AX[i][1])) cut[c.o]=(cut[c.o]||0)+1; } });
+  Object.keys(A.sup).forEach(function(pid){ var after=B.sup[pid]||{};
+    Object.keys(A.sup[pid]).forEach(function(k){ var nk=mv.key(k); if(after[nk]) return; var c=b.cells[k]||{};
+      var pp=k.split('_'); if(qBuilt(c,parseInt(pp[0],10),parseInt(pp[1],10))) bad.push({why:'built-up ground cut off', pid:pid, k:k}); else { release[nk]=pid; pay[pid]=(pay[pid]||0)+1; } }); });
+  Object.keys(A.castles).forEach(function(k){ if(A.castles[k] && B.castles[mv.key(k)]===false) bad.push({why:'castle loses its farm', pid:b.cells[k].o, k:k}); });
+  var wasUnfed={}; Object.keys(A.unfed).forEach(function(k){ wasUnfed[mv.key(k)]=1; });
+  Object.keys(B.unfed).forEach(function(nk){ if(!wasUnfed[nk]) bad.push({why:'soldiers left unfed', pid:B.unfed[nk], k:nk}); });
+  var map={}, back={}, leaks=0;
+  Object.keys(A.region).forEach(function(k){ var a=A.region[k], bb=B.region[mv.key(k)]; if(bb==null){ leaks++; return; }
+    if(map[a]==null) map[a]=bb; else if(map[a]!==bb) leaks++; if(back[bb]==null) back[bb]=a; else if(back[bb]!==a) leaks++; });
+  if(leaks) bad.push({why:'a river barrier would change ('+leaks+' squares)'});
+  Object.keys(pay).forEach(function(pid){ pay[pid]+=QUAKE_PAY_EXTRA; });
+  return {ok:!bad.length, bad:bad, release:release, pay:pay, cut:cut, moved:moved, regions:[A.regions,B.regions]};
+}
+function quakePlan(b){                     // find a crack that passes; rule out the kingdom links of each one that fails
+  var g=quakeGrid(b), ban={}, last=null;
+  for(var it=0;it<10;it++){
+    var plan=quakeCrack(g,ban); if(!plan) break;
+    var v=quakeVerdict(b,plan,Date.now()); plan.verdict=v; last=plan;
+    if(v.ok) return plan;
+    var pids={}; v.bad.forEach(function(x){ if(x.pid) pids[x.pid]=1; });
+    var any=false;
+    for(var r=-HR;r<HR;r++){ var a=plan.path[r+HR], bnext=plan.path[((r+1+HR)%WR+WR)%WR];
+      var tryBan=function(i,j){ var oa=g.O[i], ob=g.O[j]; if(oa>=0&&oa===ob&&(pids[g.names[oa]]||!Object.keys(pids).length)){ ban[i<j?i+'-'+j:j+'-'+i]=1; any=true; } };
+      tryBan(g.I(a,r),g.I(a+1,r));
+      var q; for(q=bnext+1;q<=a;q++) tryBan(g.I(q,r),g.I(q,r+1)); for(q=bnext+2;q<=a;q++) tryBan(g.I(q,r),g.I(q-1,r+1));
+      for(q=a+1;q<=bnext;q++) tryBan(g.I(q,r),g.I(q,r+1)); for(q=a+1;q<=bnext+1;q++) tryBan(g.I(q,r),g.I(q-1,r+1)); }
+    if(!any) break;                          // the trouble is not a kingdom cut (a river, say): nothing more to try
+  }
+  return last;
+}
+/* everything the quake writes, as one multi-path update of the board */
+function quakePatch(b,plan,now){
+  var v=quakeVerdict(b,plan,now), nb=v.moved.board, patch={};
+  Object.keys(v.release).forEach(function(nk){ var c=nb.cells[nk]; if(!c) return; if(c.gv&&c.gv.length){ c.o=null; } else delete nb.cells[nk]; });
+  patch.cells=nb.cells; patch.treks=nb.treks||null; patch.caravans=nb.caravans||null; patch.events=nb.events||null;
+  patch.crusades=nb.crusades||null; patch.rivnames=nb.rivnames||null; patch.fixes=nb.fixes||null;
+  ['comet','comet2','judge','plague','plague2'].forEach(function(nm){ if(nb[nm]) patch[nm]=nb[nm]; });
+  Object.keys(nb.players||{}).forEach(function(pid){ var pl=nb.players[pid]; if(pl&&pl.q!=null){ patch['players/'+pid+'/q']=pl.q; patch['players/'+pid+'/r']=pl.r; } });
+  Object.keys(v.pay).forEach(function(pid){ var pl=b.players[pid]; if(!pl) return; var n=v.pay[pid], gid=q36(now)+'-quake-'+pid;
+    patch['players/'+pid+'/squares']=(pl.squares||0)+n;
+    patch['grants/'+gid]={pid:pid,n:n,why:'the earthquake: '+(n-QUAKE_PAY_EXTRA)+' cut-off square'+(n-QUAKE_PAY_EXTRA===1?'':'s')+' cleared, paid back with '+QUAKE_PAY_EXTRA+' more',by:'gods',t:now}; });
+  patch['meta/world']=nb.meta.world;
+  patch['meta/quake']={t:now, done:now, by:ME||'', k:QUAKE_K, freeze:null, paid:v.pay, rivers:plan.rivers};
+  patch['meta/migration/v']=Math.max(5,boardVersion(b));
+  patch.rev=now;
+  return {patch:patch, verdict:v};
+}
+/* ── the quake as everyone sees it ──
+   quakeWatch runs on every download of the board. While the steward's quake is under way (meta/quake/freeze) the
+   page writes nothing and the ground trembles; once the world has moved (more rifts than this page knows of) the
+   page stops and reloads, and the first time each player comes in after a quake the cinematic plays. */
+function quakeWatch(remote){
+  var m=remote.meta||{}, qk=m.quake||null, rw=(m.world&&m.world.rifts)?Object.keys(m.world.rifts).length:0;
+  if(rw!==WORLD_EPOCH){ if(QRUN) return false; HALT=true; quakeReload(); return true; }
+  var fz=!!(qk && qk.freeze && !qk.done && Date.now()-qk.freeze<15*60000);   // a freeze left by a quake that never finished lapses
+  if(fz && !QRUN){ if(!QFREEZE){ QFREEZE=true; tremble(true,'The ground is trembling. The steward is splitting the earth: hold on, your board will move in a minute.'); } }
+  else if(QFREEZE && !QRUN){ QFREEZE=false; tremble(false); }
+  return false;
+}
+function quakeReload(){
+  tremble(true,'The earth has moved. Opening the new world&hellip;');
+  setTimeout(function(){ location.reload(); },1800);
+}
+function tremble(on,msg){
+  var b=document.getElementById('qfreeze');
+  document.body.classList.toggle('qtremble',!!on && !REDUCE);
+  if(!on){ if(b) b.remove(); quakeSound.stop(); return; }
+  if(!b){ b=document.createElement('div'); b.id='qfreeze'; b.setAttribute('role','status'); document.body.appendChild(b); }
+  b.innerHTML='&#127755; '+msg;
+  quakeSound.rumble(0.35);
+}
+/* a little sound engine: rumble, cracks, booms and the hiss of lava, all made on the spot */
+var quakeSound=(function(){
+  var ac=null, nodes=[];
+  function ctx(){ if(!ac){ try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ ac=null; } } if(ac&&ac.state==='suspended') ac.resume(); return ac; }
+  function noise(sec){ var a=ctx(), b=a.createBuffer(1,Math.floor(a.sampleRate*sec),a.sampleRate), d=b.getChannelData(0), last=0; for(var i=0;i<d.length;i++){ var w=Math.random()*2-1; last=(last+0.02*w)/1.02; d[i]=last*3.5; } return b; }
+  function white(sec){ var a=ctx(), b=a.createBuffer(1,Math.floor(a.sampleRate*sec),a.sampleRate), d=b.getChannelData(0); for(var i=0;i<d.length;i++) d[i]=Math.random()*2-1; return b; }
+  function muted(){ try{ return localStorage.getItem('marchland.music')==='off'; }catch(e){ return false; } }   // sound follows the music switch
+  return {
+    rumble:function(vol,sec){ var a=ctx(); if(!a||muted()) return; this.stop();
+      var s=a.createBufferSource(); s.buffer=noise(4); s.loop=true; var f=a.createBiquadFilter(); f.type='lowpass'; f.frequency.value=110;
+      var g=a.createGain(); g.gain.value=0; g.gain.linearRampToValueAtTime(vol||0.5,a.currentTime+0.8);
+      var lfo=a.createOscillator(), lg=a.createGain(); lfo.frequency.value=7; lg.gain.value=(vol||0.5)*0.4; lfo.connect(lg); lg.connect(g.gain);
+      s.connect(f); f.connect(g); g.connect(a.destination); s.start(); lfo.start(); nodes=[s,lfo,g];
+      if(sec) setTimeout(function(){ quakeSound.fade(1.2); },sec*1000); },
+    swell:function(vol,over){ var a=ac; if(!a||!nodes[2]) return; nodes[2].gain.cancelScheduledValues(a.currentTime); nodes[2].gain.linearRampToValueAtTime(vol,a.currentTime+(over||0.5)); },
+    fade:function(over){ var a=ac; if(!a||!nodes[2]) return; var g=nodes[2], s=nodes; g.gain.cancelScheduledValues(a.currentTime); g.gain.linearRampToValueAtTime(0,a.currentTime+(over||1)); setTimeout(function(){ s.forEach(function(n){ try{ n.stop&&n.stop(); }catch(e){} }); },(over||1)*1000+100); nodes=[]; },
+    stop:function(){ nodes.forEach(function(n){ try{ n.stop&&n.stop(); }catch(e){} }); nodes=[]; },
+    crack:function(vol){ var a=ctx(); if(!a||muted()) return; var s=a.createBufferSource(); s.buffer=white(0.5); var f=a.createBiquadFilter(); f.type='highpass'; f.frequency.value=900+Math.random()*900;
+      var g=a.createGain(), t=a.currentTime; g.gain.setValueAtTime(vol||0.5,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.35+Math.random()*0.3); s.connect(f); f.connect(g); g.connect(a.destination); s.start(); },
+    boom:function(vol){ var a=ctx(); if(!a||muted()) return; var o=a.createOscillator(), g=a.createGain(), t=a.currentTime; o.type='sine'; o.frequency.setValueAtTime(70,t); o.frequency.exponentialRampToValueAtTime(24,t+1.6);
+      g.gain.setValueAtTime(vol||0.9,t); g.gain.exponentialRampToValueAtTime(0.001,t+2.2); o.connect(g); g.connect(a.destination); o.start(); o.stop(t+2.3); this.crack((vol||0.9)*0.6); },
+    hiss:function(vol,sec){ var a=ctx(); if(!a||muted()) return; var s=a.createBufferSource(); s.buffer=white(sec||3); var f=a.createBiquadFilter(); f.type='bandpass'; f.frequency.value=520; f.Q.value=0.7;
+      var g=a.createGain(), t=a.currentTime; g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol||0.12,t+0.6); g.gain.linearRampToValueAtTime(0,t+(sec||3)); s.connect(f); f.connect(g); g.connect(a.destination); s.start(); }
+  };
+})();
+/* ── the map of a quake, drawn small: the world before (left and right of the crack) and the new land between ──
+   Used for the steward's preview and for the cinematic. rift: {k, path} in the world just before it opened; n is
+   that world's width. cellAt(p,r) / groundOf(p,r) give what stands at position p of row r in the world after. */
+var QPAL={0:'#D9D1B1',1:'#9DB189',2:'#BEB8AB',3:'#A3999E',4:'#DDCB85',5:'#5B8EC2'};
+function qHex(c,x,y,s){ c.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180; c.lineTo(x+(s+0.5)*Math.cos(a),y+(s+0.5)*Math.sin(a)); } c.closePath(); }
+function qMix(a,b,t){ var pa=parseInt(a.slice(1),16), pb=parseInt(b.slice(1),16), r=Math.round(((pa>>16)&255)*(1-t)+((pb>>16)&255)*t), g=Math.round(((pa>>8)&255)*(1-t)+((pb>>8)&255)*t), bl=Math.round((pa&255)*(1-t)+(pb&255)*t); return 'rgb('+r+','+g+','+bl+')'; }
+function qLayers(rift,n,s,cellAt,groundOf,colorOf){
+  var K=rift.k, hw=Math.sqrt(3)*s, rh=1.5*s, cu=[], r;
+  for(r=-HR;r<HR;r++) cu.push(rift.path[r+HR]+0.5+r/2);
+  var X0=(Math.min.apply(null,cu)+Math.max.apply(null,cu))/2-n/2;
+  var Wd=Math.ceil((n+K)*hw+hw), Hd=Math.ceil(WR*rh+s*2);
+  function mk(){ var cv=document.createElement('canvas'); cv.width=Wd; cv.height=Hd; return cv; }
+  var L=mk(), Rt=mk(), St=mk(), lc=L.getContext('2d'), rc=Rt.getContext('2d'), sc=St.getContext('2d'), castles=[];
+  var X=function(u){ return (u-X0)*hw+hw/2; }, Y=function(r){ return (r+HR)*rh+s; };
+  for(r=-HR;r<HR;r++){ var c=rift.path[r+HR];
+    for(var p=c-n+1;p<=c;p++){
+      var u=p+r/2, right=u<X0, ux=right?u+n:u, x=X(ux), y=Y(r), cell=cellAt(p,r), t=groundOf(p,r), col=QPAL[t];
+      if(cell&&cell.o) col=t===RIVER?qMix(QPAL[5],colorOf(cell.o),0.35):qMix(colorOf(cell.o),QPAL[t]||QPAL[0],0.14);
+      var g=right?rc:lc; g.fillStyle=col; qHex(g,x,y,s); g.fill();
+      if(cell&&cell.k===CASTLE) castles.push({x:x,y:y,right:right,o:cell.o});
+    }
+    for(var j=1;j<=K;j++){ var x2=X(c+j+r/2), y2=Y(r); sc.fillStyle=groundOf(c+j,r)===RIVER?'#7A4A3A':'#E8521A'; qHex(sc,x2,y2,s); sc.fill(); }
+  }
+  return {L:L, R:Rt, S:St, W:Wd, H:Hd, hw:hw, rh:rh, s:s, crack:cu.map(function(u,i){ return {x:X(u), y:Y(i-HR)}; }), castles:castles, K:K, X:X, Y:Y, X0:X0, n:n};
+}
+function qDraw(g,Ly,dx,glow,t){            // one frame of the map: the west, the lava in the gap, the east pushed dx along
+  g.drawImage(Ly.L,0,0);
+  if(dx>0){
+    g.save(); var cr=Ly.crack, rh=Ly.rh;
+    for(var i=0;i<cr.length;i++){ var a=cr[i], y0=a.y-rh*0.62, y1=a.y+rh*0.62;
+      var gr=g.createLinearGradient(a.x,0,a.x+dx,0); gr.addColorStop(0,'#5A1204'); gr.addColorStop(0.12,'#D8360C'); gr.addColorStop(0.5,(Math.sin(t*3+i*0.7)>0.55)?'#FFC24A':'#FF7A1E'); gr.addColorStop(0.88,'#D8360C'); gr.addColorStop(1,'#5A1204');
+      g.fillStyle=gr; g.fillRect(a.x-1,y0,dx+2,y1-y0); }
+    if(dx>=Ly.K*Ly.hw-0.5){ g.globalAlpha=0.35+0.15*Math.sin(t*2); g.drawImage(Ly.S,0,0); g.globalAlpha=1; }
+    g.restore();
+  }
+  g.drawImage(Ly.R,dx,0);
+  if(glow>0){ g.save(); g.globalCompositeOperation='lighter'; var cr2=Ly.crack;
+    for(var k=0;k<cr2.length;k+=4){ var b=cr2[k], rg=g.createRadialGradient(b.x+dx/2,b.y,1,b.x+dx/2,b.y,Ly.hw*(4+dx/Ly.hw*0.6));
+      rg.addColorStop(0,'rgba(255,110,30,'+(0.16*glow).toFixed(3)+')'); rg.addColorStop(1,'rgba(255,70,10,0)'); g.fillStyle=rg; g.fillRect(b.x+dx/2-Ly.hw*16,b.y-Ly.hw*16,Ly.hw*32,Ly.hw*32); }
+    g.restore(); }
+}
+function qCrackLine(g,Ly,upto,t){          // the crack itself, running from the top of the world down to row `upto`
+  var cr=Ly.crack; if(upto<=0) return; g.save(); g.lineJoin='round'; g.lineCap='round';
+  for(var pass=0;pass<2;pass++){ g.beginPath(); g.moveTo(cr[0].x,0);
+    for(var i=0;i<Math.min(cr.length,upto);i++) g.lineTo(cr[i].x+(pass?0:(Math.sin(i*1.7+t*20)*0.6)),cr[i].y);
+    g.strokeStyle=pass?'#FFF2B8':'#FF4A10'; g.lineWidth=pass?Ly.s*0.45:Ly.s*1.5; g.globalAlpha=pass?0.95:0.8; g.stroke(); }
+  g.restore();
+}
+/* the steward's preview: the world after the quake, the new land glowing, the crack marked */
+function quakePreviewImage(b,plan){
+  var K=QUAKE_K, rift={k:K,path:plan.path}, n=WQ, mv=quakeMover(plan.path,K);
+  var cellAt=function(p,r){ return b.cells[key(p,r)]; }, groundOf=function(p,r){ var c=plan.path[r+HR]; return p>c ? (plan.rv[(p-c)+'_'+r]?RIVER:PLAIN) : groundAt(p,r); };
+  var Ly=qLayers(rift,n,3,cellAt,groundOf,pColor), cv=document.createElement('canvas'); cv.width=Ly.W; cv.height=Ly.H;
+  var g=cv.getContext('2d'); g.fillStyle='#1B2029'; g.fillRect(0,0,cv.width,cv.height);
+  qDraw(g,Ly,K*Ly.hw,0.8,0);
+  var mine=Ly.castles.filter(function(c){ return c.o===ME; });
+  mine.forEach(function(c){ var x=c.x+(c.right?K*Ly.hw:0); g.beginPath(); g.arc(x,c.y,5,0,6.284); g.fillStyle='#fff'; g.fill(); g.lineWidth=2; g.strokeStyle='#000'; g.stroke(); });
+  return cv.toDataURL('image/png');
+}
+/* ── the steward's button ── */
+function qRaw(method,path,val){            // the quake's own writes: they go through even while the board is frozen
+  return fetch(dbUrl(path),{method:method,body:JSON.stringify(val),headers:{'Content-Type':'application/json'}}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+}
+var quakeBusy=false;
+function openQuake(){
+  if(!G||!isSteward()||quakeBusy) return;
+  if(!online) return nope('The earthquake needs the shared database.');
+  var base='/marchland/'+gameCode;
+  quakeBusy=true; say('&#127755; The gods are feeling along the world for a crack that harms nobody&hellip; this can take up to a minute.');
+  setTimeout(function(){
+    dbGet(base).then(function(b){
+      if(!b||!b.players) throw new Error('the board is empty');
+      tidyBoard(b); b.cells=b.cells||{};
+      var rw=(b.meta&&b.meta.world&&b.meta.world.rifts)?Object.keys(b.meta.world.rifts).length:0;
+      if(rw!==WORLD_EPOCH){ quakeReload(); throw new Error('the world has moved since this page opened'); }
+      var plan=quakePlan(b);
+      if(!plan) throw new Error('no crack can be found from the top of the world to the bottom');
+      var v=plan.verdict, nm=function(pid){ return esc(full(b.players[pid]||{name:'?'})); };
+      if(!v.ok){
+        quakeBusy=false;
+        return scrollDialog({eyebrow:'Steward &middot; earthquake', title:'No safe crack today',
+          html:'<p>Every crack the gods tried would hurt a kingdom:</p><ul>'+v.bad.slice(0,8).map(function(x){ return '<li>'+esc(x.why)+(x.pid?' ('+nm(x.pid)+')':'')+'</li>'; }).join('')+'</ul><p>Nothing was written. Try again another day, when the borders have moved.</p>',
+          cancel:false, buttons:[{label:'Close',value:false,primary:true}]});
+      }
+      var img=quakePreviewImage(b,plan);
+      var cut=Object.keys(v.cut).map(function(pid){ return nm(pid); }), paid=Object.keys(v.pay).map(function(pid){ return nm(pid)+': '+(v.pay[pid]-QUAKE_PAY_EXTRA)+' bare square'+(v.pay[pid]-QUAKE_PAY_EXTRA===1?'':'s')+' cleared, paid <b>'+v.pay[pid]+' marches</b>'; });
+      return scrollDialog({eyebrow:'Steward &middot; earthquake', title:'Split the earth?',
+        html:'<p>This is the world after the quake, as the gods found it just now. The glowing band is the new land; your castles are the white dots.</p>'
+          +'<img src="'+img+'" alt="The world after the quake" style="width:100%;border-radius:8px;border:1px solid #6b4a36;margin:6px 0">'
+          +'<table class="sc-table"><tr><td>New land</td><td><b>'+(QUAKE_K*WR).toLocaleString()+' squares</b> ('+QUAKE_K+' columns; the world becomes '+(WQ+QUAKE_K)+' &times; '+WR+')</td></tr>'
+          +'<tr><td>Rivers carried across</td><td>'+plan.rivers+'</td></tr>'
+          +'<tr><td>River barriers</td><td>unchanged ('+v.regions[0]+' regions before and after)</td></tr>'
+          +'<tr><td>Castles cut from their farms</td><td>none</td></tr><tr><td>Soldiers left unfed</td><td>none</td></tr>'
+          +'<tr><td>Kingdoms parted by the crack</td><td>'+(cut.length?cut.join(', '):'none')+'</td></tr>'
+          +'<tr><td>Squares cleared and paid back</td><td>'+(paid.length?paid.join('<br>'):'none')+'</td></tr></table>'
+          +'<p>When you press the button, every open board freezes and trembles for a minute, a full backup is downloaded and another kept on the database, the gods look again (the borders may have moved), and only if it is still safe does the world split. Everyone sees the quake the next time they open the game.</p>',
+        cancel:false, buttons:[{label:'Not yet',value:false},{label:'&#127755; Split the earth',value:true,primary:true}]
+      }).then(function(res){ if(!res.value){ quakeBusy=false; say('Nothing was written. The earth is quiet.'); return; } return runQuake(); });
+    }).catch(function(e){ quakeBusy=false; nope('<span class="bad">The earthquake stopped</span> ('+esc(e.message||String(e))+'). Nothing was written.'); });
+  },60);
+}
+function runQuake(rehearsal){
+  var base='/marchland/'+gameCode, t0=Date.now(), stamp=new Date().toISOString().replace(/[:.]/g,'-'), FZ=rehearsal?8000:QUAKE_FREEZE_MS;
+  QRUN=true; QFREEZE=true;
+  function abort(why){
+    return qRaw('PATCH',base,{'meta/quake/freeze':null, rev:Date.now()}).catch(function(){}).then(function(){
+      QRUN=false; QFREEZE=false; quakeBusy=false; tremble(false); if(rehearsal) window.marchlandQuakeResult={ok:false, why:why}; nope('<span class="bad">The earthquake was called off</span> ('+esc(why)+'). Nothing on the board was changed, and everyone can play on.'); });
+  }
+  return qRaw('PATCH',base,{'meta/quake/freeze':t0,'meta/quake/by':ME,'meta/quake/done':null,'meta/migration/v':Math.max(5,boardVersion(G)), rev:t0}).then(function(){
+    tremble(true,'The earth groans. Every board is frozen while the world settles: <b id="qcount">60</b> seconds.');
+    return new Promise(function(res){ var iv=setInterval(function(){ var left=Math.max(0,Math.ceil((t0+FZ-Date.now())/1000)), el=document.getElementById('qcount'); if(el) el.textContent=left; if(left<=0){ clearInterval(iv); res(); } },500); });
+  }).then(function(){
+    if(rehearsal) return dbGet(base);
+    tremble(true,'Downloading a full backup of the database&hellip;');
+    return fetch(dbUrl('/marchland'),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error('backup HTTP '+r.status); return r.text(); }).then(function(txt){
+      try{ var a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'})); a.download='marchland-backup-'+gameCode+'-before-quake-'+stamp+'.json';
+        document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.parentNode.removeChild(a); },5000); }catch(e){}
+      return dbGet(base);
+    });
+  }).then(function(b){
+    if(!b||!b.players) throw new Error('the board came back empty');
+    var copy=JSON.parse(JSON.stringify(b));
+    tidyBoard(b); b.cells=b.cells||{};
+    tremble(true,'The gods look again along the crack&hellip;');
+    var plan=quakePlan(b);
+    if(!plan||!plan.verdict.ok) return abort('the borders moved during the freeze and no safe crack is left');
+    var now=Date.now(), out=quakePatch(b,plan,now);
+    if(!out.verdict.ok) return abort('the second look found a problem');
+    tremble(true,'Keeping a copy of the old world on the database&hellip;');
+    return qRaw('PUT','/marchland/backup_'+gameCode+'_before_quake_'+now,copy).then(function(){
+      tremble(true,'&#127755; The earth splits&hellip;');
+      return qRaw('PATCH',base,out.patch);
+    }).then(function(){
+      var paid=Object.keys(out.verdict.pay).map(function(pid){ return full(b.players[pid]||{name:'?'})+' ('+out.verdict.pay[pid]+' marches)'; });
+      plagueChat('THE EARTH HAS SPLIT! A rift has torn the world from top to bottom and '+(QUAKE_K*WR).toLocaleString()+' new squares have risen from the fire. The new land is molten lava: nobody can claim it until it cools, the middle in about a day, the edges in about two. Every kingdom keeps every square it had.'+(paid.length?' The quake cut a few bare squares off from their castles; the gods have paid for them: '+paid.join(', ')+'.':''),now,'quake'+now);
+      QRUN=false; HALT=true; if(rehearsal){ tremble(false); window.marchlandQuakeResult={ok:true, at:now, paid:out.verdict.pay, rivers:plan.rivers}; return; } quakeReload();
+    });
+  }).catch(function(e){ return abort(e.message||String(e)); });
+}
+/* ── the cinematic ──  Plays once for each player, the first time they come in after a quake. Tap to skip. */
+function quakeNoteId(){ var R=RIFTS[RIFTS.length-1]; return R?'quake-'+(R.id||R.t):''; }
+function quakeNote(){
+  var R=RIFTS[RIFTS.length-1]; if(!R) return null;
+  var qk=(G&&G.meta&&G.meta.quake)||{}, paid=(qk.paid&&qk.paid[ME])||0, o={k:R.k};
+  var mid=R.t+LAVA_MID_MS, edge=R.t+LAVA_EDGE_MS, when=function(t){ var h=Math.ceil((t-Date.now())/36e5); return h<=0?'now':'in about '+h+' hour'+(h===1?'':'s'); };
+  return {id:quakeNoteId(), eyebrow:'The earth has moved', title:'&#127755; The world has split open',
+    html:'<p>A great earthquake has torn the world from top to bottom. East of the crack the land was pushed aside, and <b>'+(R.k*WR).toLocaleString()+' new squares</b> rose from the fire. The world is now <b>'+WQ+' &times; '+WR+'</b>.</p>'
+      +'<p>Every kingdom keeps every square it had. The crack wound through wild land and between rivals, so some old neighbours now have new land between them.</p>'
+      +'<p>The new land is <b>molten lava</b>. Nobody can claim or cross it until it cools. It cools from the middle outwards: the middle '+when(mid)+', the edges beside the old kingdoms '+when(edge)+'. Then it belongs to whoever takes it. New players are given land in the cooled middle.</p>'
+      +'<p>Rivers that crossed the crack now flow across the new land.</p>'
+      +(paid?'<p><b>The quake cut '+(paid-QUAKE_PAY_EXTRA)+' of your bare squares off from your castles.</b> They are gone, and the gods have paid you <b>'+paid+' marches</b> for them.</p>':''),
+    go:'To the new land!'};
+}
+function playQuakeCinematic(done){
+  var R=RIFTS[RIFTS.length-1]; if(!R){ done(); return; }
+  var n=WQ-R.k, cellAt=function(p,r){ return G.cells[key(p,r)]; }, groundOf=function(p,r){ return groundAt(p,r); };
+  var Ly; try{ Ly=qLayers(R,n,6,cellAt,groundOf,pColor); }catch(e){ done(); return; }
+  var box=document.createElement('div'); box.id='qcine'; box.setAttribute('role','dialog'); box.setAttribute('aria-label','An earthquake');
+  box.innerHTML='<canvas></canvas><div class="qcap" id="qcap"></div><div class="qsub" id="qsub"></div><button type="button" class="qskip">Skip &#9654;</button>';
+  document.body.appendChild(box);
+  var cv=box.querySelector('canvas'), g=cv.getContext('2d'), dpr=Math.min(2,window.devicePixelRatio||1), cap=box.querySelector('#qcap'), sub=box.querySelector('#qsub');
+  function size(){ cv.width=Math.round(innerWidth*dpr); cv.height=Math.round(innerHeight*dpr); }
+  size(); addEventListener('resize',size);
+  var mine=null; Ly.castles.forEach(function(c){ if(c.o===ME && !mine) mine=c; });
+  var focus=mine?{x:mine.x,y:mine.y}:{x:Ly.n*Ly.hw/2,y:Ly.H/2}, start=performance.now(), ended=false, embers=[], smoke=[], cued={};
+  var T={zoom:2400, crack:4600, open:8600, settle:11800, end:12800};
+  if(REDUCE){ T={zoom:0,crack:0,open:0,settle:3800,end:4400}; }
+  function ease(x){ x=Math.max(0,Math.min(1,x)); return x<0.5?2*x*x:1-Math.pow(-2*x+2,2)/2; }
+  function caption(a,b){ if(cap.dataset.t!==a){ cap.dataset.t=a; cap.style.opacity=0; setTimeout(function(){ cap.innerHTML=a; sub.innerHTML=b||''; cap.style.opacity=1; sub.style.opacity=b?1:0; },180); } }
+  function cue(id,f){ if(!cued[id]){ cued[id]=1; f(); } }
+  function finish(){ if(ended) return; ended=true; quakeSound.fade(0.8); box.classList.add('out'); setTimeout(function(){ removeEventListener('resize',size); box.remove(); done(); },500); }
+  box.querySelector('.qskip').onclick=finish;
+  cue('rumble',function(){ quakeSound.rumble(0.25); });
+  function frame(now){
+    if(ended) return;
+    var e=now-start, t=e/1000, Wc=cv.width, Hc=cv.height;
+    // the camera: on your castle while the ground trembles, then racing down the world with the tip of the crack,
+    // then pulling back to show the whole rift as it opens (on a tall phone screen the rift fills the width)
+    var cr0=Ly.crack, minX=Infinity, maxX=-Infinity; for(var ci=0;ci<cr0.length;ci++){ if(cr0[ci].x<minX) minX=cr0[ci].x; if(cr0[ci].x>maxX) maxX=cr0[ci].x; }
+    var zWide=Wc>=Hc ? Math.min(Wc/Ly.W,Hc/Ly.H)*0.97 : Math.min(Hc/Ly.H,Wc/((maxX-minX)+Ly.K*Ly.hw+6*Ly.hw));
+    var zin=Math.max(zWide*2.6,Wc/(34*Ly.hw)), zRun=zin*0.7, wideX=Wc>=Hc?Ly.n*Ly.hw/2+Ly.hw/2:(minX+maxX)/2, wideY=Ly.H/2;
+    var prog=e<T.zoom?0:Math.min(1,(e-T.zoom)/(T.crack-T.zoom-300)), tip=cr0[Math.min(cr0.length-1,Math.round((cr0.length-1)*ease(prog)))];
+    var z, cx, cy;
+    if(e<T.zoom){ z=zin; cx=focus.x; cy=focus.y; }
+    else if(e<T.crack){ var lead=ease(Math.min(1,(e-T.zoom)/700)); z=zin+(zRun-zin)*lead; cx=focus.x+(tip.x-focus.x)*lead; cy=focus.y+(tip.y-focus.y)*lead; }
+    else { var pull=ease(Math.min(1,(e-T.crack)/(T.open-T.crack)*1.3)), last=cr0[cr0.length-1]; z=zRun+(zWide-zRun)*pull; cx=last.x+(wideX-last.x)*pull; cy=last.y+(wideY-last.y)*pull; }
+    var dxFull=Ly.K*Ly.hw, open=e<T.crack?0:(e<T.open?ease((e-T.crack)/(T.open-T.crack)):1), dx=dxFull*open;
+    var amp=REDUCE?0:(e<T.zoom?2+6*(e/T.zoom):(e<T.crack?8+10*((e-T.zoom)/(T.crack-T.zoom)):(e<T.open?22*(1-open)+6:Math.max(0,6-(e-T.open)/400))))*dpr;
+    if(e>=T.zoom) cue('cr1',function(){ quakeSound.swell(0.55,1.5); quakeSound.crack(0.5); caption('The ground trembles&hellip;'); });
+    if(e>=T.zoom+700) cue('cr2',function(){ quakeSound.crack(0.6); });
+    if(e>=T.zoom+1400) cue('cr3',function(){ quakeSound.crack(0.7); caption('The earth is cracking!'); });
+    if(e>=T.crack) cue('boom',function(){ quakeSound.boom(1); quakeSound.swell(0.8,0.3); caption('THE EARTH SPLITS','A rift tears the world from top to bottom'); });
+    if(e>=T.crack+1600) cue('boom2',function(){ quakeSound.boom(0.7); quakeSound.hiss(0.14,6); });
+    if(e>=T.open) cue('rise',function(){ quakeSound.swell(0.3,2); caption((Ly.K*WR).toLocaleString()+' new squares rise from the fire','Molten for now. The middle cools in a day, the edges in two. Then it is anyone&rsquo;s.'); });
+    if(e>=T.settle) cue('fade',function(){ quakeSound.fade(1.2); });
+    if(e>=T.end){ finish(); return; }
+    g.setTransform(1,0,0,1,0,0); g.fillStyle='#120806'; g.fillRect(0,0,Wc,Hc);
+    var jx=(Math.random()-0.5)*amp, jy=(Math.random()-0.5)*amp, rot=(Math.random()-0.5)*amp*0.0006;
+    g.setTransform(z,0,0,z,Wc/2-cx*z+jx,Hc/2-cy*z+jy); if(rot){ g.translate(cx,cy); g.rotate(rot); g.translate(-cx,-cy); }
+    if(open>0){ g.save(); g.translate(-dx/2,0); }   // the world opens around its middle
+    qDraw(g,Ly,dx,Math.min(1,open*1.4+(e>=T.zoom&&e<T.crack?(e-T.zoom)/(T.crack-T.zoom)*0.4:0)),t);
+    if(e>=T.zoom && open<0.04) qCrackLine(g,Ly,Math.round(WR*ease(prog)),t);
+    if(!REDUCE && open>0){                           // embers thrown up out of the rift, and smoke drifting off it
+      var cr=Ly.crack;
+      for(var s0=0;s0<(e<T.open?14:5);s0++){ var a=cr[Math.floor(Math.random()*cr.length)]; embers.push({x:a.x+Math.random()*dx,y:a.y,vx:(Math.random()-0.5)*Ly.hw*1.6,vy:-Ly.hw*(1.5+Math.random()*4),l:1}); }
+      if(Math.random()<0.3){ var b2=cr[Math.floor(Math.random()*cr.length)]; smoke.push({x:b2.x+(Math.random()<0.5?0:dx)+(Math.random()-0.5)*Ly.hw*2,y:b2.y,r:Ly.hw*(1.5+Math.random()*2),l:1}); }
+    }
+    g.save(); g.globalCompositeOperation='lighter';
+    embers=embers.filter(function(p){ p.x+=p.vx*0.016; p.y+=p.vy*0.016; p.vy+=Ly.hw*3*0.016; p.l-=0.016*0.9; if(p.l<=0) return false;
+      g.globalAlpha=p.l; g.fillStyle=p.l>0.6?'#FFE7A0':'#FF7A26'; g.beginPath(); g.arc(p.x,p.y,Ly.s*0.35*(0.5+p.l),0,6.284); g.fill(); return true; });
+    g.restore(); g.save();
+    smoke=smoke.filter(function(p){ p.y-=Ly.hw*0.9*0.016*6; p.r+=Ly.hw*0.016*1.2; p.l-=0.016*0.35; if(p.l<=0) return false;
+      var sg=g.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r); sg.addColorStop(0,'rgba(40,30,26,'+(0.42*p.l).toFixed(3)+')'); sg.addColorStop(1,'rgba(40,30,26,0)');
+      g.fillStyle=sg; g.beginPath(); g.arc(p.x,p.y,p.r,0,6.284); g.fill(); return true; });
+    g.restore();
+    if(open>0) g.restore();
+    if(e<T.crack && !REDUCE){ g.setTransform(1,0,0,1,0,0); g.fillStyle='rgba(120,90,60,'+(0.05+0.08*Math.random()).toFixed(3)+')'; g.fillRect(0,0,Wc,Hc); }   // dust shaken loose
+    if(e>=T.crack && e<T.crack+260){ g.setTransform(1,0,0,1,0,0); g.fillStyle='rgba(255,200,120,'+(0.55*(1-(e-T.crack)/260)).toFixed(3)+')'; g.fillRect(0,0,Wc,Hc); }   // the flash of the split
+    if(!REDUCE && e>=T.crack && e<T.crack+1400){ var sk=(e-T.crack)/1400; g.setTransform(1,0,0,1,0,0); g.strokeStyle='rgba(255,220,170,'+(0.6*(1-sk)).toFixed(3)+')'; g.lineWidth=(14*(1-sk)+2)*dpr;   // the shock ring
+      g.beginPath(); g.arc(Wc/2,Hc/2,Math.max(Wc,Hc)*0.75*sk,0,6.284); g.stroke(); }
+    g.setTransform(1,0,0,1,0,0); var vg=g.createLinearGradient(0,Hc*0.58,0,Hc); vg.addColorStop(0,'rgba(12,5,3,0)'); vg.addColorStop(1,'rgba(12,5,3,0.82)'); g.fillStyle=vg; g.fillRect(0,Hc*0.58,Wc,Hc*0.42);   // a dark band for the words
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+/* later visits while the lava still burns: a short aftershock */
+function quakeAftershock(){
+  if(!RIFTS.length || !anyMolten() || REDUCE) return;
+  document.body.classList.remove('qafter'); void document.body.offsetWidth; document.body.classList.add('qafter');
+  quakeSound.rumble(0.22,1.4); setTimeout(function(){ quakeSound.crack(0.25); },500);
+  setTimeout(function(){ document.body.classList.remove('qafter'); },1700);
+}
+/* A read-only rehearsal of the quake on the live board, for checking it from a browser console. Nothing is written. */
+window.marchlandQuakeTest=function(){            // the whole quake, writes and all, but only ever on a test board (?game=test...)
+  if(!/^test/i.test(GAME_CODE)) return 'Only on a test board.';
+  gameCode=GAME_CODE; window.marchlandQuakeResult=null; runQuake(true); return 'started';
+};
+window.marchlandQuakeDryRun=function(){
+  var code=gameCode||GAME_CODE, t0=Date.now();
+  return dbGet('/marchland/'+code).then(function(b){
+    var keep={WQ:WQ,HQ:HQ,WR:WR,HR:HR,RIFTS:RIFTS,E:WORLD_EPOCH,om:originMemo}, joined=!!G;
+    try{
+      if(!joined) setWorld(b);
+      tidyBoard(b); b.cells=b.cells||{};
+      var before=Object.keys(b.cells).length, plan=quakePlan(b), v=plan&&plan.verdict, nm=function(pid){ var p=b.players[pid]; return p?p.name:pid; };
+      var out={ms:Date.now()-t0, found:!!plan, ok:!!(v&&v.ok), bad:v?v.bad.slice(0,6).map(function(x){ return x.why+(x.pid?' ('+nm(x.pid)+')':''); }):[],
+        newSquares:QUAKE_K*WR, world:(WQ+QUAKE_K)+'x'+WR, riversCarried:plan?plan.rivers:0, regions:v?v.regions:null,
+        kingdomsParted:v?Object.keys(v.cut).map(function(p){ return nm(p)+':'+v.cut[p]; }):[], cleared:v?Object.keys(v.release).length:0,
+        paid:v?Object.keys(v.pay).map(function(p){ return nm(p)+':'+v.pay[p]; }):[], cellsBefore:before};
+      if(plan&&v&&v.ok){ var pt=quakePatch(b,plan,Date.now()); out.patchKeys=Object.keys(pt.patch).length; out.cellsAfter=Object.keys(pt.patch.cells).length; out.patchBytes=JSON.stringify(pt.patch).length; }
+      out.path=plan?plan.path.join(','):''; out.ms=Date.now()-t0;
+      return out;
+    } finally { if(!joined){ WQ=keep.WQ; HQ=keep.HQ; WR=keep.WR; HR=keep.HR; RIFTS=keep.RIFTS; WORLD_EPOCH=keep.E; originMemo=keep.om; } }
+  });
+};
 function renderSteward(){
   var el=document.getElementById('steward-panel'); if(!el) return;
   var on=!!(G&&me()&&isSteward()); el.classList.toggle('hide',!on); if(!on) return;
@@ -8067,6 +8670,7 @@ document.getElementById('st-sp').addEventListener('click',function(){ if(isStewa
 document.getElementById('st-strikes').addEventListener('click',function(){ if(isSteward()) openStrikes(); });
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
+document.getElementById('st-quake').addEventListener('click',function(){ if(isSteward()) openQuake(); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('undo-pill').addEventListener('click',doUndo);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
@@ -8559,7 +9163,7 @@ function crusadePool(c,q,r){
   var pool=[];
   Object.keys(c.members||{}).sort().forEach(function(pid){
     var L=liveRoads(pid);
-    for(var i=0;i<6;i++){ var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr, n=G.cells[nk]; if(n&&n.o===pid&&n.b>0&&!building(n)) pool.push({pid:pid,q:nq,r:nr,n:n.b}); }
+    for(var i=0;i<6;i++){ var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), nk=nq+'_'+nr, n=G.cells[nk]; if(n&&n.o===pid&&n.b>0&&!building(n)) pool.push({pid:pid,q:nq,r:nr,n:n.b}); }
   });
   return pool;
 }
@@ -8888,7 +9492,7 @@ function enterGame(isNew){
   viewQ=me().q; viewR=me().r;
   layout(); render(); ambKick();
   if(isNew){ markNoticeSeen(); markCvNoteSeen(); say('You have <b>'+me().squares+' marches</b> to start. Tap a dashed cell to take it for one march, then claim today&rsquo;s steps from the Health app once you have walked.'); setTimeout(function(){ coachShow('stuck'); },1600); setTimeout(showSaga,2600); }
-  else { setTimeout(showNext,700); settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')+sitesLine()); }
+  else { if(RIFTS.length && !noteSeen(quakeNoteId())) playQuakeCinematic(function(){ showNext(); }); else { setTimeout(showNext,700); setTimeout(quakeAftershock,400); } settleCastles(); var ca0=castleAlert(ME); say('Welcome back, <b>'+esc(me().name)+'</b>. You have <b>'+avail()+'</b> marches to spend.'+(ca0?' '+ca0.long:'')+sitesLine()); }
   chatStart();
   loadLetters();
 }
@@ -9017,7 +9621,8 @@ var NOTES=[
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
-  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null;
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null;
+  if(qn) out.unshift(qn);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
     html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
   return out;
@@ -9407,8 +10012,8 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; dlRev=myRev; dlAt=Date.now(); lastFresh=Date.now(); tidyBoard(G); }
-    else G=blankGame(gameCode);
+    if(remote&&remote.players){ G=remote; setWorld(G); G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; dlRev=myRev; dlAt=Date.now(); lastFresh=Date.now(); tidyBoard(G); }
+    else { G=blankGame(gameCode); setWorld(G); }
     var ex=G.players[tryPid];
     var rnIn=(document.getElementById('realname').value||'').trim().replace(/\s+/g,' ').slice(0,24);
     var realName=rnIn||(ex&&ex.rn)||'';
@@ -9806,7 +10411,7 @@ function horseOrigin(tq,tr){
 function horsePos(c,t){
   var k=Math.max(0,Math.min(1,(t-c.t)/Math.max(1,c.eta-c.t)));
   var B=nearCopy(c.tq,c.tr,c.fq,c.fr), h=cubeRound(c.fq+(B[0]-c.fq)*k, c.fr+(B[1]-c.fr)*k);
-  return [wrapC(h[0]),wrapC(h[1])];
+  return [wrapQ(h[0]),wrapR(h[1])];
 }
 /* the nearest standing tower or trebuchet of pid's within sight of the horse, or null (the sender never sees it that way) */
 function horseWatch(c,pid,t){
@@ -9863,7 +10468,7 @@ function sendHorse(tq,tr,L){
   if(!HORSE_OK||tc.k!==TOWER||!tc.o||tc.o===ME) return nope('That is no longer a tower of another player. Nothing was sent.');
   var og=horseOrigin(tq,tr); if(!og) return nope('You need a standing castle to send a horse from.');
   var err=horseLoadError(L,og); if(err) return nope(err);
-  var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapC(tq),tr:wrapC(tr),h:1,ln:L.ln||''};
+  var now=Date.now(), id=ME+'-'+now.toString(36), rec={from:ME,to:tc.o,g:g,a:a,t:now,eta:now+horseTravel(og.d),fq:og.q,fr:og.r,tq:wrapQ(tq),tr:wrapR(tr),h:1,ln:L.ln||''};
   function launch(){
     GOODS.forEach(function(k){ pl.res[k]-=g[k]+(HORSE_COST[k]||0); });
     G.caravans=G.caravans||{}; G.caravans[id]=rec;
@@ -10286,7 +10891,7 @@ function coachTargets(){
     var c=G.cells[k]; if(c.o!==ME || building(c)) continue;
     var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10);
     for(var i=0;i<6;i++){
-      var nq=wrapC(q+AX[i][0]), nr=wrapC(r+AX[i][1]), nk=nq+'_'+nr;
+      var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), nk=nq+'_'+nr;
       if(seen[nk]) continue; seen[nk]=1;
       var n=G.cells[nk]; if(n && (n.o||n.k)) continue;
       var t=groundAt(nq,nr); if(t===RIVER) continue;
@@ -10381,7 +10986,7 @@ function coachShow(how){                             // how: false = asked for i
     if(auto && !mapInView()) return;
     var nc=nearCopy(p.target[0],p.target[1],viewQ,viewR), sp=toScreen(nc[0],nc[1]);
     if(sp[0]<S*1.5 || sp[0]>W-S*1.5 || sp[1]<S*2.2 || sp[1]>H-S*1.5){ centreOn(nc[0],nc[1]); }
-    coach.target={q:wrapC(p.target[0]), r:wrapC(p.target[1]), glow:!!p.glow, label:p.label||'Not sure? Try here', until:clock()+15};
+    coach.target={q:wrapQ(p.target[0]), r:wrapR(p.target[1]), glow:!!p.glow, label:p.label||'Not sure? Try here', until:clock()+15};
     coach.following=true;
     coachKick();
     if(!auto) say(p.txt);
