@@ -640,7 +640,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
         <div class="stat" id="s-march"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u" id="u-march">squares</span></div>
       </div>
-      <div class="bless-note hide" id="bless-note">&#10022; <b>The gods&rsquo; blessing is on you.</b> Taking another player&rsquo;s land costs only <b>1 march</b>, and your land yields <b>double</b>.</div>
+      <div class="bless-note hide" id="bless-note">&#10022; <b>The gods&rsquo; blessing is on you.</b> Your land yields <b>double</b>.</div>
 
       <div class="canvas-pad">
         <canvas id="board"></canvas>
@@ -2498,9 +2498,23 @@ function settleBless(){
     if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.bless1=x.v; } return; }
     G.fixes=G.fixes||{}; G.fixes.bless1=rec0; blessCache.at=0; bumpRev().then(ok,fail); render();
     plagueChat('The gods look down upon the realm and see the mighty growing fat while the small go hungry. This displeases us. (It is also boring to watch.)',now,'bless1a');
-    plagueChat('Hear now the GODS’ BLESSING. Every warrior in the bottom half of land holders is blessed: taking another player’s land costs only 1 march, and your land yields DOUBLE.',now,'bless1b');
+    plagueChat('Hear now the GODS’ BLESSING. Every warrior in the bottom half of land holders is blessed: your land yields DOUBLE.',now,'bless1b');
     plagueChat('The blessing follows the land. Grow great and it leaves you; fall low and it finds you. Look for the golden banner above your map. Rise up, little ones.',now,'bless1c');
   }).catch(function(){}).then(function(){ blessing=false; });
+  return true;
+}
+/* ── the blessing tempered ──  once (fixes/bless2): the gods say attacks cost the usual marches again for the blessed */
+var blessing2=false;
+function settleBless2(){
+  if(!online||blessing2||!G||!G.players||dirty||ELIM||!boardFresh()||!(G.fixes&&G.fixes.bless1)||(G.fixes&&G.fixes.bless2)) return false;
+  var now=Date.now(), rec0={t:now};
+  blessing2=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/bless2',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.bless2=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.bless2=rec0; bumpRev().then(ok,fail);
+    plagueChat('The gods have watched the little ones feast, and perhaps we were too generous. The blessing is tempered: taking land costs the usual 2 marches for everyone again. The blessed still reap DOUBLE from their land.',now,'bless2');
+  }).catch(function(){}).then(function(){ blessing2=false; });
   return true;
 }
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
@@ -2801,7 +2815,7 @@ function blessedSet(){
 }
 function blessed(pid){ return blessOn() && !!blessedSet()[pid==null?ME:pid]; }
 function blessMul(pid,at){ at=at||Date.now(); return (blessOn() && at>=G.fixes.bless1.t && blessed(pid))?2:1; }
-function attackCost(pid){ return blessed(pid)?1:ATTACK_COST; }
+function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made attacks cost 1 march; Chris found that too much, so attacks cost the same for everyone)
 function ratesFor(pid,at){
   var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
   for(var k in G.cells){
@@ -7443,6 +7457,7 @@ function render(){
     settleTurkeySwarm();
     settleAnnaVotes();
     settleBless();
+    settleBless2();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8822,7 +8837,6 @@ var NOTES=[
    html:'<p><i>&ldquo;We look down upon the realm and see the mighty growing fat while the small go hungry. This displeases us. (It is also boring to watch.)&rdquo;</i></p>'
      +'<p><b>The rules</b></p><ul>'
      +'<li>Every warrior in the <b>bottom half of land holders</b> is blessed by the gods.</li>'
-     +'<li>If you are blessed, taking another player&rsquo;s land costs only <b>1 march</b> instead of 2.</li>'
      +'<li>If you are blessed, your land yields <b>double</b>: twice the stone, timber, iron and grain.</li>'
      +'<li>The blessing <b>follows the land</b>. Grow into the top half and it leaves you; fall into the bottom half and it finds you.</li>'
      +'<li>If you are blessed, a <b>golden banner</b> above your map tells you so.</li>'
