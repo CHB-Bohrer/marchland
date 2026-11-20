@@ -8164,14 +8164,18 @@ function quakeCrack(g,ban){                 // the cheapest crack, row by row (d
     if(c<INF) c+=pc(I(b,r+1),I(b+1,r+1));
     Tc[(ri*n+ai)*ND+d+MAXD]=c;
   }
-  var best={cost:INF};
-  for(var s=-HQ;s<HQ;s++){
-    var c0=pc(I(s,-HR),I(s+1,-HR)); if(c0>=INF) continue;
+  var best={cost:INF}, starts=[];
+  for(var s0=-HQ;s0<HQ;s0++){ var c00=pc(I(s0,-HR),I(s0+1,-HR)); if(c00<INF) starts.push([s0,c00]); }
+  starts.sort(function(x,y){ return x[1]-y[1]; });                       // cheap places to start first, so a good crack is found early
+  for(var si=0;si<starts.length;si++){
+    var s=starts[si][0], c0=starts[si][1];
     var dp=new Map([[s,c0]]), from=[];
-    for(var ri=0;ri<WR;ri++){ var nx=new Map(), bk=new Map(), last=(ri===WR-1);
+    for(var ri=0;ri<WR && dp.size;ri++){ var nx=new Map(), bk=new Map(), last=(ri===WR-1);
       dp.forEach(function(ca,a){ for(var d=-MAXD;d<=MAXD;d++){ var b=a+d; if(last&&b!==s) continue;
-        var t=Tc[(ri*n+m(a+HQ))*ND+d+MAXD]; if(t>=INF) continue; var c=ca+t, ex=nx.get(b); if(ex===undefined||c<ex){ nx.set(b,c); bk.set(b,a); } } });
+        var t=Tc[(ri*n+m(a+HQ))*ND+d+MAXD]; if(t>=INF) continue; var c=ca+t; if(c>=best.cost) continue;   // already worse than the best crack found: drop it
+        var ex=nx.get(b); if(ex===undefined||c<ex){ nx.set(b,c); bk.set(b,a); } } });
       from.push(bk); dp=nx; }
+    if(from.length<WR) continue;
     var end=dp.get(s);
     if(end!==undefined&&end<best.cost){ var path=[s], cur=s; for(var j=from.length-1;j>=0;j--){ cur=from[j].get(cur); path.unshift(cur); } path.pop(); best={cost:end,path:path}; }
   }
@@ -8192,12 +8196,16 @@ function quakeMover(path,K){
     return [Math.round((+pt[0]+dq)*1000)/1000, +pt[1]]; };
   return mv;
 }
-function quakeMoved(b,plan,now){           // the whole board as it will be after the quake (b is not changed)
-  var K=QUAKE_K, mv=quakeMover(plan.path,K), out=JSON.parse(JSON.stringify(b)), KEYRE=/^-?\d+_-?\d+$/;
+function quakeMoved(b,plan,now,light){     // the board as it will be after the quake (b is not changed); light: only squares, players and the world
+  var K=QUAKE_K, mv=quakeMover(plan.path,K), KEYRE=/^-?\d+_-?\d+$/;
+  var out=light ? {players:JSON.parse(JSON.stringify(b.players||{})), meta:JSON.parse(JSON.stringify(b.meta||{}))} : JSON.parse(JSON.stringify(b));
   var pair=function(p){ if(!Array.isArray(p)||p.length!==2) return p; var a=mv(p[0],p[1]); return [a[0],a[1]]; };
   var cells={}; Object.keys(b.cells||{}).forEach(function(k){ var c=JSON.parse(JSON.stringify(b.cells[k])), nk=mv.key(k), p=nk.split('_');
     if(c.q!=null){ c.q=parseInt(p[0],10); c.r=parseInt(p[1],10); } cells[nk]=c; });
   out.cells=cells;
+  if(light){ Object.keys(out.players).forEach(function(pid){ var pl=out.players[pid]; if(pl&&pl.q!=null&&pl.r!=null){ var a=mv(pl.q,pl.r); pl.q=a[0]; pl.r=a[1]; } });
+    out.meta.world=out.meta.world||{}; var rl=(out.meta.world.rifts?arr(out.meta.world.rifts):[]).slice(); rl.push({id:'trial', k:K, t:now, path:plan.path.slice(), rv:plan.rv}); out.meta.world.rifts=rl;
+    return {board:out, mv:mv}; }
   Object.keys(out.players||{}).forEach(function(pid){ var pl=out.players[pid]; if(pl&&pl.q!=null&&pl.r!=null){ var a=mv(pl.q,pl.r); pl.q=a[0]; pl.r=a[1]; } });
   Object.keys(out.treks||{}).forEach(function(id){ var t=out.treks[id]; if(!t) return;
     if(t.from) t.from=mv.pt(arr(t.from)); if(t.to) t.to=pair(arr(t.to)); if(t.path) t.path=arr(t.path).map(function(p){ return pair(arr(p)); }); });
@@ -8245,8 +8253,8 @@ function quakeJudge(b,worldOf){
     return out;
   } finally { G=keepG; WQ=keepW.WQ; HQ=keepW.HQ; WR=keepW.WR; HR=keepW.HR; RIFTS=keepW.RIFTS; WORLD_EPOCH=keepW.E; originMemo=keepW.om; cellsGen++; }
 }
-function quakeVerdict(b,plan,now){         // play the quake out on a copy and say whether it is safe
-  var moved=quakeMoved(b,plan,now), A=quakeJudge(b,b), B=quakeJudge(moved.board,moved.board), mv=moved.mv, bad=[], release={}, pay={};
+function quakeVerdict(b,plan,now,A,light){  // play the quake out on a copy and say whether it is safe (A: the board's verdict before, if already known)
+  var moved=quakeMoved(b,plan,now,light); A=A||quakeJudge(b,b); var B=quakeJudge(moved.board,moved.board), mv=moved.mv, bad=[], release={}, pay={};
   var cut={}, P=WQ+QUAKE_K, HP=P/2, wP=function(x){ return ((x+HP)%P+P)%P-HP; };   // pairs of squares of one kingdom that no longer touch
   Object.keys(b.cells).forEach(function(k){ var c=b.cells[k]; if(!c||!c.o) return; var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), a=mv(q,r);
     for(var i=0;i<3;i++){ var nq=q+AX[i][0], nr=r+AX[i][1], n=b.cells[key(nq,nr)]; if(!n||n.o!==c.o) continue; var bq=mv(nq,nr);
@@ -8264,22 +8272,24 @@ function quakeVerdict(b,plan,now){         // play the quake out on a copy and s
   Object.keys(pay).forEach(function(pid){ pay[pid]+=QUAKE_PAY_EXTRA; });
   return {ok:!bad.length, bad:bad, release:release, pay:pay, cut:cut, moved:moved, regions:[A.regions,B.regions]};
 }
-function quakePlan(b){                     // find a crack that passes; rule out the kingdom links of each one that fails
-  var g=quakeGrid(b), ban={}, last=null;
-  for(var it=0;it<10;it++){
+var QUAKE_TRIES=12;
+function quakePlan(b){                     // find a safe crack that clears the fewest squares: each try rules out the kingdom links that did harm
+  var g=quakeGrid(b), ban={}, best=null, last=null, A=quakeJudge(b,b);
+  for(var it=0;it<QUAKE_TRIES;it++){
     var plan=quakeCrack(g,ban); if(!plan) break;
-    var v=quakeVerdict(b,plan,Date.now()); plan.verdict=v; last=plan;
-    if(v.ok) return plan;
-    var pids={}; v.bad.forEach(function(x){ if(x.pid) pids[x.pid]=1; });
+    var v=quakeVerdict(b,plan,Date.now(),A,true), cleared=Object.keys(v.release).length; plan.verdict=v; plan.cleared=cleared; last=plan;
+    if(v.ok && (!best || cleared<best.cleared || (cleared===best.cleared && Object.keys(v.cut).length<Object.keys(best.verdict.cut).length))) best=plan;
+    if(v.ok && cleared===0) break;
+    var pids={}; v.bad.forEach(function(x){ if(x.pid) pids[x.pid]=1; }); Object.keys(v.release).forEach(function(k){ pids[v.release[k]]=1; });
     var any=false;
     for(var r=-HR;r<HR;r++){ var a=plan.path[r+HR], bnext=plan.path[((r+1+HR)%WR+WR)%WR];
-      var tryBan=function(i,j){ var oa=g.O[i], ob=g.O[j]; if(oa>=0&&oa===ob&&(pids[g.names[oa]]||!Object.keys(pids).length)){ ban[i<j?i+'-'+j:j+'-'+i]=1; any=true; } };
+      var tryBan=function(i,j){ var oa=g.O[i], ob=g.O[j]; if(oa>=0&&oa===ob&&(pids[g.names[oa]]||!Object.keys(pids).length)){ var k2=i<j?i+'-'+j:j+'-'+i; if(!ban[k2]){ ban[k2]=1; any=true; } } };
       tryBan(g.I(a,r),g.I(a+1,r));
       var q; for(q=bnext+1;q<=a;q++) tryBan(g.I(q,r),g.I(q,r+1)); for(q=bnext+2;q<=a;q++) tryBan(g.I(q,r),g.I(q-1,r+1));
       for(q=a+1;q<=bnext;q++) tryBan(g.I(q,r),g.I(q,r+1)); for(q=a+1;q<=bnext+1;q++) tryBan(g.I(q,r),g.I(q-1,r+1)); }
-    if(!any) break;                          // the trouble is not a kingdom cut (a river, say): nothing more to try
+    if(!any) break;                          // nothing more to rule out
   }
-  return last;
+  return best||last;
 }
 /* everything the quake writes, as one multi-path update of the board */
 function quakePatch(b,plan,now){
