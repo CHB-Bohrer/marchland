@@ -513,6 +513,8 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
 .chat-badge{ min-width:18px; height:18px; padding:0 5px; border-radius:9px; background:#C9503B; color:#fff; font:700 11px/18px system-ui,sans-serif; text-align:center; flex:0 0 auto; }
 @keyframes cbflash{ 0%,45%{ background:var(--cb-flash); } 100%{ background:transparent; } }
 .cb-last.flash{ animation:cbflash 2.2s ease-out; }
+.bless-note{ margin:8px 0 0; padding:7px 12px; border:1px solid #c9a646; background:linear-gradient(90deg,rgba(255,226,140,.35),rgba(255,240,200,.15)); color:var(--ink,#2a2018); font-size:13px; border-radius:2px; }
+.bless-note b{ color:#7a5a10; }
 .chat-note{ font-family:var(--mono); font-size:10.5px; color:var(--p1); padding:0 0 8px; }
 .hush-btn{ border:0; background:transparent; padding:0 4px; margin-left:6px; font-size:13px; line-height:1; cursor:pointer; opacity:.55; vertical-align:middle; }
 .hush-btn:hover,.hush-btn:focus-visible{ opacity:1; }
@@ -638,6 +640,7 @@ body.has-chatbar .why{ bottom:calc(var(--cbh) + 52px); }
         <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
         <div class="stat" id="s-march"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u" id="u-march">squares</span></div>
       </div>
+      <div class="bless-note hide" id="bless-note">&#10022; <b>The gods&rsquo; blessing is on you.</b> Taking another player&rsquo;s land costs only <b>1 march</b>, and your land yields <b>double</b>.</div>
 
       <div class="canvas-pad">
         <canvas id="board"></canvas>
@@ -2482,6 +2485,23 @@ function settleAnnaVotes(){
   }).catch(function(){}).then(function(){ annaVoting=false; });
   return true;
 }
+/* ── the gods' blessing begins ──  once (fixes/bless1, claimed with a conditional write); announced by the gods; scroll 'nov19-bless'. */
+var blessing=false;
+function settleBless(){
+  if(!online||blessing||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.bless1)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var now=Date.now(), rec0={t:now};
+  blessing=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/bless1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.bless1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.bless1=rec0; blessCache.at=0; bumpRev().then(ok,fail); render();
+    plagueChat('The gods look down upon the realm and see the mighty growing fat while the small go hungry. This displeases us. (It is also boring to watch.)',now,'bless1a');
+    plagueChat('Hear now the GODS’ BLESSING. Every warrior in the bottom half of land holders is blessed: taking another player’s land costs only 1 march, and your land yields DOUBLE.',now,'bless1b');
+    plagueChat('The blessing follows the land. Grow great and it leaves you; fall low and it finds you. Look for the golden banner above your map. Rise up, little ones.',now,'bless1c');
+  }).catch(function(){}).then(function(){ blessing=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -2756,6 +2776,24 @@ function garrisonNeed(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=garNeed(c); }
   return [have,need];
 }
+/* ── the gods' blessing ──  Players in the bottom half of land holders (counted among everyone who holds at least one
+   square; ties at the line are all blessed) are blessed: taking another player's land costs them 1 march instead of
+   ATTACK_COST, and their land yields double. It follows the board as it is now, so it comes and goes as land changes hands.
+   Begins with G.fixes.bless1 (announced once by the gods); harvest from before then is not doubled. */
+var blessCache={at:0,gen:-1,set:{},cut:0};
+function blessOn(){ return !!(G && G.fixes && G.fixes.bless1); }
+function landCounts(){ var n={}; for(var k in G.cells){ var c=G.cells[k]; if(c&&c.o&&G.players[c.o]) n[c.o]=(n[c.o]||0)+1; } return n; }
+function blessedSet(){
+  var now=Date.now();
+  if(now-blessCache.at<2000 && blessCache.gen===cellsGen) return blessCache.set;
+  var n=landCounts(), ids=Object.keys(n).sort(function(a,b){ return n[a]-n[b]; }), set={}, cut=0;
+  if(ids.length>=2){ cut=n[ids[Math.floor(ids.length/2)-1]]; ids.forEach(function(p){ if(n[p]<=cut) set[p]=1; }); }
+  blessCache={at:now,gen:cellsGen,set:set,cut:cut};
+  return set;
+}
+function blessed(pid){ return blessOn() && !!blessedSet()[pid==null?ME:pid]; }
+function blessMul(pid,at){ at=at||Date.now(); return (blessOn() && at>=G.fixes.bless1.t && blessed(pid))?2:1; }
+function attackCost(pid){ return blessed(pid)?1:ATTACK_COST; }
 function ratesFor(pid,at){
   var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
   for(var k in G.cells){
@@ -2767,8 +2805,9 @@ function ratesFor(pid,at){
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
     var pm=plagueMul(pid,at)*plague2Mul(k,at);          // a plague on the land halves every harvest (and one on a single square halves that square's)
     var tm=turkeyMul(pid,at);                          // a turkey swarm eats every grain the land brings in
-    if(y) out[y.r]+=y.n*pm*(y.r==='grain'?tm:1);
-    if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm*tm;
+    var bm=blessMul(pid,at);                           // the gods' blessing doubles the land's yield
+    if(y) out[y.r]+=y.n*pm*bm*(y.r==='grain'?tm:1);
+    if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm*tm*bm;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
   var strd=strandedMen(pid,sup);                      // cut-off bands are fed by nobody (see strandedCells)
@@ -3404,7 +3443,7 @@ function spendMarch0(q,r){
     return say('Cell taken for <b>1</b> march. <b>'+avail()+'</b> left.');
   }
   // someone else's ground: a band of mine beside it fights a chain of duels for it
-  if(pl.squares<ATTACK_COST) return nope('Not enough marches — an attack costs '+ATTACK_COST+', win or lose. Claim today&rsquo;s steps.');
+  if(pl.squares<attackCost()) return nope('Not enough marches — an attack costs '+attackCost()+', win or lose. Claim today&rsquo;s steps.');
   attackPrompt(q,r);
 }
 
@@ -3550,7 +3589,7 @@ function attackPrompt(q,r,note){
     +(L.towers?'<p><i>'+(L.towers>1?L.towers+' of their towers reach':'One of their towers reaches')+' this square and make'+(L.towers>1?'':'s')+' every duel harder (&minus;'+Math.round(L.pen*100)+'%).</i></p>':'')
     +(hasGoods(sp)?'<p>If you win you carry off '+(loserN>1?'1/'+loserN+' of what':'all that')+' '+who+' has banked: about <b>'+goodsText(sp)+'</b>.</p>':'')
     +(ruin?'<p>Seizing the ruin pays <b>'+CASTLE_BOUNTY+' marches</b>.</p>':'')
-    +'<p><i>Costs '+ATTACK_COST+' marches, win or lose. Defenders you bring down stay down even if you fail.</i></p><p class="muted" style="font-size:11px">page version '+BUILD+'</p>';
+    +'<p><i>Costs '+(attackCost()===1?'1 march (the gods&rsquo; blessing)':attackCost()+' marches')+', win or lose. Defenders you bring down stay down even if you fail.</i></p><p class="muted" style="font-size:11px">page version '+BUILD+'</p>';
   scrollDialog({eyebrow:'Battle', title:'Attack '+who+'&rsquo;s '+what+'?', html:html, cancel:false,
     buttons:[{label:'Hold back',value:false},{label:'Attack &mdash; '+pct(o.win),value:true,primary:true}]}).then(function(res){
     if(res.value) attackNow(q,r,band,L.p);
@@ -3568,7 +3607,8 @@ function attackNow(q,r,band0,shown){
     var band=attackBand(q,r), L=defenderLine(q,r);
     if(!band) throw {msg:'<span class="bad">Your band beside it has gone.</span>'};
     if(band.n!==band0.n || JSON.stringify(L.p)!==JSON.stringify(shown)){ fighting=false; return attackPrompt(q,r,'The defences changed while you were deciding. These are the new odds.'); }
-    if(pl.squares<ATTACK_COST) throw {msg:'Not enough marches &mdash; an attack costs '+ATTACK_COST+'. Claim today&rsquo;s steps.'};
+    var cost=attackCost();
+    if(pl.squares<cost) throw {msg:'Not enough marches &mdash; an attack costs '+cost+'. Claim today&rsquo;s steps.'};
     var seed=newSeed(), res=fightOut(band.n,L.p,seed), kn=lineCounts(L.units,0,res.killed);
     var snaps={}, snap=function(kk){ if(!(kk in snaps)) snaps[kk]=G.cells[kk]?JSON.parse(JSON.stringify(G.cells[kk])):null; };   // to put things back if the write is refused
     snap(key(band.q,band.r)); L.guard.cells.forEach(function(g){ snap(key(g[0],g[1])); });
@@ -3585,7 +3625,7 @@ function attackNow(q,r,band0,shown){
     if(kn.treb){ c.tb=Math.max(0,(c.tb||0)-kn.treb); c.tr=(c.tr||[]).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } }
     addGraves(c,res.lost);                                          // attackers who fell here
     var from=G.cells[key(band.q,band.r)], bounty=0;
-    pl.squares-=ATTACK_COST;
+    pl.squares-=cost;
     if(res.won){
       c.o=ME; c.w=0; delete c.wd; delete c.tb; delete c.tr; c.b=res.left;
       if(ruin){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; bounty=CASTLE_BOUNTY; pl.squares+=bounty; }   // the ruin is razed, and the captor is paid
@@ -3594,7 +3634,7 @@ function attackNow(q,r,band0,shown){
     } else if(from){ from.b=res.left; if(!from.b) delete from.b; }
     writeCell(q,r,c);
     return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
-      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=ATTACK_COST-bounty; throw {msg:'That square changed at the last moment. Nothing happened &mdash; look again and try once more.'}; }
+      if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=cost-bounty; throw {msg:'That square changed at the last moment. Nothing happened &mdash; look again and try once more.'}; }
       pushCell(band.q,band.r); touched.forEach(function(g){ pushCell(g[0],g[1]); });
       var ev={v:2, seed:seed, n:band.n, ln:L.p.map(function(x){ return Math.round(x*100); }), lt:L.units.map(function(u){ return UNIT_CODE[u.t]; }).join(''),
         won:res.won?1:0, kl:res.killed, pw:pw||null, pk:pk||null, pl:pk?plv:null, pg:pk?pg:null, cb:bounty||null};
@@ -4696,8 +4736,8 @@ function cellActions(q,r){
   } else if(!own){
     var guns=coverOn(q,r,ME), guard=guardOn(q,r,c.o), need2=guns+guard.n, L=defenderLine(q,r), band=attackBand(q,r);
     var bandWhy=function(n){ return !beside?'Needs one of your bands beside it':(beside<n+1?'Needs a band of '+(n+1)+' beside it (yours has '+beside+')':''); };
-    var whyTake=!band?'Needs one of your bands beside it':marches(ATTACK_COST);
-    var price=ATTACK_COST+' marches'+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'')+(function(){ var n=soldiersFor70(L.p); return n==null?' &middot; 70% out of reach':(band&&band.n>=n?' &middot; 70% needs '+n:' &middot; 70% needs '+n+' soldiers'); })();   // the 70% figure shows even with no band beside it
+    var whyTake=!band?'Needs one of your bands beside it':marches(attackCost());
+    var price=(attackCost()===1?'1 march &#10022;':attackCost()+' marches')+(band?' &middot; '+pct(battleOdds(band.n,L.p).win)+' to win':'')+(function(){ var n=soldiersFor70(L.p); return n==null?' &middot; 70% out of reach':(band&&band.n>=n?' &middot; 70% needs '+n:' &middot; 70% needs '+n+' soldiers'); })();   // the 70% figure shows even with no band beside it
     var take=function(){ spendMarch(q,r); };
     if(c.k===CASTLE&&!isRuin(c)) A('Storm the castle','',take,'A castle can&rsquo;t be stormed while it stands');
     else if(c.k===CASTLE) A('Seize the fallen castle',price+' &middot; +'+CASTLE_BOUNTY+' marches',take,whyTake);
@@ -7394,6 +7434,7 @@ function render(){
     settleHush();
     settleTurkeySwarm();
     settleAnnaVotes();
+    settleBless();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -7413,6 +7454,7 @@ function render(){
   document.getElementById('u-field').textContent=nb?('in '+nb+' band'+(nb>1?'s':'')):'none raised';
   var owed=owedBy(pl);
   document.getElementById('v-march').textContent=pl.squares;
+  var bn=document.getElementById('bless-note'); if(bn) bn.classList.toggle('hide',!blessed(ME));
   document.getElementById('u-march').textContent= owed ? owed+' owed from next claim' : 'squares';
   document.getElementById('s-march').classList.toggle('warn',owed>0);
   document.getElementById('u-grain').textContent=(R.net>=0?'+':'')+R.net+' / tick';
@@ -8768,6 +8810,15 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov19-bless', eyebrow:'The gods have spoken', title:'&#10022; The gods&rsquo; blessing',
+   html:'<p><i>&ldquo;We look down upon the realm and see the mighty growing fat while the small go hungry. This displeases us. (It is also boring to watch.)&rdquo;</i></p>'
+     +'<p><b>The rules</b></p><ul>'
+     +'<li>Every warrior in the <b>bottom half of land holders</b> is blessed by the gods.</li>'
+     +'<li>If you are blessed, taking another player&rsquo;s land costs only <b>1 march</b> instead of 2.</li>'
+     +'<li>If you are blessed, your land yields <b>double</b>: twice the stone, timber, iron and grain.</li>'
+     +'<li>The blessing <b>follows the land</b>. Grow into the top half and it leaves you; fall into the bottom half and it finds you.</li>'
+     +'<li>If you are blessed, a <b>golden banner</b> above your map tells you so.</li>'
+     +'</ul><p>Rise up, little ones. The gods are watching.</p>', go:'Praise the gods'},
   {id:'nov19-turkeys', eyebrow:'The gods are not fooled', title:'&#129411; The turkeys have come for Keybler',
    html:'<p>The gods were overjoyed to see a photo arrive for the turkey hunt&hellip; until they looked closer. <b>Keybler</b> had simply photographed one of the turkeys <b>in this very game</b>.</p>'
      +'<p><b>Now the turkeys have come for him.</b> For <b>one day</b> a swarm of turkeys overruns his land and gobbles up his harvest: his farms bring in <b>no grain</b>. Look for them strutting and pecking across his squares.</p>'
