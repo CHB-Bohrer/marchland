@@ -2602,13 +2602,15 @@ document.getElementById('st-turkey').addEventListener('click',function(){ if(isS
    Chris asked for the players Lily and Trevor to be deleted: their accounts go, every square they hold is wiped and
    the ground is free. Done once (G.removed records it); whichever up-to-date screen sees them first does it. */
 var REMOVE_ID='rm1', REMOVE_NAMES=['lily','trevor'];
+/* a second batch, by player id: Chris asked for Jeez, Your mom (Jennifer Adamo) and DD (Doyeal Yu) to be removed */
+var REMOVE2_ID='rm2', REMOVE2_PIDS=['ptjtn87','p1gcfthp','ppu2pmd'];
 function settleRemovals(){
   if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
   if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
   var now=Date.now(), patch={}, mineOut=false, k, c;
   var ids=Object.keys(G.players).filter(function(pid){
     var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
-    return REMOVE_NAMES.indexOf(n)>=0 && !(G.removed&&G.removed[pid+REMOVE_ID]);
+    return (REMOVE_NAMES.indexOf(n)>=0 && !(G.removed&&G.removed[pid+REMOVE_ID])) || (REMOVE2_PIDS.indexOf(pid)>=0 && !(G.removed&&G.removed[pid+REMOVE2_ID]));
   });
   if(!ids.length) return false;
   G.fallen=G.fallen||{}; G.removed=G.removed||{};
@@ -2622,7 +2624,8 @@ function settleRemovals(){
       var cv=G.caravans[id]; if(cv && (cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
     });
     patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
-    patch['removed/'+pid+REMOVE_ID]=now; G.removed[pid+REMOVE_ID]=now;   // (a later newcomer with the same name is not touched)
+    var rid=REMOVE2_PIDS.indexOf(pid)>=0?REMOVE2_ID:REMOVE_ID;
+    patch['removed/'+pid+rid]=now; G.removed[pid+rid]=now;   // (a later newcomer with the same name is not touched)
     if(pid===ME) mineOut=true; else delete G.players[pid];
   });
   patch['rev']=now; myRev=now;
