@@ -2371,6 +2371,92 @@ function settleHush(){
   }).catch(function(){}).then(function(){ hushing=false; });
   return true;
 }
+/* ── the turkey swarm ──  Keybler sent the gods a photo of one of the game's own turkeys for the turkey hunt. For one day
+   turkeys overrun his land and eat his harvest: his farms (and castles) bring in no grain (see turkeyMul in ratesFor).
+   Claimed once with a conditional write (G.tswarm = {pid,start,end}); announced by the gods; the scroll is 'nov19-turkeys'. */
+var TSWARM_MS=864e5, turkeyQ=[], tswarming=false;
+function tswarmOn(at){ var T=G&&G.tswarm; at=at||Date.now(); return !!T && at>=T.start && at<T.end; }
+function turkeyMul(pid,at){ var T=G&&G.tswarm; return (T && T.pid===pid && tswarmOn(at))?0:1; }
+function settleTurkeySwarm(){
+  if(!online||tswarming||!G||!G.players||dirty||ELIM||!boardFresh()||G.tswarm) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var kb=judgePids(['thekeyblerelf']); if(kb.length!==1) return false;
+  var now=Date.now(), T={pid:kb[0],start:now,end:now+TSWARM_MS};
+  tswarming=true;
+  dbPutIf('/marchland/'+gameCode+'/tswarm',T).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.tswarm=x.v; return; }
+    G.tswarm=T; bumpRev().then(ok,fail); render();
+    plagueChat('Keybler tried to fool the gods with a painted turkey. Now the turkeys have come for him.',now,'tswarm1a');
+    plagueChat('For one day the turkeys overrun his land and gobble up every grain his farms bring in. Gobble gobble.',now,'tswarm1b');
+  }).catch(function(){}).then(function(){ tswarming=false; });
+  return true;
+}
+/* one turkey: a bronze body, a tail that fans out in a great wheel when he struts, a bare blue head with a red wattle.
+   He walks, stops to peck (scattering grain on a farm), and now and then fans his tail and gobbles. */
+function drawOneTurkey(X,Y,z,dir,walk,peck,fan,t,farm,talk){
+  ctx.save(); ctx.translate(X,Y); ctx.scale(dir,1); ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.globalAlpha=.3; ctx.fillStyle='#1d1410'; ctx.beginPath(); ctx.ellipse(0,z*0.62,z*0.8,z*0.18,0,0,6.284); ctx.fill(); ctx.globalAlpha=1;   // shadow
+  // tail: a fan of banded feathers behind him, wheeling up when he displays
+  var N=9, spread=0.35+1.25*fan, L=z*(0.7+0.85*fan), base=-1.57-0.55*(1-fan)-0.0;   // pointing up-back when fanned, back when relaxed
+  var pivx=-z*0.35, pivy=-z*0.05;
+  for(var i=0;i<N;i++){
+    var a=(fan>0.05?-1.57:-2.6)+(i/(N-1)-0.5)*spread*2*(fan>0.05?1:0.35);
+    var ex=pivx+Math.cos(a)*L, ey=pivy+Math.sin(a)*L*(fan>0.05?1:0.7);
+    ctx.save(); ctx.translate(pivx,pivy); ctx.rotate(Math.atan2(ey-pivy,ex-pivx));
+    var fl=Math.hypot(ex-pivx,ey-pivy);
+    ctx.fillStyle='#4a2a14'; ctx.beginPath(); ctx.ellipse(fl*0.5,0,fl*0.52,z*(0.1+0.08*fan),0,0,6.284); ctx.fill();
+    ctx.fillStyle='#8a5a2b'; ctx.beginPath(); ctx.ellipse(fl*0.72,0,fl*0.2,z*(0.09+0.07*fan),0,0,6.284); ctx.fill();   // bronze band
+    ctx.fillStyle='#e8d8b0'; ctx.beginPath(); ctx.ellipse(fl*0.95,0,fl*0.07,z*(0.08+0.06*fan),0,0,6.284); ctx.fill();   // pale tip
+    ctx.restore();
+  }
+  // legs
+  var sw=walk?Math.sin(t*14)*z*0.18:0;
+  ctx.strokeStyle='#c98a4a'; ctx.lineWidth=Math.max(1,z*0.08);
+  ctx.beginPath(); ctx.moveTo(-z*0.1,z*0.3); ctx.lineTo(-z*0.1+sw,z*0.6); ctx.moveTo(z*0.12,z*0.3); ctx.lineTo(z*0.12-sw,z*0.6); ctx.stroke();
+  // body, with a bronze sheen and a striped wing
+  var g=ctx.createRadialGradient(-z*0.1,-z*0.15,z*0.05,0,0,z*0.7); g.addColorStop(0,'#9a6a35'); g.addColorStop(.55,'#5b3519'); g.addColorStop(1,'#33200f');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(0,z*0.05+(fan?-z*0.05*fan:0),z*0.58,z*0.42,-0.1*fan,0,6.284); ctx.fill();
+  ctx.strokeStyle='#e8d8b0'; ctx.lineWidth=Math.max(0.6,z*0.035); ctx.globalAlpha=.6;
+  for(var w=0;w<3;w++){ ctx.beginPath(); ctx.ellipse(-z*0.05,z*0.08+w*z*0.08,z*0.32-w*z*0.04,z*0.1,0,0.2,2.9); ctx.stroke(); }
+  ctx.globalAlpha=1;
+  // neck and head: up when he struts, down when he pecks
+  var hx=z*0.55+z*0.25*peck, hy=-z*0.55+z*0.95*peck+(fan?-z*0.1*fan:0);
+  ctx.strokeStyle='#9fb6cc'; ctx.lineWidth=Math.max(1.2,z*0.16); ctx.beginPath(); ctx.moveTo(z*0.35,-z*0.12); ctx.quadraticCurveTo(z*0.62,-z*0.2+z*0.4*peck,hx,hy); ctx.stroke();
+  ctx.fillStyle='#bcd3e6'; ctx.beginPath(); ctx.arc(hx,hy,z*0.15,0,6.284); ctx.fill();
+  ctx.fillStyle='#e0b23a'; ctx.beginPath(); ctx.moveTo(hx+z*0.12,hy-z*0.03); ctx.lineTo(hx+z*0.3,hy+z*0.02); ctx.lineTo(hx+z*0.12,hy+z*0.07); ctx.fill();   // beak
+  ctx.fillStyle='#d0302a'; ctx.beginPath(); ctx.ellipse(hx+z*0.07,hy+z*0.2,z*0.06,z*(0.14+0.05*fan),0,0,6.284); ctx.fill();   // wattle
+  ctx.beginPath(); ctx.ellipse(hx+z*0.2,hy+z*0.03+z*0.1*(1-fan),z*0.035,z*0.11,0.3,0,6.284); ctx.fill();   // snood over the beak
+  ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(hx+z*0.04,hy-z*0.04,Math.max(0.6,z*0.03),0,6.284); ctx.fill();
+  if(peck>0.6 && farm){ ctx.fillStyle='#e6c66a'; for(var c=0;c<4;c++){ var cp=((t*3+c*0.25)%1); ctx.globalAlpha=(1-cp); ctx.beginPath(); ctx.arc(hx+z*0.3+Math.cos(c*1.7)*z*0.25*cp,hy+z*0.1-Math.sin(cp*3.14)*z*0.25,Math.max(0.6,z*0.04),0,6.284); ctx.fill(); } ctx.globalAlpha=1; }   // grain flying as he pecks
+  ctx.restore();
+  if(talk>0.15 && z>=5){                                  // "gobble!"
+    ctx.save(); ctx.globalAlpha=Math.min(1,talk*1.6); ctx.font='bold '+Math.max(8,Math.round(z*0.55))+'px monospace'; ctx.textAlign='center';
+    var tx=X+dir*z*0.5, ty=Y-z*1.25-talk*z*0.25;
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(255,250,235,.95)'; ctx.strokeText('gobble!',tx,ty); ctx.fillStyle='#7a2a10'; ctx.fillText('gobble!',tx,ty);
+    ctx.restore();
+  }
+}
+/* the swarm on one of Keybler's squares: a few loose feathers, and two turkeys (three on a farm) strutting about */
+function drawTurkeys(x,y,s,q,r,t,farm){
+  if(s<9) return;
+  var hq=wrapC(q), hr=wrapC(r), i;
+  ctx.save(); ctx.fillStyle='#e8d8b0'; ctx.strokeStyle='#5b3519'; ctx.lineWidth=Math.max(0.6,s*0.02);
+  for(i=0;i<3;i++){ var fa=artHash(hq,hr,980+i)*6.28, fx=x+(artHash(hq,hr,985+i)-0.5)*s*1.1, fy=y+(artHash(hq,hr,990+i)-0.5)*s*0.7;
+    ctx.save(); ctx.translate(fx,fy); ctx.rotate(fa); ctx.globalAlpha=.75; ctx.beginPath(); ctx.ellipse(0,0,s*0.09,s*0.03,0,0,6.284); ctx.fill(); ctx.stroke(); ctx.restore(); }
+  ctx.restore();
+  var n=farm?3:2, rows=n===3?[-0.24,0.04,0.3]:[-0.14,0.2];
+  for(i=0;i<n;i++){
+    var h=artHash(hq,hr,970+i), sp=0.6+0.5*h, cyc=((t*0.5+h*7)%4+4)%4, seg=Math.floor((t*0.5+h*7)/4);
+    var moving=cyc<2.4, pos=seg*2.4+Math.min(cyc,2.4), w=pos*sp+h*20;   // he walks for a while, then stops
+    var ox=Math.sin(w)*s*0.33, dir=Math.cos(w)>=0?1:-1;
+    var oy=rows[i]*s+Math.sin(w*0.6)*s*0.05;
+    var peck=(cyc>2.4&&cyc<3.3)?Math.abs(Math.sin((cyc-2.4)*Math.PI*4.4)):0;
+    var fan=(cyc>=3.3)?Math.sin((cyc-3.3)/0.7*Math.PI):0;
+    var talk=(fan>0 && artHash(hq,hr,960+i+seg%7)>0.45)?fan:0;
+    drawOneTurkey(x+ox,y+oy-(moving?Math.abs(Math.sin(t*7+h*9))*s*0.03:0),s*0.27,dir,moving,peck,fan,t,farm,talk);
+  }
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -2655,8 +2741,9 @@ function ratesFor(pid,at){
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
     var pm=plagueMul(pid,at)*plague2Mul(k,at);          // a plague on the land halves every harvest (and one on a single square halves that square's)
-    if(y) out[y.r]+=y.n*pm;
-    if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm;
+    var tm=turkeyMul(pid,at);                          // a turkey swarm eats every grain the land brings in
+    if(y) out[y.r]+=y.n*pm*(y.r==='grain'?tm:1);
+    if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm*tm;
   }
   var g=garrisonNeed(pid), pl=G.players[pid];
   var strd=strandedMen(pid,sup);                      // cut-off bands are fed by nobody (see strandedCells)
@@ -2967,7 +3054,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -6215,6 +6302,7 @@ function draw(){
     if(c.o && (plagueMul(c.o)<1 || plague2Mul(key(q,r))<1)) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(G.titan && titanActive() && c.o===G.titan.pid && ((c.b||0)+(c.g||0))>0) titanQ.push([p[0],p[1],q,r]);
+    if(c.o && tswarmOn() && c.o===G.tswarm.pid) turkeyQ.push([p[0],p[1],q,r,isFarmCell(G.cells[key(q,r)],q,r)]);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
@@ -6281,7 +6369,8 @@ function draw(){
   bands.forEach(function(e){ drawBand(e[0],e[1][0],e[1][1],e[2],detail); });
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
   titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); });
-  drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;   // the titan's foot comes down on top   // comets fall over everything else
+  drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;
+  turkeyQ.forEach(function(e){ drawTurkeys(e[0],e[1],S,e[2],e[3],Date.now()/1000,e[4]); }); turkeyQ.length=0;   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
@@ -7278,6 +7367,7 @@ function render(){
     settleGift2();
     settleTitan();
     settleHush();
+    settleTurkeySwarm();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -8652,6 +8742,10 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov19-turkeys', eyebrow:'The gods are not fooled', title:'&#129411; The turkeys have come for Keybler',
+   html:'<p>The gods were overjoyed to see a photo arrive for the turkey hunt&hellip; until they looked closer. <b>Keybler</b> had simply photographed one of the turkeys <b>in this very game</b>.</p>'
+     +'<p><b>Now the turkeys have come for him.</b> For <b>one day</b> a swarm of turkeys overruns his land and gobbles up his harvest: his farms bring in <b>no grain</b>. Look for them strutting and pecking across his squares.</p>'
+     +'<p>The turkey hunt wants a photo of you beside a <b>living</b> turkey. The gods know the difference.</p>', go:'Gobble gobble'},
   {id:'nov19-hush', eyebrow:'The gods have spoken', title:'&#129323; The warriors shall judge the chatter',
    html:'<p><i>&ldquo;We forged this realm for <b>war</b>. &hellip;Ahem. For the <b>well-being of humankind</b>. Not to listen to the squabbling of children from another realm.&rdquo;</i></p>'
      +'<p>The old chat fee is gone. <b>Chat is free</b> again, but the warriors now decide who talks too much.</p>'
