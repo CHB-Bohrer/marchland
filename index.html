@@ -2457,6 +2457,31 @@ function drawTurkeys(x,y,s,q,r,t,farm){
     drawOneTurkey(x+ox,y+oy-(moving?Math.abs(Math.sin(t*7+h*9))*s*0.03:0),s*0.27,dir,moving,peck,fan,t,farm,talk);
   }
 }
+/* ── Anna's dispute votes cleared ──  Chris asked for all of Anna's votes to void other players' step claims to be removed, as
+   she was just learning the game. Once (fixes/anna2, claimed with a conditional write): every "void" vote of hers on a claim
+   is deleted, read fresh from the database. Her "fine" votes stay. Silent: no announcement. */
+var annaVoting=false;
+function settleAnnaVotes(){
+  if(!online||annaVoting||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.anna2)) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var an=judgePids(['anna']); if(an.length!==1) return false;
+  var apid=an[0], now=Date.now(), base='/marchland/'+gameCode;
+  annaVoting=true;
+  dbGet(base+'/claims').then(function(C){
+    C=C||{};
+    var ids=Object.keys(C).filter(function(id){ var v=C[id]&&C[id].votes&&C[id].votes[apid]; return v&&v.v==='no'; });
+    var rec0={pid:apid,n:ids.length,ids:ids,t:now};
+    return dbPutIf(base+'/fixes/anna2',rec0).then(function(x){
+      if(x.halted) return;
+      if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.anna2=x.v; } return; }
+      G.fixes=G.fixes||{}; G.fixes.anna2=rec0;
+      var patch={'rev':now}; myRev=now;
+      ids.forEach(function(id){ patch['claims/'+id+'/votes/'+apid]=null; var lc=G.claims&&G.claims[id]; if(lc&&lc.votes) delete lc.votes[apid]; });
+      return dbPatch(base,patch).then(ok,fail).then(function(){ render(); });
+    });
+  }).catch(function(){}).then(function(){ annaVoting=false; });
+  return true;
+}
 /* ── the gods tire of chatter ──  announced once in the chat by the gods themselves (G.fixes.chatter1, claimed with a
    conditional write so it only happens once); the one-time scroll for everyone is the 'nov18-chatter' note. */
 var chatterng=false;
@@ -7368,6 +7393,7 @@ function render(){
     settleTitan();
     settleHush();
     settleTurkeySwarm();
+    settleAnnaVotes();
     settlePietro();
     settleTurkey();
     settleRemovals();
