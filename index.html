@@ -1458,6 +1458,7 @@ function settleApprovals(){
   var ids=Object.keys(G.pending).filter(function(pid){
     var p=G.pending[pid], sp=(G.sponsorships||{})[pid];
     return p && p.ok && !p.no && p.pin && !G.players[pid] && !admitting[pid] && !(sp&&(sp.fake||sp.gone))
+      && !(G.fallen && G.fallen[pid] && (p.t||0)<=G.fallen[pid])   // a request from before they were removed never brings them back
       && (p.ok.by===ME || isSteward());           // only the sponsor's screen or the steward's, so two screens rarely race
   });
   if(!ids.length) return false;
@@ -2604,13 +2605,16 @@ document.getElementById('st-turkey').addEventListener('click',function(){ if(isS
 var REMOVE_ID='rm1', REMOVE_NAMES=['lily','trevor'];
 /* a second batch, by player id: Chris asked for Jeez, Your mom (Jennifer Adamo) and DD (Doyeal Yu) to be removed */
 var REMOVE2_ID='rm2', REMOVE2_PIDS=['ptjtn87','p1gcfthp','ppu2pmd'];
+/* and again: 21 seconds after the first removal, her old approved join request let her back in. Removed again, with the request deleted */
+var REMOVE3_ID='rm3', REMOVE3_PIDS=['p1gcfthp'];
 function settleRemovals(){
   if(!G||!G.players||dirty||ELIM||!boardFresh()) return false;
   if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
   var now=Date.now(), patch={}, mineOut=false, k, c;
   var ids=Object.keys(G.players).filter(function(pid){
     var n=((G.players[pid]||{}).name||'').toLowerCase().replace(/[^a-z]/g,'');
-    return (REMOVE_NAMES.indexOf(n)>=0 && !(G.removed&&G.removed[pid+REMOVE_ID])) || (REMOVE2_PIDS.indexOf(pid)>=0 && !(G.removed&&G.removed[pid+REMOVE2_ID]));
+    return (REMOVE_NAMES.indexOf(n)>=0 && !(G.removed&&G.removed[pid+REMOVE_ID])) || (REMOVE2_PIDS.indexOf(pid)>=0 && !(G.removed&&G.removed[pid+REMOVE2_ID]))
+      || (REMOVE3_PIDS.indexOf(pid)>=0 && !(G.removed&&G.removed[pid+REMOVE3_ID]));
   });
   if(!ids.length) return false;
   G.fallen=G.fallen||{}; G.removed=G.removed||{};
@@ -2624,7 +2628,8 @@ function settleRemovals(){
       var cv=G.caravans[id]; if(cv && (cv.to===pid||cv.from===pid)){ delete G.caravans[id]; patch['caravans/'+id]=null; }
     });
     patch['players/'+pid]=null; patch['fallen/'+pid]=now; G.fallen[pid]=now;
-    var rid=REMOVE2_PIDS.indexOf(pid)>=0?REMOVE2_ID:REMOVE_ID;
+    var rid=(REMOVE3_PIDS.indexOf(pid)>=0&&G.removed[pid+REMOVE2_ID])?REMOVE3_ID:(REMOVE2_PIDS.indexOf(pid)>=0?REMOVE2_ID:REMOVE_ID);
+    patch['pending/'+pid]=null; if(G.pending) delete G.pending[pid];     // their old join request goes too, so no screen can let them back in
     patch['removed/'+pid+rid]=now; G.removed[pid+rid]=now;   // (a later newcomer with the same name is not touched)
     if(pid===ME) mineOut=true; else delete G.players[pid];
   });
