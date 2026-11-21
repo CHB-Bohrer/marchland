@@ -552,6 +552,9 @@ body.qafter #game{animation:qshake .2s linear 8}
 #qcine .qsub{position:absolute;left:6%;right:6%;bottom:8%;text-align:center;color:#F3D3A8;font:600 clamp(14px,3.6vw,22px)/1.35 system-ui,sans-serif;text-shadow:0 2px 6px #000;opacity:0;transition:opacity .45s;pointer-events:none}
 #qcine .qskip{position:absolute;right:14px;top:14px;color:#E9CBA8;font:600 14px system-ui,sans-serif;background:rgba(0,0,0,.45);border:1px solid #7A4A30;border-radius:9px;padding:7px 12px;cursor:pointer}
 @media (prefers-reduced-motion:reduce){ body.qtremble #game, body.qafter #game{animation:none} }
+.newland-bar{ margin:0 0 14px; padding:12px 16px; background:#3A1408; color:#FFE6C4; border:3px solid #FF6A1A; border-radius:3px; font-size:16px; line-height:1.4; display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; box-shadow:0 0 18px rgba(255,106,26,.35); }
+.newland-bar span{ flex:1 1 260px; }
+.newland-bar button{ font:inherit; font-weight:700; padding:6px 14px; border-radius:3px; border:2px solid #FFB067; background:#FF7A26; color:#2A0E04; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -588,6 +591,7 @@ body.qafter #game{animation:qshake .2s linear 8}
 
     <div class="dispute-alert hide" id="disputealert" role="alert" aria-live="assertive"></div>
     <div class="caravan-alert hide" id="caravanalert" role="alert" aria-live="assertive"></div>
+    <div class="newland-bar hide" id="newlandbar" role="status"></div>
     <div class="caravan-alert hunger hide" id="hungeralert" role="alert" aria-live="assertive"></div>
     <div class="caravan-alert horse hide" id="horsealert" role="alert" aria-live="polite"></div>
 
@@ -3304,7 +3308,7 @@ function applyRemote(remote){
   G.treks=remote.treks||{};
   G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
-  if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; rnAt=0; }
+  if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; G.newland=remote.newland||null; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
   G.fallen=remote.fallen||{};
   var rmine=remote.players[ME];                        // my PIN was changed (a reset): this saved sign-in is no longer good, so sign out and ask again
@@ -7654,6 +7658,9 @@ function render(){
     settleBless();
     settleBless2();
     settleMoveRafael();
+    settleNewLandOffer();
+    settleNewLandMoves();
+    settleBohrerSteps();
     settleTavern();
     settlePietro();
     settleTurkey();
@@ -7825,6 +7832,7 @@ function renderNotice(list){
     });
   }
   renderCaravanAlert();
+  renderNewLandBar();
   var da=document.getElementById('disputealert');
   if(da){ da.innerHTML=big.concat(bigVoid).join('<hr style="border:0;border-top:1px solid rgba(255,255,255,.35);width:100%;margin:0">'); da.classList.toggle('hide',!big.length&&!bigVoid.length); da.classList.toggle('void',!big.length&&!!bigVoid.length); }
   caravanNotices(lines);
@@ -8625,12 +8633,222 @@ window.marchlandQuakeDryRun=function(){
     } finally { if(!joined){ WQ=keep.WQ; HQ=keep.HQ; WR=keep.WR; HR=keep.HR; RIFTS=keep.RIFTS; WORLD_EPOCH=keep.E; originMemo=keep.om; } }
   });
 };
+/* ═══ the new land: a fresh start for the small kingdoms ═════════════════════
+   After the earthquake every kingdom no bigger than Todd's (The Whole Fojo) is offered a move to the new land
+   (newland/offer, made once, by the first signed-in screen, with a conditional write). Each player answers on a
+   scroll (newland/pick/<pid>) and can change their mind from the banner until the move. Once the lava has cooled
+   everywhere, the first screen to see the board (fixes/newland1, claimed with a conditional write) lifts every kingdom
+   that said yes and sets it down whole on the new land, spaced out down the rift: as many squares as it had, its
+   castles, towers, trebuchets, walls, roads and soldiers in the same places around its keep as far as the new
+   ground allows (a castle never lands on a farm). Bands on the march wait at the new keep. Resources and marches are
+   untouched. The old land goes back to the wild. */
+var NEWLAND_TODD='p1unnh9x', nlBusy=false, nlAsked=false;
+function nlOffer(){ return (G&&G.newland&&G.newland.offer)||null; }
+function nlMoveAt(){ var R=RIFTS[0]; return R?R.t+LAVA_EDGE_MS:0; }
+function nlDone(){ return !!(G&&((G.fixes&&G.fixes.newland1)||(G.newland&&G.newland.done))); }
+function nlEligible(pid){ var o=nlOffer(); return !!(o&&o.list&&o.list[pid||ME]!=null) && !nlDone(); }
+function nlPick(pid){ var p=G&&G.newland&&G.newland.pick; return (p&&p[pid||ME])||null; }
+function landCounts(){ var n={}; Object.keys(G.cells).forEach(function(k){ var c=G.cells[k]; if(c&&c.o) n[c.o]=(n[c.o]||0)+1; }); return n; }
+function nlWhen(){ var t=nlMoveAt(), left=t-Date.now(), d=new Date(t);
+  return (left>0?'in '+fmtDur(left)+' (':'(')+d.toLocaleString([], {weekday:'short', hour:'numeric', minute:'2-digit'})+')'; }
+function settleNewLandOffer(){
+  if(!online||nlBusy||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||!RIFTS.length||nlOffer()||nlDone()) return false;
+  if(!G.players[NEWLAND_TODD] || Date.now()>=nlMoveAt()) return false;
+  var land=landCounts(), cap=land[NEWLAND_TODD]||0, now=Date.now(), list={};
+  if(!cap) return false;
+  Object.keys(G.players).forEach(function(pid){ var n=land[pid]||0; if(n>0&&n<=cap) list[pid]=n; });
+  var rec={t:now, cap:cap, by:NEWLAND_TODD, list:list, at:nlMoveAt(), rift:RIFTS[0].id||''}, base='/marchland/'+gameCode;
+  nlBusy=true;
+  dbPutIf(base+'/newland/offer',rec).then(function(x){
+    if(x.halted) return;
+    G.newland=G.newland||{};
+    if(!x.ok){ if(x.v) G.newland.offer=x.v; return; }
+    G.newland.offer=rec;
+    plagueChat('THE GODS MAKE AN OFFER. The new land the earthquake raised goes first to the small kingdoms: every kingdom no bigger than '+G.players[NEWLAND_TODD].name+'’s ('+cap+' squares) may move there. Say yes and, once the lava has cooled, your whole kingdom (every square, castle, tower, wall, road and soldier) is lifted and set down together on the new land, with your resources and marches. Your old land goes back to the wild. The choice is on your screen.',now,'newland1');
+    render(); showNext();
+  }).catch(function(){}).then(function(){ nlBusy=false; });
+  return true;
+}
+function nlOfferHtml(){
+  var o=nlOffer(), land=landCounts()[ME]||0;
+  return '<p>The earthquake raised new land, and the gods give it first to the small kingdoms: every kingdom no bigger than <b>'+esc(nameOf(o.by))+'</b>&rsquo;s ('+o.cap+' squares). Yours has <b>'+land+'</b>.</p>'
+    +'<p>Say yes, and once the lava has cooled, <b>'+nlWhen()+'</b>, your <b>whole kingdom</b> is lifted and set down together on the new land: as many squares as you hold then, and your castles, towers, trebuchets, walls, roads and soldiers in the same places around your keep, as far as the new ground allows. Bands on the march wait for you at the new keep. Your resources and marches come with you.</p>'
+    +'<p>Your old land goes back to the wild, and your old neighbours are left behind. The new ground is fresh from the fire: different fields and forests from the ones you have now.</p>'
+    +'<p>Until the move you can change your mind from the banner at the top of the page.</p>';
+}
+function showNewLandOffer(){
+  if(nlAsked||!G||!me()||!nlEligible()||nlPick()||Date.now()>=nlMoveAt()) return false;
+  if(document.querySelector('.rulesnote:not(.hide)')||document.querySelector('.sc-dlg')||document.getElementById('qcine')) return false;
+  nlAsked=true;
+  scrollDialog({eyebrow:'An offer from the gods', title:'&#127755; A new start on the new land?', html:nlOfferHtml(), cancel:false,
+    buttons:[{label:'Stay where I am',value:'no'},{label:'Move my kingdom',value:'yes',primary:true}]
+  }).then(function(res){ if(res&&res.value) nlChoose(res.value==='yes'); });
+  return true;
+}
+function nlChoose(yes){
+  if(!G||!me()||!nlEligible()) return;
+  if(Date.now()>=nlMoveAt()) return nope('The kingdoms are being moved: it is too late to change your mind.');
+  var rec={yes:!!yes, t:Date.now()};
+  G.newland=G.newland||{}; G.newland.pick=G.newland.pick||{}; G.newland.pick[ME]=rec;
+  putPath('/newland/pick/'+ME,rec);
+  render();
+  say(yes?'&#127755; <b>Done.</b> Your whole kingdom moves to the new land once the lava has cooled, '+nlWhen()+'. You can change your mind from the banner until then.'
+         :'Your kingdom stays where it is. You can still change your mind from the banner until '+nlWhen()+'.');
+}
+function renderNewLandBar(){
+  var el=document.getElementById('newlandbar'); if(!el) return;
+  if(!G||!me()||!nlEligible()||Date.now()>=nlMoveAt()){ el.classList.add('hide'); return; }
+  var p=nlPick();
+  el.innerHTML=!p ? '<span>&#127755; <b>The gods offer your kingdom a new start on the new land.</b></span><button type="button" data-nl="ask">Choose</button>'
+    : p.yes ? '<span>&#127755; <b>Your kingdom moves to the new land</b> once the lava has cooled, '+nlWhen()+'.</span><button type="button" data-nl="no">Stay after all</button>'
+    : '<span>You chose to keep your kingdom where it is. The move to the new land is '+nlWhen()+'.</span><button type="button" data-nl="yes">Move after all</button>';
+  el.classList.remove('hide');
+}
+function nlStewardLine(){
+  var o=nlOffer(); if(!o) return '';
+  if(nlDone()){ var f=(G.fixes&&G.fixes.newland1)||{}; return 'New land: '+(f.moved?f.moved.length:0)+' kingdom(s) moved.'; }
+  var pk=(G.newland&&G.newland.pick)||{}, yes=[], no=[], none=[];
+  Object.keys(o.list).forEach(function(pid){ var p=pk[pid], nm=esc(nameOf(pid)); (p?(p.yes?yes:no):none).push(nm); });
+  return 'New land offer (kingdoms of '+o.cap+' squares or fewer), move '+nlWhen()+': <b>moving</b> '+(yes.join(', ')||'nobody yet')+'; staying '+(no.join(', ')||'nobody')+'; not answered '+(none.join(', ')||'nobody')+'.';
+}
+/* where each kingdom goes and what it takes: worked out on the board as it is, without changing it */
+function nlPlanMoves(now){
+  var o=nlOffer(), pk=(G.newland&&G.newland.pick)||{}, land=landCounts(), out={moves:[], cells:{}, players:{}, treks:[], keepAdd:{}};
+  var movers=Object.keys(pk).filter(function(pid){ return pk[pid]&&pk[pid].yes&&o.list[pid]!=null&&G.players[pid]&&land[pid]>0; });
+  movers.sort(function(a,b){ return land[b]-land[a]; });
+  if(!movers.length) return out;
+  var free={}, rows={}, owner=function(k){ var c=G.cells[k]; return c&&(c.o||c.k)?(c.o||'?'):null; };
+  for(var q=-HQ;q<HQ;q++) for(var r=-HR;r<HR;r++){ var s=riftSquare(q,r); if(!s) continue; var k=key(q,r);
+    if(riverAt(q,r)||moltenAt(q,r,now)||owner(k)) continue; free[k]=[q,r,s.j]; (rows[r]=rows[r]||[]).push([q,r,s.j,RIFTS[s.s].k]); }
+  var taken={}, ring=function(k,fn){ var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10); for(var i=0;i<6;i++) fn(key(q0+AX[i][0],r0+AX[i][1])); };
+  var foreignNear=function(k,pid){ var bad=false; ring(k,function(n){ var w=owner(n); if(w&&w!==pid) bad=true; if(taken[n]&&taken[n]!==pid) bad=true; }); return bad; };
+  function midInRow(r){                       // the free square nearest the middle of the rift in row r, clear of every kingdom
+    var best=null, bd=1e9; (rows[wrapR(r)]||[]).forEach(function(x){ var k=key(x[0],x[1]), d=Math.abs(x[2]-(x[3]+1)/2); if(taken[k]||foreignNear(k,'')) return; if(d<bd){ bd=d; best=[x[0],x[1]]; } });
+    return best; }
+  function centreFor(i){                      // spread the kingdoms evenly down the rift, each in its middle column
+    var want=-HR+Math.round((i+0.5)*WR/movers.length);
+    for(var dr=0;dr<WR;dr++) for(var sg=0;sg<2;sg++){ var c=midInRow(want+(sg?-dr:dr)); if(c) return c; }
+    return null; }
+  function grow(c0,n,pid,strict,have){        // the nearest free squares around the centre, ring by ring (strict: never touching another kingdom)
+    var got=[], mine={}, seen={}, qu=[c0], h=0; (have||[]).forEach(function(x){ mine[key(x[0],x[1])]=1; });
+    while(h<qu.length&&got.length<n){ var cur=qu[h++], k=key(cur[0],cur[1]); if(seen[k]) continue; seen[k]=1;
+      if(!free[k]||taken[k]) continue;
+      if(!mine[k]){ if(strict&&foreignNear(k,pid)) continue; got.push([cur[0],cur[1]]); }
+      for(var i=0;i<6;i++) qu.push([cur[0]+AX[i][0],cur[1]+AX[i][1]]); }
+    return got; }
+  movers.forEach(function(pid,i){
+    var pl=G.players[pid], n=land[pid], c0=centreFor(i); if(!c0) return;
+    var blob=null, ctry=[c0];                  // the rivers cut the new land into stretches: if this one has no room or no farm, try further along
+    for(var t=0;t<ctry.length&&t<9;t++){
+      var b=grow([ctry[t][0],ctry[t][1]],n,pid,true); if(b.length<n) b=b.concat(grow([ctry[t][0],ctry[t][1]],n-b.length,pid,false,b));
+      var hasFarm=b.some(function(x){ return groundAt(x[0],x[1])===FARM; }), fits=b.length>=n;
+      if(!blob || (fits&&hasFarm) || (fits&&blob.length<n)) blob=b;
+      if(fits&&hasFarm) break;
+      var alt=midInRow(c0[1]+9*(t+1)*(t%2?-1:1)); if(alt) ctry.push(alt);
+    }
+    if(!blob||blob.length<n){ out.skipped=(out.skipped||[]).concat([pid]); return; }   // no room for the whole kingdom: it stays where it is rather than lose land
+    blob.forEach(function(x){ taken[key(x[0],x[1])]=pid; });
+    // the old kingdom: its keep (the castle nearest its home square) and everything that stands on it
+    var old=[], keep=null, kd=1e9;
+    Object.keys(G.cells).forEach(function(k){ var c=G.cells[k]; if(!c||c.o!==pid) return; var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10); old.push([q,r,c]);
+      if(c.k===CASTLE){ var d=hexDist(q,r,pl.q||0,pl.r||0); if(d<kd){ kd=d; keep=[q,r]; } } });
+    if(!keep&&old.length) keep=[old[0][0],old[0][1]];
+    var free2=blob.slice(), used={}, nk=null;
+    function nearest(tq,tr,okFn){ var bi=-1, bd=1e9; for(var j=0;j<free2.length;j++){ var x=free2[j]; if(used[key(x[0],x[1])]) continue; if(okFn&&!okFn(x)) continue; var d=hexDist(x[0],x[1],tq,tr); if(d<bd){ bd=d; bi=j; } } return bi<0?null:free2[bi]; }
+    var notFarm=function(x){ return groundAt(x[0],x[1])!==FARM; };
+    var built=function(c){ return !!(c.k||c.w>0||c.rd||c.tb>0||c.cb||c.b>0||c.g>0); };
+    var rank=function(c){ return c.k===CASTLE?0:c.k?1:c.tb>0?2:c.w>0?3:c.rd?4:5; };
+    var structs=old.filter(function(x){ return built(x[2]); }).sort(function(a,b){ if(keep&&a[0]===keep[0]&&a[1]===keep[1]) return -1; if(keep&&b[0]===keep[0]&&b[1]===keep[1]) return 1; return rank(a[2])-rank(b[2]); });
+    var centre=blob[0];
+    structs.forEach(function(x){
+      var c=x[2], isKeep=keep&&x[0]===keep[0]&&x[1]===keep[1], nc=nearCopy(x[0],x[1],keep[0],keep[1]), dq=nc[0]-keep[0], dr=nc[1]-keep[1];
+      var base=isKeep?centre:(nk||centre), spot=nearest(base[0]+dq,base[1]+dr,c.k===CASTLE?notFarm:null)||nearest(base[0]+dq,base[1]+dr,null);
+      if(!spot) return; used[key(spot[0],spot[1])]=1; if(isKeep) nk=spot;
+      var nc2={o:pid, w:c.w||0, k:c.k||null, l:c.l||0, g:c.g||0, d:c.d||0};
+      if(c.b>0) nc2.b=c.b; if(c.k===CASTLE&&c.h!=null){ nc2.h=c.h; if(c.ht) nc2.ht=c.ht; if(c.rt) nc2.rt=c.rt; } if(c.k===TOWER&&c.h!=null) nc2.h=c.h;
+      if(c.w>0&&c.wd>0) nc2.wd=c.wd; if(c.cs) nc2.cs=c.cs; if(c.tb>0){ nc2.tb=c.tb; if(c.tr) nc2.tr=c.tr; } if(c.rd){ nc2.rd=1; if(c.rf) nc2.rf=c.rf; }
+      if(c.cb&&c.cbo===pid&&!c.k){ nc2.cb=c.cb; nc2.cbo=pid; }
+      out.cells[key(spot[0],spot[1])]=nc2;
+    });
+    if(!nk) nk=centre;
+    free2.forEach(function(x){ var k=key(x[0],x[1]); if(!used[k]&&!out.cells[k]) out.cells[k]={o:pid,w:0,k:null,l:0,g:0,d:0}; });
+    old.forEach(function(x){ var k=key(x[0],x[1]), c=x[2]; if(out.cells[k]) return; out.cells[k]=(c.gv&&c.gv.length)?{o:null,w:0,k:null,l:0,g:0,d:0,gv:c.gv}:null; });
+    var add={b:0,tb:0};
+    Object.keys(G.treks||{}).forEach(function(id){ var t=G.treks[id]; if(!t||t.o!==pid) return; add.b+=t.n||0; add.tb+=t.tb||0; out.treks.push(id); });
+    if(add.b||add.tb){ var kc=out.cells[key(nk[0],nk[1])]; if(kc){ if(add.b) kc.b=(kc.b||0)+add.b; if(add.tb){ kc.tb=(kc.tb||0)+add.tb; kc.tr=(arr(kc.tr||[])).concat(new Array(add.tb).fill(0)); } } }
+    out.players[pid]={q:wrapQ(nk[0]), r:wrapR(nk[1])};
+    out.moves.push({pid:pid, n:n, placed:blob.length, to:[wrapQ(nk[0]),wrapR(nk[1])]});
+  });
+  return out;
+}
+function settleNewLandMoves(){
+  if(!online||nlBusy||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||!nlOffer()||nlDone()) return false;
+  var now=Date.now(); if(now<nlMoveAt()) return false;
+  var plan=nlPlanMoves(now), base='/marchland/'+gameCode;
+  var rec={t:now, moved:plan.moves};
+  nlBusy=true;
+  dbPutIf(base+'/fixes/newland1',rec).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.newland1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.newland1=rec;
+    var patch={};
+    Object.keys(plan.cells).forEach(function(k){ var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), c=plan.cells[k];
+      if(c) writeCell(q,r,c); else delete G.cells[k]; patch['cells/'+k]=G.cells[k]||null; });
+    plan.treks.forEach(function(id){ if(G.treks) delete G.treks[id]; patch['treks/'+id]=null; });
+    Object.keys(G.caravans||{}).forEach(function(id){ var cv=G.caravans[id], np=cv&&plan.players[cv.to]; if(!np||cv.got) return; cv.tq=np.q; cv.tr=np.r; patch['caravans/'+id+'/tq']=np.q; patch['caravans/'+id+'/tr']=np.r; });
+    Object.keys(plan.players).forEach(function(pid){ var p=plan.players[pid]; G.players[pid].q=p.q; G.players[pid].r=p.r; patch['players/'+pid+'/q']=p.q; patch['players/'+pid+'/r']=p.r; });
+    G.newland=G.newland||{}; G.newland.done=now; patch['newland/done']=now;
+    patch.rev=now; myRev=now; cellsGen++;
+    if(plan.players[ME]) centreOn(plan.players[ME].q,plan.players[ME].r);
+    return dbPatch(base,patch).then(ok,fail).then(function(){
+      render();
+      var names=plan.moves.map(function(m){ return G.players[m.pid].name; });
+      if(names.length) plagueChat('THE LAVA HAS COOLED, and the gods have kept their word. They lifted the kingdoms of '+names.join(', ')+' and set them down whole on the new land. The rest of it is anyone’s.',now,'newland2');
+    });
+  }).catch(function(){}).then(function(){ nlBusy=false; });
+  return true;
+}
+function nlMovedNote(){                      // once, for each player whose kingdom was moved
+  var f=G&&G.fixes&&G.fixes.newland1; if(!f||!f.moved) return null;
+  var m=null; arr(f.moved).forEach(function(x){ if(x&&x.pid===ME) m=x; }); if(!m) return null;
+  return {id:'newland-moved', eyebrow:'The gods kept their word', title:'&#127755; Your kingdom stands on the new land',
+    html:'<p>The lava has cooled, and your whole kingdom has been lifted and set down on the new land: <b>'+m.placed+' squares</b>, with your castles, towers, walls, roads and soldiers around your keep. Your resources and marches came with you.</p><p>The ground here is fresh from the fire, and the rest of the new land is open to whoever takes it first. Grow well.</p>',
+    go:'To my new kingdom'};
+}
+/* ── Bohrer's steps for Friday 20 November ──  Once (fixes/steps1, claimed with a conditional write): a claim of 25,000
+   steps dated that evening goes into the claim log, with the marches those steps earn by the usual rule. No vote (it is
+   the steward's own grant), and today's claim stays open. */
+var STEPS1_N=25000, STEPS1_T=Date.UTC(2026,10,21,2,0,0), steps1ing=false;       // 9 PM Friday 20 November, Eastern
+function settleBohrerSteps(){
+  if(!online||steps1ing||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||(G.fixes&&G.fixes.steps1)) return false;
+  if(!Object.keys(G.cells).length) return false;
+  var pid=pidFor('Bohrer'); if(!G.players[pid]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, earned=squaresFor(STEPS1_N/STEPS_PER_KM), id=pid+'-'+STEPS1_T.toString(36);
+  var rec0={pid:pid,steps:STEPS1_N,got:earned,claim:id,t:now}, claim={pid:pid,steps:STEPS1_N,got:earned,t:STEPS1_T,voters:{},shot:false,by:'steward'};
+  steps1ing=true;
+  dbPutIf(base+'/fixes/steps1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.steps1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.steps1=rec0;
+    G.claims=G.claims||{}; G.claims[id]=claim;
+    var patch={'fixes/steps1':rec0}; patch['claims/'+id]=claim;
+    var done=function(){ patch.rev=now; myRev=now; return dbPatch(base,patch).then(ok,fail); };
+    if(pid===ME){ var pl=me(); pl.squares=(pl.squares||0)+earned; pl.collected=(pl.collected||0)+STEPS1_N; render(); pushMe(); done();
+      say('<span class="good">'+STEPS1_N.toLocaleString()+' steps for Friday</span> are in the claim log, and <b>'+earned+' marches</b> are added to your count.'); }
+    else dbGet(base+'/players/'+pid).then(function(cur){
+      cur=cur||{}; var nx=(cur.squares||0)+earned, nc=(cur.collected||0)+STEPS1_N;
+      patch['players/'+pid+'/squares']=nx; patch['players/'+pid+'/collected']=nc; G.players[pid].squares=nx; G.players[pid].collected=nc; return done();
+    }).catch(fail);
+  }).catch(function(){}).then(function(){ steps1ing=false; });
+  return true;
+}
 function renderSteward(){
   var el=document.getElementById('steward-panel'); if(!el) return;
   var on=!!(G&&me()&&isSteward()); el.classList.toggle('hide',!on); if(!on) return;
   var pend=migrationPending(G);
   document.getElementById('steward-status').innerHTML='Board data version <b>'+boardVersion(G)+'</b>, this page understands version <b>'+DATA_V+'</b>. '
     +(pend.length?'<span class="bad">Waiting for the update: '+pend.map(function(s){ return esc(s.title.toLowerCase()); }).join('; ')+'.</span> Until it runs, only you can enter the board.':'Nothing is waiting. Running the update again is safe and changes nothing that is already done.');
+  var nlLine=nlStewardLine(); if(nlLine) document.getElementById('steward-status').innerHTML+='<br>&#127755; '+nlLine;
 }
 function dbUrl(path){ return window.DB_URL.replace(/\/$/,'')+path+'.json'; }
 function runMigration(){
@@ -8694,6 +8912,7 @@ document.getElementById('st-strikes').addEventListener('click',function(){ if(is
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
 document.getElementById('st-quake').addEventListener('click',function(){ if(isSteward()) openQuake(); });
+document.getElementById('newlandbar').addEventListener('click',function(e){ var b=e.target.closest('[data-nl]'); if(!b) return; var a=b.getAttribute('data-nl'); if(a==='ask'){ nlAsked=false; showNewLandOffer(); } else nlChoose(a==='yes'); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('undo-pill').addEventListener('click',doUndo);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
@@ -9644,8 +9863,9 @@ var NOTES=[
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
-  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null;
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null;
   if(qn) out.unshift(qn);
+  if(mn) out.unshift(mn);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
     html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
   return out;
@@ -10024,7 +10244,8 @@ function showRiverNote(){
   return true;
 }
 /* the order players meet the announcements in */
-function showNext(){ if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote(); }
+function showNext(){ if(document.getElementById('qcine')) return false;   // nothing on top of the earthquake while it plays (it calls showNext when it ends)
+  if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote() || showNewLandOffer(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
