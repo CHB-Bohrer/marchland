@@ -7677,6 +7677,7 @@ function render(){
     settleBless2();
     settleMoveRafael();
     settleNewLandOffer();
+    settleNewLandReminder();
     settleNewLandMoves();
     settleBohrerSteps();
     settleTavern();
@@ -8801,6 +8802,23 @@ function nlPlanMoves(now){
     out.moves.push({pid:pid, n:n, placed:blob.length, to:[wrapQ(nk[0]),wrapR(nk[1])]});
   });
   return out;
+}
+/* a second call from the gods (fixes/newland1b, claimed once with a conditional write): the Choose button did not work for some
+   players at first. Anyone who tried and nothing happened is asked to reload and try again. */
+var nlReminding=false;
+function settleNewLandReminder(){
+  if(!online||nlReminding||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||!nlOffer()||nlDone()||(G.fixes&&G.fixes.newland1b)) return false;
+  if(Date.now()>=nlMoveAt()) return false;
+  var now=Date.now(), rec0={t:now};
+  nlReminding=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/newland1b',rec0).then(function(x){
+    if(x.halted) return;
+    G.fixes=G.fixes||{};
+    if(!x.ok){ if(x.v) G.fixes.newland1b=x.v; return; }
+    G.fixes.newland1b=rec0;
+    plagueChat('The gods repeat their offer. The button that lets a small kingdom choose the new land did not work for some of you. It is mended. Reload the game and try again: tap Choose at the top of the page, or look for the scroll that opens by itself. The kingdoms are moved Monday at 9:33 in the morning.',now,'newland1b');
+  }).catch(function(){}).then(function(){ nlReminding=false; });
+  return true;
 }
 function settleNewLandMoves(){
   if(!online||nlBusy||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||!nlOffer()||nlDone()) return false;
