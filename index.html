@@ -961,7 +961,7 @@ body.qafter #game{animation:qshake .2s linear 8}
 <section id="chatbar" class="chatbar hide" aria-label="Chat with the other players">
   <div class="cb-tabs hide" id="chat-tabs" role="tablist" aria-label="Chat rooms"><div class="cb-in">
     <button type="button" role="tab" class="cb-tab" id="tab-war" data-room="war" aria-selected="true">&#9876; War <span class="cb-tn hide" id="tn-war"></span></button>
-    <button type="button" role="tab" class="cb-tab" id="tab-tav" data-room="tav" aria-selected="false">&#127866; Tavern <span class="cb-tn hide" id="tn-tav"></span></button>
+    <button type="button" role="tab" class="cb-tab" id="tab-tav" data-room="tav" aria-selected="false">&#9749; Starbucks <span class="cb-tn hide" id="tn-tav"></span></button>
     <span class="cb-thint" id="chat-thint">The game</span>
   </div></div>
   <div class="cb-feed hide" id="chat-feed" aria-live="polite"><div class="cb-in" id="chat-list"></div></div>
@@ -1270,6 +1270,8 @@ function writeCell(q,r,c){
   if(c.w>0 && c.wd>0) G.cells[k].wd=c.wd;              // hits the top wall course has taken (two bring a course down)
   if(c.cs && c.o) G.cells[k].cs=c.cs;                  // what the owner spent on what stands here (half comes back if it is torn down)
   if(c.k===TOWER && c.tu>Date.now() && c.o) G.cells[k].tu=c.tu;     // a tower still being raised, and when it is ready
+  if(c.o && c.tk>Date.now()) G.cells[k].tk=c.tk;       // turkeys driven off this square until then
+  if(c.o && c.th>Date.now()) G.cells[k].th=c.th;       // a band here that hunted: it may hunt again then
   if(c.tb>0 && c.o){ G.cells[k].tb=c.tb; if(c.tr) G.cells[k].tr=c.tr; }   // trebuchets, and when each can next fire
   if(c.rd && c.o){ G.cells[k].rd=1; if(c.rf) G.cells[k].rf=c.rf; }        // a road, and when it is finished
   if(c.cb && c.o && c.cbo===c.o && !c.k){ G.cells[k].cb=c.cb; G.cells[k].cbo=c.cbo; }   // a castle going up, and whose (it used to be dropped here, so a begun castle vanished at once)
@@ -2554,6 +2556,188 @@ function drawTurkeys(x,y,s,q,r,t,farm){
     drawOneTurkey(x+ox,y+oy-(moving?Math.abs(Math.sin(t*7+h*9))*s*0.03:0),s*0.27,dir,moving,peck,fan,t,farm,talk);
   }
 }
+/* ── the turkey invasion (22 Nov 2026) ──  The gods are angry that nobody sends them a turkey photo. Turkeys land on the players' ground on a
+   hidden schedule that gets worse every hour until Thanksgiving is over (TURKEY_END): a square is overrun once its own number (artHash, salt 777)
+   falls below the day's density, so the same squares fall first for everyone and no board data is needed for it. A square with turkeys on it yields
+   nothing (see ratesFor). Keeps are never overrun. A player whose turkey photo stands (G.turkeys, not voided) is left alone. Soldiers and
+   trebuchets drive them off: that sets c.tk, the time the square is clear until (12 hours, then they come back). A band can hunt once every 2 hours
+   (c.th on its square). The announcement says only that the gods are angry; none of this is in it. Claimed once with a conditional write (G.tinv). */
+var TINV_MAXD=0.55, TINV_POW=1.6, TCLEAR_MS=12*36e5, THUNT_CD=2*36e5, TLAND_MS=1600, tinving=false, tinvQ=[], tburstQ=[];
+function tinvOn(at){ var T=G&&G.tinv; at=at||Date.now(); return !!T && at>=T.start && at<T.end; }
+function tinvD(at){ var T=G.tinv, f=Math.max(0,Math.min(1,((at||Date.now())-T.start)/(T.end-T.start))); return TINV_MAXD*Math.pow(f,TINV_POW); }
+function tinvExempt(pid){ var m=G&&G.turkeys&&G.turkeys[pid]; return !!m && !m.void; }
+function tinvArrive(q,r){ var T=G.tinv, h=artHash(wrapQ(q),wrapR(r),777); return h>=TINV_MAXD?Infinity:T.start+(T.end-T.start)*Math.pow(h/TINV_MAXD,1/TINV_POW); }
+function turkeyHere(q,r,c,at,d){
+  if(!c||!c.o||c.k===CASTLE||!tinvOn(at)) return false;
+  at=at||Date.now();
+  if(c.tk && c.tk>at) return false;
+  if(tinvExempt(c.o) || groundAt(q,r)===RIVER) return false;
+  if(d==null) d=tinvD(at);
+  return artHash(wrapQ(q),wrapR(r),777)<d;
+}
+function settleTurkeyInvasion(){
+  if(!online||tinving||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||G.tinv||Date.now()>=TURKEY_END) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var now=Date.now(), T={id:'tinv1',start:now,end:TURKEY_END};
+  tinving=true;
+  dbPutIf('/marchland/'+gameCode+'/tinv',T).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v) G.tinv=x.v; return; }
+    G.tinv=T; bumpRev().then(ok,fail); render();
+    plagueChat('The gods are angry. Not one of you has stood beside a living turkey for them, and they have noticed.',now,'tinv1a');
+    plagueChat('The turkeys are restless. Gobble. Gobble. Gobble.',now,'tinv1b');
+  }).catch(function(){}).then(function(){ tinving=false; });
+  return true;
+}
+/* soldiers: a band of mine on or beside the square, not hunted in the last 2 hours */
+function tinvBandFor(q,r){
+  var now=Date.now();
+  for(var i=-1;i<6;i++){
+    var nq=wrapQ(i<0?q:q+AX[i][0]), nr=wrapR(i<0?r:r+AX[i][1]), n=G.cells[key(nq,nr)];
+    if(n && n.o===ME && n.b>0 && !(n.th>now)) return {q:nq,r:nr};
+  }
+  return null;
+}
+function huntTurkeys(q,r){
+  var c=cellOf(q,r); if(c.o!==ME || !turkeyHere(q,r,c)) return nope('There are no turkeys on that square.');
+  var b=tinvBandFor(q,r); if(!b) return nope('The soldiers need to be on or beside the square, and a band hunts only once every 2 hours.');
+  var now=Date.now(); c.tk=now+TCLEAR_MS;
+  var same=key(b.q,b.r)===key(wrapQ(q),wrapR(r));
+  if(same) c.th=now+THUNT_CD;
+  writeCell(q,r,c);
+  if(!same){ var bc=cellOf(b.q,b.r); bc.th=now+THUNT_CD; writeCell(b.q,b.r,bc); pushCell(b.q,b.r); }
+  pushCell(q,r); render();
+  say('<b>The soldiers drive the turkeys off.</b> The square yields again, and stays clear for 12 hours. This band can hunt again in 2 hours.');
+}
+/* trebuchets: a stone scatters the turkeys on the square it strikes and on every square of mine around it */
+function tinvTrebTargets(q,r){
+  var out=[];
+  for(var k in G.cells){
+    var c=G.cells[k]; if(c.o!==ME) continue;
+    var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10), d=hexDist(q,r,tq,tr);
+    if(d>TREB_RANGE || !turkeyHere(tq,tr,c)) continue;
+    var n=0; for(var i=-1;i<6;i++){ var nc=G.cells[key(wrapQ(i<0?tq:tq+AX[i][0]),wrapR(i<0?tr:tr+AX[i][1]))]; if(nc&&nc.o===ME&&turkeyHere(wrapQ(i<0?tq:tq+AX[i][0]),wrapR(i<0?tr:tr+AX[i][1]),nc)) n++; }
+    out.push({q:tq,r:tr,d:d,n:n});
+  }
+  return out.sort(function(a,b){ return b.n-a.n || a.d-b.d; }).slice(0,8);
+}
+function fireTurkeys(q,r){
+  var pl=me(), c=cellOf(q,r);
+  if(!(c.o===ME && c.tb>0)) return nope('Pick a square of yours with a trebuchet on it.');
+  if(!trebReady(c)) return nope('No trebuchet here is ready &mdash; the next can throw in <b>'+hoursLeft(trebNext(c))+'</b>.');
+  var list=tinvTrebTargets(q,r);
+  if(!list.length) return nope('No turkeys within '+TREB_RANGE+' squares of this trebuchet.');
+  var why=(pl.res.stone||0)<TREB_SHOT?'Needs '+TREB_SHOT+' stone':'';
+  scrollDialog({eyebrow:'Trebuchet', title:'Where do the stones fall?',
+    html:'<p>A stone sends the turkeys flying from the square it strikes and from your squares around it. Each shot costs '+TREB_SHOT+' stone.</p>',
+    list:list.map(function(t){ return {label:t.n+(t.n===1?' square':' squares')+' cleared',cost:t.d+' away',why:why,value:t}; }), cancel:null,
+    buttons:[{label:'Not now',value:null}]}).then(function(res){ var t=res.value; if(t&&t.q!=null) doFireTurkeys(q,r,t.q,t.r); });
+}
+function doFireTurkeys(q,r,tq,tr){
+  var pl=me(), sc=cellOf(q,r), now=Date.now();
+  if(!(sc.o===ME && trebReady(sc)>0)) return nope('No trebuchet on that square is ready.');
+  if(hexDist(q,r,tq,tr)>TREB_RANGE) return nope('Too far &mdash; a trebuchet reaches '+TREB_RANGE+' squares.');
+  if((pl.res.stone||0)<TREB_SHOT) return nope('A shot costs '+TREB_SHOT+' stone. '+shortBy({stone:TREB_SHOT}));
+  var cleared=0;
+  for(var i=-1;i<6;i++){
+    var nq=wrapQ(i<0?tq:tq+AX[i][0]), nr=wrapR(i<0?tr:tr+AX[i][1]), nc=G.cells[key(nq,nr)];
+    if(nc && nc.o===ME && turkeyHere(nq,nr,nc)){ var cc=cellOf(nq,nr); cc.tk=now+TCLEAR_MS; writeCell(nq,nr,cc); pushCell(nq,nr); cleared++; }
+  }
+  if(!cleared) return nope('Those turkeys are gone already.');
+  var s2=cellOf(q,r), trs=arr(s2.tr).slice(0,s2.tb||0), left=1;
+  while(trs.length<(s2.tb||0)) trs.push(0);
+  for(var j=0;j<trs.length&&left>0;j++) if(!(trs[j]>now)){ trs[j]=now+TREB_RELOAD; left--; }
+  s2.tr=trs; writeCell(q,r,s2); pushCell(q,r);
+  pl.res.stone-=TREB_SHOT; render(); pushMe();
+  say('<b>The stone lands among the turkeys.</b> '+cleared+(cleared===1?' square is':' squares are')+' clear for 12 hours. This trebuchet reloads for 4 hours.');
+}
+/* ── drawing ──  A turkey drops in from the sky when its square falls (age < TLAND_MS), lands in a puff of feathers, then struts about as
+   the swarm always has. A hunted square bursts in feathers, stars and a drumstick for a few seconds. Every overrun square has a muddy wash. */
+function drawInvasion(S,tnow){
+  tinvQ.forEach(function(e){
+    var x=e[0], y=e[1], age=tnow-e[5];
+    ctx.save(); hexPath(x,y,S*0.9); ctx.fillStyle='rgba(120,72,22,0.26)'; ctx.fill(); ctx.restore();
+    if(S<9) return;
+    if(age>=0 && age<TLAND_MS && !REDUCE){
+      var f=age/TLAND_MS, fall=(1-f)*(1-f), t=tnow/1000;
+      for(var i=0;i<2;i++){
+        var h=artHash(e[2],e[3],960+i), ox=(h-0.5)*S*0.6, oy=(i?0.2:-0.14)*S, z=S*0.27*(0.55+0.45*f);
+        ctx.save(); ctx.globalAlpha=.12+.28*f; ctx.fillStyle='#1d1410'; ctx.beginPath(); ctx.ellipse(x+ox,y+oy+z*0.6,z*(1.2-0.4*f),z*0.2,0,0,6.284); ctx.fill(); ctx.restore();   // his shadow grows as he comes down
+        var yy=y+oy-fall*S*5.5, flap=Math.sin(t*22+h*9);
+        ctx.save(); ctx.translate(x+ox,yy); ctx.fillStyle='#6b3d17'; ctx.strokeStyle='#3b2108'; ctx.lineWidth=Math.max(0.6,S*0.02);
+        [-1,1].forEach(function(sd){ ctx.save(); ctx.rotate(sd*(0.5+0.7*flap)); ctx.beginPath(); ctx.ellipse(sd*z*0.9,-z*0.15,z*0.85,z*0.28,0,0,6.284); ctx.fill(); ctx.stroke(); ctx.restore(); });   // wings beating
+        ctx.restore();
+        drawOneTurkey(x+ox,yy,z,i?-1:1,true,0,0.6,t,false,0);
+      }
+      return;
+    }
+    if(age>=TLAND_MS && age<TLAND_MS+900 && !REDUCE){                            // the landing: a ring of dust and feathers
+      var g=(age-TLAND_MS)/900;
+      ctx.save(); ctx.globalAlpha=.55*(1-g); ctx.strokeStyle='#d9c49a'; ctx.lineWidth=Math.max(1,S*0.06*(1-g)); ctx.beginPath(); ctx.ellipse(x,y+S*0.1,S*(0.25+0.7*g),S*(0.1+0.3*g),0,0,6.284); ctx.stroke(); ctx.restore();
+      for(var k=0;k<8;k++){ var a=artHash(e[2],e[3],900+k)*6.284, d=S*(0.2+0.55*g)*(0.6+0.6*artHash(e[2],e[3],910+k));
+        ctx.save(); ctx.globalAlpha=.8*(1-g); ctx.translate(x+Math.cos(a)*d,y+Math.sin(a)*d*0.55-g*S*0.3); ctx.rotate(a+g*3); ctx.fillStyle='#e8d8b0'; ctx.strokeStyle='#5b3519'; ctx.lineWidth=Math.max(0.5,S*0.015);
+        ctx.beginPath(); ctx.ellipse(0,0,S*0.09,S*0.03,0,0,6.284); ctx.fill(); ctx.stroke(); ctx.restore(); }
+    }
+    drawTurkeys(x,y,S,e[2],e[3],tnow/1000,e[4]);
+  });
+  tinvQ.length=0;
+  tburstQ.forEach(function(e){
+    var x=e[0], y=e[1], g=(tnow-e[4])/3600; if(g<0||g>1||S<7) return;
+    ctx.save(); ctx.globalAlpha=Math.max(0,.7*(1-g*2)); ctx.fillStyle='#fff7da'; ctx.beginPath(); ctx.arc(x,y,S*(0.15+0.9*Math.min(1,g*3)),0,6.284); ctx.fill(); ctx.restore();   // the poof
+    for(var k=0;k<14;k++){
+      var a=artHash(e[2],e[3],930+k)*6.284, sp=0.5+artHash(e[2],e[3],940+k), px=x+Math.cos(a)*S*1.3*sp*g, py=y+Math.sin(a)*S*0.8*sp*g+S*1.3*g*g;
+      ctx.save(); ctx.globalAlpha=Math.max(0,1-g*1.1); ctx.translate(px,py); ctx.rotate(a+g*8*(k%2?1:-1)); ctx.fillStyle=k%3?'#8a4b1d':'#e8d8b0'; ctx.strokeStyle='#3b2108'; ctx.lineWidth=Math.max(0.5,S*0.015);
+      ctx.beginPath(); ctx.ellipse(0,0,S*0.11,S*0.035,0,0,6.284); ctx.fill(); ctx.stroke(); ctx.restore();
+    }
+    if(S>=12){ ctx.save(); ctx.globalAlpha=Math.max(0,1-Math.max(0,g-0.55)*2.2); ctx.font=Math.round(S*0.7)+'px serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('🍗',x,y-S*0.2-g*S*1.1); ctx.restore(); }   // a drumstick rises
+  });
+  tburstQ.length=0;
+}
+/* the flock: once for each player, after the gods' scroll — the sky darkens and turkeys wheel across the screen, gobbling */
+var tflockOn=false;
+function playTurkeyFlock(){
+  if(REDUCE||tflockOn||document.getElementById('qcine')) return; tflockOn=true;
+  var cv=document.createElement('canvas'); cv.id='tflock'; cv.style.cssText='position:fixed;inset:0;width:100%;height:100%;z-index:90;touch-action:none;background:transparent';
+  var W=cv.width=innerWidth, H=cv.height=innerHeight; document.body.appendChild(cv);
+  var oc=cv.getContext('2d'), T0=performance.now(), DUR=7200, birds=[], i;
+  for(i=0;i<16;i++) birds.push({y:H*(0.12+0.7*Math.random()),sz:(0.35+0.75*Math.random())*Math.min(W,H)*0.13,dl:Math.random()*2400,sp:0.6+0.7*Math.random(),dir:i%2?1:-1,ph:Math.random()*9,wob:Math.random()*40});
+  var ac=null; try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){}
+  function gobble(at,pitch){ if(!ac) return; var o=ac.createOscillator(), lf=ac.createOscillator(), lg=ac.createGain(), g=ac.createGain(), t=ac.currentTime+at;
+    o.type='sawtooth'; o.frequency.setValueAtTime(pitch,t); o.frequency.exponentialRampToValueAtTime(pitch*0.55,t+0.55); lf.frequency.value=26; lg.gain.value=pitch*0.5; lf.connect(lg); lg.connect(o.frequency);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.16,t+0.05); g.gain.exponentialRampToValueAtTime(0.0001,t+0.6); o.connect(g); g.connect(ac.destination); o.start(t); lf.start(t); o.stop(t+0.65); lf.stop(t+0.65); }
+  [0.2,0.9,1.4,2.3,3.1,3.6,4.6].forEach(function(t,j){ gobble(t,300+(j%3)*70); });
+  var done=false; function end(){ if(done) return; done=true; cv.remove(); tflockOn=false; try{ ac&&ac.close(); }catch(e){} }
+  cv.addEventListener('click',end); cv.addEventListener('touchstart',end,{passive:true});
+  document.body.classList.add('qtremble'); setTimeout(function(){ document.body.classList.remove('qtremble'); },900);
+  (function frame(){
+    if(done) return;
+    var el=performance.now()-T0; if(el>DUR){ end(); return; }
+    var u=el/DUR, dark=Math.sin(Math.min(1,u*1.15)*Math.PI);
+    oc.clearRect(0,0,W,H);
+    var gr=oc.createLinearGradient(0,0,0,H); gr.addColorStop(0,'rgba(40,18,0,'+(0.6*dark)+')'); gr.addColorStop(1,'rgba(120,50,0,'+(0.25*dark)+')'); oc.fillStyle=gr; oc.fillRect(0,0,W,H);
+    var sv=ctx; ctx=oc;
+    birds.forEach(function(b){
+      var e2=(el-b.dl)/(DUR*0.62); if(e2<0||e2>1) return;
+      var x=b.dir>0?-b.sz*2+e2*(W+b.sz*4):W+b.sz*2-e2*(W+b.sz*4), y=b.y+Math.sin(e2*9+b.ph)*b.wob, flap=Math.sin(el/55*b.sp+b.ph);
+      oc.save(); oc.translate(x,y); oc.rotate(Math.sin(e2*9+b.ph)*0.12); oc.scale(b.dir,1);
+      oc.fillStyle='#6b3d17'; oc.strokeStyle='#3b2108'; oc.lineWidth=Math.max(1,b.sz*0.03);
+      [-1,1].forEach(function(sd){ oc.save(); oc.rotate(sd*(0.35+0.75*flap)); oc.beginPath(); oc.ellipse(0,sd*b.sz*0.9,b.sz*0.28,b.sz*0.95,0,0,6.284); oc.fill(); oc.stroke(); oc.restore(); });
+      oc.restore();
+      drawOneTurkey(x,y,b.sz*0.5,b.dir,true,0,0.7+0.3*flap,el/1000,false,0);
+    });
+    ctx=sv;
+    for(var k=0;k<26;k++){ var fe=((el/1800+k*0.173)%1), fx=(k*97%W)+Math.sin(fe*6+k)*40, fy=fe*H; oc.save(); oc.globalAlpha=0.5*dark; oc.translate(fx,fy); oc.rotate(fe*7+k); oc.fillStyle='#e8d8b0'; oc.beginPath(); oc.ellipse(0,0,9,3,0,0,6.284); oc.fill(); oc.restore(); }
+    oc.save(); oc.globalAlpha=Math.max(0,Math.min(1,(u-0.18)*5))*Math.max(0,Math.min(1,(0.9-u)*8)); oc.textAlign='center'; oc.fillStyle='#fff3cf'; oc.strokeStyle='#4a1d00'; oc.lineWidth=6;
+    oc.font='700 '+Math.round(Math.min(W/9,52))+'px Georgia, serif'; oc.strokeText('THE GODS ARE ANGRY',W/2,H*0.5); oc.fillText('THE GODS ARE ANGRY',W/2,H*0.5); oc.restore();
+    requestAnimationFrame(frame);
+  })();
+}
+function tinvNote(){                                  // the scroll: it says only that the gods are angry (nothing of what will come of it)
+  if(!tinvOn()) return null;
+  return {id:'tinv-gods', eyebrow:'The gods are displeased', title:'&#129411; The gods are angry',
+    html:'<p>The gods have been waiting for a turkey. Not one of you has stood beside a living one for them, and they have noticed.</p><p>The turkeys are restless.</p>',
+    go:'Gobble gobble'};
+}
 /* ── Anna's dispute votes cleared ──  Chris asked for all of Anna's votes to void other players' step claims to be removed, as
    she was just learning the game. Once (fixes/anna2, claimed with a conditional write): every "void" vote of hers on a claim
    is deleted, read fresh from the database. Her "fine" votes stay. Silent: no announcement. */
@@ -2661,7 +2845,7 @@ function settleMoveRafael(){
   }).catch(function(){}).then(function(){ moving1=false; });
   return true;
 }
-/* ── the Tavern opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
+/* ── Starbucks opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
 var taverning=false;
 var crusadeEnding=false;
 function settleCrusadeEnd(){
@@ -2677,7 +2861,7 @@ function settleCrusadeEnd(){
   }).catch(function(){}).then(function(){ crusadeEnding=false; });
   return true;
 }
-function settleTavern(){
+function settleSTARBUCKSKEEP(){
   if(!online||taverning||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.tavern1)) return false;
   var now=Date.now(), rec0={t:now};
   taverning=true;
@@ -2685,8 +2869,8 @@ function settleTavern(){
     if(x.halted) return;
     if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.tavern1=x.v; } return; }
     G.fixes=G.fixes||{}; G.fixes.tavern1=rec0; bumpRev().then(ok,fail);
-    plagueChat('The gods have built a TAVERN. Open the chat and you will find two doors: ⚔ War, for the game, and 🍺 Tavern, for everything else.',now,'tav1a');
-    plagueChat('Talk of battles, alliances, trades and threats belongs in War. Gossip, jokes and pointless chatter belong in the Tavern, where you may babble as much as you please. Hush votes apply only in War.',now,'tav1b');
+    plagueChat('The gods have built a STARBUCKS. Open the chat and you will find two doors: ⚔ War, for the game, and ☕ Starbucks, for everything else.',now,'tav1a');
+    plagueChat('Talk of battles, alliances, trades and threats belongs in War. Gossip, jokes and pointless chatter belong in Starbucks, where you may babble as much as you please. Hush votes apply only in War.',now,'tav1b');
   }).catch(function(){}).then(function(){ taverning=false; });
   return true;
 }
@@ -3001,7 +3185,7 @@ function blessed(pid){ return blessOn() && !!blessedSet()[pid==null?ME:pid]; }
 function blessMul(pid,at){ at=at||Date.now(); return (blessOn() && at>=G.fixes.bless1.t && blessed(pid))?2:1; }
 function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made attacks cost 1 march; Chris found that too much, so attacks cost the same for everyone)
 function ratesFor(pid,at){
-  var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0;
+  var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0, td=(at||Date.now(), tinvOn(at)?tinvD(at):0);
   for(var k in G.cells){
     var c=G.cells[k]; if(c.o!==pid||building(c)) continue; own++;
     if(!sup[k]) continue; s++;
@@ -3009,6 +3193,7 @@ function ratesFor(pid,at){
     // ground held from before rivers ran through it keeps the yield of the land it was;
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
+    if(td && turkeyHere(q0,r0,c,at,td)) continue;     // turkeys on the square: it yields nothing
     var pm=plagueMul(pid,at)*plague2Mul(k,at);          // a plague on the land halves every harvest (and one on a single square halves that square's)
     var tm=turkeyMul(pid,at);                          // a turkey swarm eats every grain the land brings in
     var bm=blessMul(pid,at);                           // the gods' blessing doubles the land's yield
@@ -3325,7 +3510,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.tinv=remote.tinv||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; G.newland=remote.newland||null; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -4964,6 +5149,8 @@ function cellActions(q,r){
     A('Bridge being built','ready in '+hoursLeft(c.f),function(){},'Wait for it to finish');
   } else {
     if(c.b>0||c.tb>0) A(c.b>0&&c.tb>0?'Move soldiers and trebuchets':c.tb>0?'Move trebuchets':'Move soldiers','free &middot; '+(ROAD_STEP_MS/36e5)+' h a square on roads, '+(TREK_MS_CELL/36e5)+' off',function(){ startMove(q,r); });
+    if(!wet && turkeyHere(q,r,c)) A('Drive off the turkeys','soldiers &middot; clear for 12 h',function(){ huntTurkeys(q,r); },tinvBandFor(q,r)?'':'Needs one of your bands on or beside it, ready to hunt');
+    if(c.tb>0 && tinvOn()){ var rdy2=trebReady(c), tt=tinvTrebTargets(q,r).length; A('Fire at the turkeys'+(rdy2?' ('+rdy2+' ready)':''),TREB_SHOT+' stone &middot; clears the square and its neighbours',function(){ fireTurkeys(q,r); },!rdy2?'Next ready in '+hoursLeft(trebNext(c)):(!tt?'No turkeys within '+TREB_RANGE+' squares':lackText({stone:TREB_SHOT}))); }
     if(c.tb>0){
       var rdy=trebReady(c), tgt=fireTargets(q,r).length;
       A('Fire'+(rdy?' ('+rdy+' ready)':''),TREB_SHOT+' stone &middot; '+TREB_DMG+' damage &middot; range '+TREB_RANGE,function(){ fireMenu(q,r); },
@@ -6568,7 +6755,7 @@ function draw(){
   var sup=me()?supplied(ME):{};
   var haveMarch=me()&&avail()>0;
   var cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
-  var guns=[], walls=[], builds=[], spans=[], bands=[], trebs=[], roads=[], detail=S>=7, now=clock(), myLive=me()?liveRoads(ME):{};
+  var guns=[], walls=[], builds=[], spans=[], bands=[], trebs=[], roads=[], detail=S>=7, now=clock(), myLive=me()?liveRoads(ME):{}, tdn=tinvOn()?tinvD():0, tnow=Date.now();
   var HV=!!harvestState()&&S>=HV_DECOR_S, hvFarms=[], hvOpen=[];   // HARVEST LAYER
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
@@ -6614,6 +6801,7 @@ function draw(){
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(G.titan && titanActive() && c.o===G.titan.pid && ((c.b||0)+(c.g||0))>0) titanQ.push([p[0],p[1],q,r]);
     if(c.o && tswarmOn() && c.o===G.tswarm.pid) turkeyQ.push([p[0],p[1],q,r,isFarmCell(G.cells[key(q,r)],q,r)]);
+    if(tdn && c.o){ var tcl=G.cells[key(q,r)]; if(tcl){ if(turkeyHere(q,r,tcl,tnow,tdn)) tinvQ.push([p[0],p[1],q,r,isFarmCell(tcl,q,r),Math.max(tinvArrive(q,r),tcl.tk||0)]); if(tcl.tk>tnow && tnow-(tcl.tk-TCLEAR_MS)<3600) tburstQ.push([p[0],p[1],q,r,tcl.tk-TCLEAR_MS]); } }
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
@@ -6681,7 +6869,7 @@ function draw(){
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
   titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); });
   drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;
-  turkeyQ.forEach(function(e){ drawTurkeys(e[0],e[1],S,e[2],e[3],Date.now()/1000,e[4]); }); turkeyQ.length=0;   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
+  turkeyQ.forEach(function(e){ drawTurkeys(e[0],e[1],S,e[2],e[3],Date.now()/1000,e[4]); }); turkeyQ.length=0; drawInvasion(S,tnow);   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
@@ -7118,7 +7306,7 @@ function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hid
 function ambLoop(ts){
   ambRaf=0;
   if(!ambWanted()) return;
-  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S) || anyMolten())){ ambLast=ts; draw(); }   // lava keeps moving at any zoom   // the move and pointer loops draw every frame anyway
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S) || anyMolten() || (tinvOn()&&S>=9))){ ambLast=ts; draw(); }   // lava keeps moving at any zoom   // the move and pointer loops draw every frame anyway
   ambRaf=requestAnimationFrame(ambLoop);
 }
 function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
@@ -7679,6 +7867,7 @@ function render(){
     settleTitan();
     settleHush();
     settleTurkeySwarm();
+    settleTurkeyInvasion();
     settleAnnaVotes();
     settleBless();
     settleBless2();
@@ -7688,7 +7877,7 @@ function render(){
     settleTowerRuleChat();
     settleNewLandMoves();
     settleBohrerSteps();
-    settleTavern();
+    settleSTARBUCKSKEEP();
     settleCrusadeEnd();
     settlePietro();
     settleTurkey();
@@ -9846,13 +10035,13 @@ var NOTES=[
      +'<li>After that, <b>no crusade can be proclaimed, joined or struck</b>, and any crusade still standing is dissolved.</li>'
      +'<li>What is left in a treasury is <b>handed back</b> to those who paid it in.</li>'
      +'</ul><p>Take the cross while you can.</p>', go:'So be it', forNew:true, when:function(){ return CRUSADE_OK && !!crusadeCut(); }},
-  {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#127866; The Tavern is open',
-   html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built a <b>Tavern</b>.</p>'
+  {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#9749; Starbucks is open',
+   html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built <b>Starbucks</b>.</p>'
      +'<p>Open the chat and you will find <b>two rooms</b>:</p><ul>'
      +'<li><b>&#9876; War</b> is for the game: battles, alliances, trades, threats and the words of the gods. Hush votes apply here.</li>'
-     +'<li><b>&#127866; Tavern</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in the Tavern, and even a hushed warrior may drink here.</li>'
+     +'<li><b>&#9749; Starbucks</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in Starbucks, and even a hushed warrior may drink here.</li>'
      +'<li>Each room shows its own count of new messages. The chat bar only lights up for new messages in <b>War</b>.</li>'
-     +'</ul><p>Keep the chatter in the Tavern, and the war in War.</p>', go:'Pull up a stool'},
+     +'</ul><p>Keep the chatter in Starbucks, and the war in War.</p>', go:'Pull up a stool'},
   {id:'nov20-bless2', eyebrow:'The gods have spoken', title:'&#10022; The blessing is tempered',
    html:'<p><i>&ldquo;We watched the little ones feast&hellip; and perhaps we were too generous.&rdquo;</i></p>'
      +'<p><b>What changed</b></p><ul>'
@@ -9951,10 +10140,11 @@ var NOTES=[
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
-  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null;
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null;
   if(Date.now()<TOWER_RULE_T+864e5) out.unshift(towerRuleNote());
   if(qn) out.unshift(qn);
   if(an) out.unshift(an);
+  if(tn) out.unshift(tn);
   if(mn) out.unshift(mn);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
     html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
@@ -9979,6 +10169,7 @@ function closeNotice(){
   var was=noteOpen;
   if(noteOpen) markNoteSeen(noteOpen);
   noteOpen=null;
+  if(was==='tinv-gods') setTimeout(playTurkeyFlock,350);
   if(was==='nov26-horse' && HORSE_OK){ setTimeout(function(){ horseTutorial(0,true); },250); return; }   // the illustrated tutorial opens once, straight after it
   setTimeout(showNext,250);
 }
@@ -11413,11 +11604,11 @@ function chatUsed(){
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
-  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
+  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in Starbucks…'; btn.textContent='Send'; return; }
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
     inp.disabled=!!hl; btn.disabled=!!hl;
-    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
+    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. Starbucks is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
     btn.textContent='Send'; return;
   }
   var left=CHAT_FREE-chatUsed();
@@ -11434,9 +11625,9 @@ function chatPut(sub,val){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 function q36(t){ var s=Math.max(0,Math.floor(t)).toString(36); while(s.length<9) s='0'+s; return s; }   // keys sort by time
-/* Two rooms: War (the game; the gods speak here, and hush votes apply) and the Tavern (everything else: chat freely, no
+/* Two rooms: War (the game; the gods speak here, and hush votes apply) and Starbucks (everything else: chat freely, no
    hush votes, and a hushed warrior may still drink here). A message's room is m.rm ('tav'); old messages are War.
-   The bar's badge and flash count only the War room, so the Tavern never drags anyone away from the game. */
+   The bar's badge and flash count only the War room, so Starbucks never drags anyone away from the game. */
 function msgRoom(m){ return (m&&m.rm==='tav')?'tav':'war'; }
 function chatSeenKey(room){ return 'marchland.chatSeen.'+((room||'war')==='tav'?'tav.':'')+ME; }
 function chatSeenOf(room){ return room==='tav'?chat.seenTav:chat.seen; }
@@ -11472,9 +11663,9 @@ function chatWho(m){ var p=G&&G.players[m.pid]; return p?full(p):(m.n||'someone'
 /* the bar always shows the newest message; the history opens above it */
 function chatPreview(){
   var l=chatList(), m=l[l.length-1], el=document.getElementById('chat-preview');
-  if(!m){ el.innerHTML='<span class="muted">'+(chat.room==='tav'?'The Tavern is quiet &mdash; pull up a stool':'No messages yet &mdash; say hello to everyone on the board')+'</span>'; return; }
+  if(!m){ el.innerHTML='<span class="muted">'+(chat.room==='tav'?'Starbucks is quiet &mdash; pull up a stool':'No messages yet &mdash; say hello to everyone on the board')+'</span>'; return; }
   var txt=String(m.m).slice(0,CHAT_MAX);
-  el.innerHTML=(chat.room==='tav'?'<span aria-hidden="true">&#127866;</span> ':'')+'<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
+  el.innerHTML=(chat.room==='tav'?'<span aria-hidden="true">&#9749;</span> ':'')+'<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
     +' <span class="muted">&middot; '+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span>';
 }
 function chatRender(){
@@ -11482,7 +11673,7 @@ function chatRender(){
   if(!chat.open){ chatBadge(); return; }
   var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
-  if(!l.length) list.innerHTML='<p class="muted empty">'+(chat.room==='tav'?'The Tavern is quiet. Talk about anything you like here &mdash; it stays out of the War room.':'No messages yet. Say hello &mdash; everyone on the board will see it.')+'</p>';
+  if(!l.length) list.innerHTML='<p class="muted empty">'+(chat.room==='tav'?'Starbucks is quiet. Talk about anything you like here &mdash; it stays out of the War room.':'No messages yet. Say hello &mdash; everyone on the board will see it.')+'</p>';
   else list.innerHTML='<div class="chat-top">'+(chat.noMore?'The start of the chat':(chat.olderBusy?'Loading earlier messages…':'<button type="button" class="chat-older" data-older="1">Show earlier messages</button>'))+'</div>'+l.map(function(m,i){
     var day=chatDay(m.t), sep=(i===0||chatDay(l[i-1].t)!==day)?'<div class="chat-day">'+day+'</div>':'';
     return sep+'<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
@@ -11546,7 +11737,7 @@ function chatSend(){
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   var room=chat.room==='tav'?'tav':'war';
-  if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
+  if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in Starbucks.'); return; }
   var pl=me(), pay=!hushOn() && chatUsed()>=CHAT_FREE;     // (the old chat fee: replaced by hush votes once they begin)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
     var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
@@ -11756,7 +11947,7 @@ function chatStart(){
   var s=0; try{ s=parseInt(localStorage.getItem(chatSeenKey())||'0',10)||0; }catch(e){}
   chat.seen=s||Date.now()-864e5;                      // first time here: the last day counts as new
   var st=0; try{ st=parseInt(localStorage.getItem(chatSeenKey('tav'))||'0',10)||0; }catch(e){}
-  chat.seenTav=st||Date.now();                        // the Tavern is new: nothing in it counts as unread yet
+  chat.seenTav=st||Date.now();                        // Starbucks is new: nothing in it counts as unread yet
   try{ chat.room=localStorage.getItem('marchland.chatRoom.'+ME)==='tav'?'tav':'war'; }catch(e){ chat.room='war'; }
   document.getElementById('chatbar').classList.remove('hide');
   document.body.classList.add('has-chatbar');
