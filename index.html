@@ -8704,7 +8704,7 @@ function showNewLandOffer(force){
   nlAsked=true;
   scrollDialog({eyebrow:'An offer from the gods', title:'&#127755; A new start on the new land?', html:nlOfferHtml(), cancel:false,
     buttons:[{label:'Stay where I am',value:'no'},{label:'Move my kingdom',value:'yes',primary:true}]
-  }).then(function(res){ if(res&&res.value) nlChoose(res.value==='yes'); });
+  }).then(function(res){ if(res&&res.value) nlChoose(res.value==='yes'); setTimeout(function(){ try{ showNext(); }catch(e){} },400); });
   return true;
 }
 function nlChoose(yes){
@@ -8846,6 +8846,16 @@ function settleNewLandMoves(){
     });
   }).catch(function(){}).then(function(){ nlBusy=false; });
   return true;
+}
+function nlAgainNote(){                      // once, for every player: the offer is repeated because the Choose button failed at first
+  if(!nlOffer()||nlDone()||Date.now()>=nlMoveAt()) return null;
+  var mine=nlEligible()&&!nlPick();
+  return {id:'newland-again', eyebrow:'The gods repeat themselves', title:'&#127755; The new land: try again',
+    html:'<p>The gods offered the small kingdoms a new start on the new land, but the button to choose did not work for some of you. <b>It is mended.</b></p>'
+      +(mine?'<p><b>Your kingdom is one of them.</b> Tap <b>Choose</b> in the banner at the top of the page, or answer the scroll that opens by itself. If you tried before and nothing happened, try again now.</p>'
+            :'<p>If your kingdom was offered the new land and you tried before without luck, reload the game and try again: tap <b>Choose</b> in the banner at the top of the page.</p>')
+      +'<p>The kingdoms that say yes are moved on <b>Monday at 9:33 in the morning</b>, when the lava at the edges has cooled.</p>',
+    go:'I understand'};
 }
 function nlMovedNote(){                      // once, for each player whose kingdom was moved
   var f=G&&G.fixes&&G.fixes.newland1; if(!f||!f.moved) return null;
@@ -9912,8 +9922,9 @@ var NOTES=[
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
-  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null;
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null;
   if(qn) out.unshift(qn);
+  if(an) out.unshift(an);
   if(mn) out.unshift(mn);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
     html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
