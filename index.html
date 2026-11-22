@@ -2282,6 +2282,23 @@ function settlePinReset(){
   }).catch(function(){}).then(function(){ pinning=false; });
   return true;
 }
+/* ── PIN reset ──  Chris asked for Anna's PIN to be changed (22 Nov). Once (fixes/pin2, claimed with a conditional write) her stored PIN
+   hash is replaced. (Only the hash is kept here.) A screen of hers still holding the old PIN signs out and asks for the new one. */
+var PIN2_PID='p1jzq6ij', PIN2_HASH='k1e3fvjzxxoll1', pinning2=false;
+function settlePinReset2(){
+  if(!online||pinning2||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||(G.fixes&&G.fixes.pin2)||!G.players[PIN2_PID]) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, rec0={pid:PIN2_PID,t:now};
+  pinning2=true;
+  dbPutIf(base+'/fixes/pin2',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.pin2=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.pin2=rec0;
+    G.players[PIN2_PID].pin=PIN2_HASH;
+    var patch={'fixes/pin2':rec0,rev:now}; patch['players/'+PIN2_PID+'/pin']=PIN2_HASH; myRev=now;
+    dbPatch(base,patch).then(ok,fail);
+  }).catch(function(){}).then(function(){ pinning2=false; });
+  return true;
+}
 /* ── a gift for Elisa ──  200 of every resource, once (fixes/gift2, claimed with a conditional write). */
 var GIFT2_N=200, gifting2=false;
 function settleGift2(){
@@ -7924,6 +7941,7 @@ function render(){
     settleIronGift2();
     settleAnna();
     settlePinReset();
+    settlePinReset2();
     settleGift2();
     settleTitan();
     settleHush();
