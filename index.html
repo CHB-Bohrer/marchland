@@ -1269,6 +1269,7 @@ function writeCell(q,r,c){
   if(c.k===TOWER && c.h!=null) G.cells[k].h=c.h;       // tower health (only stored while it is damaged)
   if(c.w>0 && c.wd>0) G.cells[k].wd=c.wd;              // hits the top wall course has taken (two bring a course down)
   if(c.cs && c.o) G.cells[k].cs=c.cs;                  // what the owner spent on what stands here (half comes back if it is torn down)
+  if(c.k===TOWER && c.tu>Date.now() && c.o) G.cells[k].tu=c.tu;     // a tower still being raised, and when it is ready
   if(c.tb>0 && c.o){ G.cells[k].tb=c.tb; if(c.tr) G.cells[k].tr=c.tr; }   // trebuchets, and when each can next fire
   if(c.rd && c.o){ G.cells[k].rd=1; if(c.rf) G.cells[k].rf=c.rf; }        // a road, and when it is finished
   if(c.cb && c.o && c.cbo===c.o && !c.k){ G.cells[k].cb=c.cb; G.cells[k].cbo=c.cbo; }   // a castle going up, and whose (it used to be dropped here, so a begun castle vanished at once)
@@ -3672,6 +3673,11 @@ var DUEL_P={wall:0.65, guard:0.50, gun:0.60, tower:0.55, treb:0.90};
 var TOWER_PENALTY=[0,0.03,0.04,0.05], TOWER_PEN_CAP=0.20, DUEL_MIN=0.10, TOWER_UNIT_H=10, TOWER_MAX_H=[0,10,20,30], ATTACK_COST=2;
 var UNIT_CODE={wall:'w',guard:'g',gun:'c',tower:'t',treb:'b'}, UNIT_FROM={w:'wall',g:'guard',c:'gun',t:'tower',b:'treb'};
 var UNIT_NAME={wall:['wall course','wall courses'],guard:['guarding soldier','guarding soldiers'],gun:['castle gun','castle guns'],tower:['tower unit','tower units'],treb:['trebuchet','trebuchets']};
+/* MAJOR RULE (announced 22 Nov 2026): from Wed 25 Nov, 3 PM Eastern, a tower takes 12 hours to raise. It stands on its square at once
+   (it can be attacked, and its materials are paid), but until it is ready (c.tu) it gives no range: it makes no attack on any
+   square harder, and it cannot be upgraded. */
+var TOWER_RULE_T=Date.UTC(2026,10,25,20,0,0), TOWER_BUILD_MS=12*36e5;
+function towerRaising(c){ return !!(c && c.tu && c.tu>Date.now()); }
 function towerMax(l){ return TOWER_MAX_H[Math.max(1,Math.min(3,l||1))]; }
 function towerH(c){ return c.h==null?towerMax(c.l):Math.max(0,c.h); }
 function towerUnits(c){ return Math.ceil(towerH(c)/TOWER_UNIT_H); }
@@ -3686,7 +3692,7 @@ function defenderLine(q,r,att){                       // att: who attacks (defau
   for(i=0;i<(c.tb||0);i++) units.push({t:'treb'});
   var pen=0, ownPen=0, towers=0;
   if(own) for(var k in G.cells){
-    var tc=G.cells[k]; if(tc.k!==TOWER||tc.o!==own||towerH(tc)<=0) continue;
+    var tc=G.cells[k]; if(tc.k!==TOWER||tc.o!==own||towerH(tc)<=0||towerRaising(tc)) continue;
     var p=k.split('_'), tq=parseInt(p[0],10), tr=parseInt(p[1],10);
     if(hexDist(q,r,tq,tr)>SPEC[TOWER].range[tc.l||1]) continue;
     towers++;
@@ -4489,13 +4495,13 @@ function build0(q,r,kind){
   for(var k2 in cost) pl.res[k2]-=cost[k2];
   var from=fromFor(q,r,ME), pw=c.w||0;
   var sent=kind===CASTLE?drawSoldiers(ME,q,r,1):[];   // the nearest band sends a man to a castle; a tower needs nobody
-  c=cellOf(q,r); c.k=kind; c.l=1; c.g=kind===CASTLE?1:0; delete c.h; delete c.ht;   // (any wall on the square stays standing around it)
+  c=cellOf(q,r); c.k=kind; c.l=1; c.g=kind===CASTLE?1:0; delete c.h; delete c.ht; delete c.tu; if(kind===TOWER && Date.now()>=TOWER_RULE_T) c.tu=Date.now()+TOWER_BUILD_MS;   // (any wall on the square stays standing around it)
   if(c.cs) delete c.cs.n; spendAdd(c,'k',cost,{});
   writeCell(q,r,c); logMove(kind===TOWER?'tw':'cs',q,r,from,null,0,pw?{pw:pw}:null);
   render();
   sent.forEach(function(x){ if(key(x[0],x[1])!==key(q,r)) pushCell(x[0],x[1]); }); pushCell(q,r); pushMe();
   say(kind===TOWER
-    ? 'Watchtower raised, at full health ('+towerMax(1)+'). Every attack on your ground within '+SPEC[TOWER].range[1]+' square of it is harder, and it stands in the way of anyone taking its own square.'
+    ? (c.tu ? '<b>Watchtower begun.</b> It takes 12 hours to raise: ready in <b>'+hoursLeft(c.tu)+'</b>. Until then it can be attacked (health '+towerMax(1)+') but makes no attack on your ground harder. ' : '')+'Watchtower raised, at full health ('+towerMax(1)+'). Every attack on your ground within '+SPEC[TOWER].range[1]+' square of it is harder, and it stands in the way of anyone taking its own square.'
     : '<b>Castle founded.</b> Everything connected to it is back in supply, and you can muster here. The next one will cost more again.' + ' Keep it joined to a farm by unbroken ground: if no grain square is connected to it, it loses health and falls in 5 days.');
 }
 function costLine(c){ var p=[]; for(var k in c) p.push(c[k]+' '+k); return p.join(', '); }
@@ -4520,6 +4526,7 @@ function upgrade0(q,r){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME||!c.k) return nope('Click one of your own towers or castles.');
   if(isRuin(c)) return nope('That castle has fallen &mdash; it cannot be upgraded until a connected farm brings its health back.');
+  if(c.k===TOWER && towerRaising(c)) return nope('The tower is still being raised &mdash; ready in <b>'+hoursLeft(c.tu)+'</b>. It can be upgraded once it stands.');
   if(c.l>=3) return nope('Already at level III.');
   var lvl=c.l+1, cost=SPEC[c.k].cost, extra=c.k===CASTLE?Math.max(0,SPEC[CASTLE].gar[lvl]-c.g):0;
   for(var k in cost){ if(pl.res[k]<cost[k]*lvl) return nope('Upgrade needs '+cost[k]*lvl+' '+k+'. You have '+Math.floor(pl.res[k])+'.'); }
@@ -4917,7 +4924,7 @@ function bestBandBeside(q,r){                        // the biggest band of mine
 function cellTitle(c){
   var wet=c.t===RIVER, who=c.o?(c.o===ME?'Your ':esc(nameOf(c.o))+'&rsquo;s '):'', what;
   if(c.k===CASTLE) what=isRuin(c)?'fallen castle':'castle'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
-  else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l);
+  else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l)+(towerRaising(c)?' &middot; being raised, ready in '+hoursLeft(c.tu):'');
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
   else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
@@ -4979,7 +4986,7 @@ function cellActions(q,r){
         A('Castle going up','ready in '+hoursLeft(c.cb)+' &middot; '+castlePct(c)+'%',function(){ castleStatus(q,r); });
       } else if(!c.k){
         var tc=SPEC[TOWER].cost;
-        A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick',function(){ build(q,r,TOWER); },lackText(tc));
+        A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick'+(Date.now()>=TOWER_RULE_T?' &middot; 12 h to raise':''),function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).concat(pendingCastles(ME)).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
         var cwhy=isFarmCell(c,wrapQ(q),wrapR(r))?'Can&rsquo;t stand on a grain square':(!castleFed(q,r,ME)?'Needs unbroken ground of yours to a farm':(!castleSurrounded(q,r,ME)?'Needs all six squares around it to be yours':(tooClose?'Too close to another keep':(lackText(cc)||(mine<SPEC[CASTLE].gar[1]?'Needs a soldier to man it':'')))));
         A('Found a castle',costLine(cc),function(){ build(q,r,CASTLE); },cwhy);
@@ -7678,6 +7685,7 @@ function render(){
     settleMoveRafael();
     settleNewLandOffer();
     settleNewLandReminder();
+    settleTowerRuleChat();
     settleNewLandMoves();
     settleBohrerSteps();
     settleTavern();
@@ -8787,7 +8795,7 @@ function nlPlanMoves(now){
       var base=isKeep?centre:(nk||centre), spot=nearest(base[0]+dq,base[1]+dr,c.k===CASTLE?notFarm:null)||nearest(base[0]+dq,base[1]+dr,null);
       if(!spot) return; used[key(spot[0],spot[1])]=1; if(isKeep) nk=spot;
       var nc2={o:pid, w:c.w||0, k:c.k||null, l:c.l||0, g:c.g||0, d:c.d||0};
-      if(c.b>0) nc2.b=c.b; if(c.k===CASTLE&&c.h!=null){ nc2.h=c.h; if(c.ht) nc2.ht=c.ht; if(c.rt) nc2.rt=c.rt; } if(c.k===TOWER&&c.h!=null) nc2.h=c.h;
+      if(c.b>0) nc2.b=c.b; if(c.k===CASTLE&&c.h!=null){ nc2.h=c.h; if(c.ht) nc2.ht=c.ht; if(c.rt) nc2.rt=c.rt; } if(c.k===TOWER&&c.h!=null) nc2.h=c.h; if(c.k===TOWER&&c.tu>Date.now()) nc2.tu=c.tu;
       if(c.w>0&&c.wd>0) nc2.wd=c.wd; if(c.cs) nc2.cs=c.cs; if(c.tb>0){ nc2.tb=c.tb; if(c.tr) nc2.tr=c.tr; } if(c.rd){ nc2.rd=1; if(c.rf) nc2.rf=c.rf; }
       if(c.cb&&c.cbo===pid&&!c.k){ nc2.cb=c.cb; nc2.cbo=pid; }
       out.cells[key(spot[0],spot[1])]=nc2;
@@ -8818,6 +8826,20 @@ function settleNewLandReminder(){
     G.fixes.newland1b=rec0;
     plagueChat('The gods repeat their offer. The button that lets a small kingdom choose the new land did not work for some of you. It is mended. Reload the game and try again: tap Choose at the top of the page, or look for the scroll that opens by itself. The kingdoms are moved Monday at 9:33 in the morning.',now,'newland1b');
   }).catch(function(){}).then(function(){ nlReminding=false; });
+  return true;
+}
+/* the gods tell the chat once about the tower rule (fixes/towers1, claimed with a conditional write) */
+var towerSaying=false;
+function settleTowerRuleChat(){
+  if(!online||towerSaying||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||(G.fixes&&G.fixes.towers1)||Date.now()>=TOWER_RULE_T) return false;
+  var now=Date.now(), rec0={t:now}; towerSaying=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/towers1',rec0).then(function(x){
+    if(x.halted) return;
+    G.fixes=G.fixes||{};
+    if(!x.ok){ if(x.v) G.fixes.towers1=x.v; return; }
+    G.fixes.towers1=rec0;
+    plagueChat('Hear a change of rule. From Wednesday 25 November at 3 in the afternoon, Eastern time, a tower takes 12 hours to raise. Until it is done it can be attacked but gives no range, and it cannot be upgraded. Towers already standing are not touched. Raise yours now, or plan half a day ahead.',now,'towers1');
+  }).catch(function(){}).then(function(){ towerSaying=false; });
   return true;
 }
 function settleNewLandMoves(){
@@ -8855,6 +8877,13 @@ function nlAgainNote(){                      // once, for every player: the offe
       +(mine?'<p><b>Your kingdom is one of them.</b> Tap <b>Choose</b> in the banner at the top of the page, or answer the scroll that opens by itself. If you tried before and nothing happened, try again now.</p>'
             :'<p>If your kingdom was offered the new land and you tried before without luck, reload the game and try again: tap <b>Choose</b> in the banner at the top of the page.</p>')
       +'<p>The kingdoms that say yes are moved on <b>Monday at 9:33 in the morning</b>, when the lava at the edges has cooled.</p>',
+    go:'I understand'};
+}
+function towerRuleNote(){                    // the announcement scroll, once for everyone
+  return {id:'tower12h', eyebrow:'A major change of rule', title:'&#127983; Towers will take 12 hours to raise',
+    html:'<p>The gods have changed a rule. <b>From Wednesday 25 November, at 3 in the afternoon (Eastern), a tower takes 12 hours to raise.</b> Until then, towers still go up at once.</p>'
+      +'<p>After that time, a new tower stands on its square from the moment you start it, and its materials are paid then. But until its 12 hours are done it is only a shell: it <b>can be attacked</b>, yet it makes <b>no attack on your ground harder</b>, and it <b>cannot be upgraded</b>. Tap the tower to see when it will be ready.</p>'
+      +'<p>Towers already standing are not affected. Castles are as they were, a day to raise. If you want a tower in place, raise it before the deadline, or plan it half a day ahead.</p>',
     go:'I understand'};
 }
 function nlMovedNote(){                      // once, for each player whose kingdom was moved
@@ -9923,6 +9952,7 @@ var NOTES=[
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
   var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null;
+  if(Date.now()<TOWER_RULE_T+864e5) out.unshift(towerRuleNote());
   if(qn) out.unshift(qn);
   if(an) out.unshift(an);
   if(mn) out.unshift(mn);
