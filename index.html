@@ -2662,6 +2662,20 @@ function settleMoveRafael(){
 }
 /* ── the Tavern opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
 var taverning=false;
+var crusadeEnding=false;
+function settleCrusadeEnd(){
+  if(!online||crusadeEnding||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.crusadeend1)||!CRUSADE_OK) return false;
+  var now=Date.now(), rec0={t:now};
+  crusadeEnding=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/crusadeend1',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.crusadeend1=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.crusadeend1=rec0; bumpRev().then(ok,fail);
+    plagueChat('HEAR US. The crusades are going away. You have ONE DAY. After that, no crusade may be proclaimed, joined or struck, and every crusade still standing is dissolved.',now,'cend1a');
+    plagueChat('Whatever sits in a crusade\u2019s treasury goes back to those who paid it in. Use the cross while you still hold it.',now,'cend1b');
+  }).catch(function(){}).then(function(){ crusadeEnding=false; });
+  return true;
+}
 function settleTavern(){
   if(!online||taverning||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.tavern1)) return false;
   var now=Date.now(), rec0={t:now};
@@ -7666,6 +7680,7 @@ function render(){
     settleNewLandMoves();
     settleBohrerSteps();
     settleTavern();
+    settleCrusadeEnd();
     settlePietro();
     settleTurkey();
     settleRemovals();
@@ -9384,11 +9399,14 @@ function letterCount(){ var t=document.getElementById('cv-letter'), n=(t.value||
 var CRUSADE_OK=(new Date().getMonth()===10);
 try{ if(/[?&]crusade=1/.test(location.search)) CRUSADE_OK=true; }catch(e){}
 var CRUSADE_MS=72*36e5, CRUSADE_COL='#F7EBC0', CRUSADE_EDGE='#8E1B1B';
-function crusadeEnd(t){ var y=new Date(t).getFullYear(), dec=new Date(y,11,1).getTime(); if(dec<=t) dec=new Date(y+1,11,1).getTime(); return Math.min(t+CRUSADE_MS,dec); }
+/* the gods call the crusades off: once fixes/crusadeend1 is written, crusades stop 24 hours later */
+function crusadeCut(){ var f=G&&G.fixes&&G.fixes.crusadeend1; return (f&&f.t)?f.t+864e5:0; }
+function crusadeOn(){ var c=crusadeCut(); if(c&&Date.now()>=c) return false; return CRUSADE_OK; }
+function crusadeEnd(t){ var y=new Date(t).getFullYear(), dec=new Date(y,11,1).getTime(); if(dec<=t) dec=new Date(y+1,11,1).getTime(); var e=Math.min(t+CRUSADE_MS,dec), c=crusadeCut(); return c?Math.min(e,c):e; }
 function crusadesLive(){
   var now=Date.now(), out=[];
   if(!G||!G.crusades) return out;
-  Object.keys(G.crusades).forEach(function(id){ var c=G.crusades[id]; if(c && !c.done && now<c.end && CRUSADE_OK) out.push({id:id,c:c}); });
+  Object.keys(G.crusades).forEach(function(id){ var c=G.crusades[id]; if(c && !c.done && now<c.end && crusadeOn()) out.push({id:id,c:c}); });
   return out;
 }
 function crusadeOf(pid){ return crusadesLive().filter(function(x){ return x.c.members && x.c.members[pid]; })[0]||null; }
@@ -9415,7 +9433,7 @@ function crusadePool(c,q,r){
 }
 function poolBy(pool){ var w={}; pool.forEach(function(b){ w[b.pid]=(w[b.pid]||0)+b.n; }); return w; }
 function proclaim(){
-  if(!CRUSADE_OK) return nope('Crusades are only proclaimed in November.');
+  if(!crusadeOn()) return nope(crusadeCut()?'The gods have called the crusades off.':'Crusades are only proclaimed in November.');
   if(!castlesOf(ME)) return nope('Only a player with a castle standing can proclaim a crusade.');
   if(crusadeOf(ME)) return nope('You have already taken the cross in a crusade &mdash; a player belongs to one at a time.');
   var ids=playerList().filter(function(p){ return p!==ME && !crusadeAgainst(p); });
@@ -9578,7 +9596,7 @@ function settleCrusades(){
   var now=Date.now();
   Object.keys(G.crusades).forEach(function(id){
     var c=G.crusades[id]; if(!c||c.done) return;
-    if(now<c.end && CRUSADE_OK) return;
+    if(now<c.end && crusadeOn()) return;
     var paid={}; Object.keys(c.pay||{}).forEach(function(k){ var p=c.pay[k]; paid[p.pid]=(paid[p.pid]||0)+(p.n||0); });
     var back=shareOut(treasury(c),paid), patch={done:now};
     Object.keys(back).forEach(function(p){ if(back[p]>0) patch['ent/'+p+'/refund']={m:back[p],res:{},why:'the treasury handed back when the crusade ended',t:now}; });
@@ -9670,7 +9688,7 @@ function trebTutorial(i){
 }
 function renderCrusades(){
   var el=document.getElementById('crusade-strip'); if(!el) return;
-  if(!CRUSADE_OK||!me()){ el.classList.add('hide'); return; }
+  if(!crusadeOn()||!me()){ el.classList.add('hide'); return; }
   var live=crusadesLive(), mine=crusadeOf(ME), rows=live.map(function(x){
     var c=x.c, n=Object.keys(c.members||{}).length, isM=!!(c.members||{})[ME], btn='';
     if(c.target!==ME && !mine) btn+='<button type="button" data-cr="join" data-id="'+x.id+'">Take the cross</button>';
@@ -9681,7 +9699,7 @@ function renderCrusades(){
       +'<div class="cr-members"><b>Crusaders:</b> '+mem+'</div></div>';
   }).join('');
   var can=!mine && castlesOf(ME)>0 && !live.some(function(x){ return x.c.by===ME; });
-  el.innerHTML=rows+(can?'<div class="cr-row"><span class="muted">'+(live.length?'':'November is the month of crusades. ')+'Any player with a castle may proclaim one against another player.</span><span class="spacer"></span><button type="button" data-cr="proclaim">Proclaim a crusade</button></div>':'');
+  el.innerHTML=(crusadeCut()?'<div class="cr-row"><span><b>The crusades are going away.</b> The gods end them in '+hoursLeft(crusadeCut())+'.</span></div>':'')+rows+(can?'<div class="cr-row"><span class="muted">'+(live.length?'':'November is the month of crusades. ')+'Any player with a castle may proclaim one against another player.</span><span class="spacer"></span><button type="button" data-cr="proclaim">Proclaim a crusade</button></div>':'');
   el.innerHTML+='<div class="cr-row"><span class="muted">New to crusades?</span><span class="spacer"></span><button type="button" data-cr="how">How crusades work</button></div>';
   el.classList.remove('hide');
 }
@@ -9762,6 +9780,13 @@ var NOTES=[
   {id:'nov26-sponsors', eyebrow:'New this November', title:'Sponsors and letters',
    html:'<p>A new player now joins only when someone already playing vouches for them in writing. If someone asks you, a <b>Sponsor requests</b> button appears beside your name.</p>'
      +'<p>A caravan can now carry a <b>sealed letter</b> of up to 280 characters, with or without goods. Only the one it is sent to can read it.</p>'},
+  {id:'nov22-crusadeend', eyebrow:'The gods have spoken', title:'&#9876; The crusades are going away',
+   html:'<p><i>&ldquo;The crusades were a fine idea. They are over.&rdquo;</i></p>'
+     +'<p><b>You have one day.</b></p><ul>'
+     +'<li>For the next <b>24 hours</b> crusades still work as before, but none can outlast that day.</li>'
+     +'<li>After that, <b>no crusade can be proclaimed, joined or struck</b>, and any crusade still standing is dissolved.</li>'
+     +'<li>What is left in a treasury is <b>handed back</b> to those who paid it in.</li>'
+     +'</ul><p>Take the cross while you can.</p>', go:'So be it', forNew:true, when:function(){ return CRUSADE_OK && !!crusadeCut(); }},
   {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#127866; The Tavern is open',
    html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built a <b>Tavern</b>.</p>'
      +'<p>Open the chat and you will find <b>two rooms</b>:</p><ul>'
@@ -9862,7 +9887,7 @@ var NOTES=[
      +'<li>Nobody can see what is inside. But a horse that comes within <b>4 squares</b> of a tower or trebuchet may be attacked by its owner: the goods are lost, the soldiers are deployed where it stands, and the wreck lies on the map for <b>3 days</b>.</li></ul>'
      +'<p>It vanishes when November ends, so use it while you can. And in the years to come, <b>ask your elders about the days when the Trojan horse was around.</b></p>'
      +'<p>A short illustrated tutorial follows. You will find it again on the horse button beside the map.</p>', go:'Show me how it works'},
-  {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return CRUSADE_OK; },
+  {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return crusadeOn(); },
    html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
