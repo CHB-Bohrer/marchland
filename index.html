@@ -709,6 +709,7 @@ body.qafter #game{animation:qshake .2s linear 8}
           <div class="field"><label for="cv-timber">Timber <i id="cvh-timber"></i></label><input id="cv-timber" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
           <div class="field"><label for="cv-iron">Iron <i id="cvh-iron"></i></label><input id="cv-iron" type="number" min="0" step="5" inputmode="numeric" placeholder="0"></div>
           <div class="field"><label for="cv-grain">Grain <i id="cvh-grain"></i></label><input id="cv-grain" type="number" min="0" step="10" inputmode="numeric" placeholder="0"></div>
+          <div class="field hide" id="cv-hush-f"><label for="cv-hush">&#129323; Hush votes <i id="cvh-hush"></i></label><input id="cv-hush" type="number" min="0" step="1" inputmode="numeric" placeholder="0"></div>
           <div class="field cv-letter"><label for="cv-letter">A letter, if you like <i id="cv-count">0/280</i></label><textarea id="cv-letter" maxlength="280" rows="2" placeholder="Only they will read it"></textarea></div>
           <button id="cv-send" class="go">Send caravan</button>
         </div>
@@ -1779,6 +1780,7 @@ function doUndo(){
       if(U.cv){
         if(G.caravans) delete G.caravans[U.cv];
         putPath('/caravans/'+U.cv,null);
+        if(pl.hxOut && pl.hxOut[U.cv]){ delete pl.hxOut[U.cv]; }
         if(U.lt && online && U.to){ dbPut(letterPath(U.to,U.cv),null).catch(function(){}); dbPut('/marchland/'+gameCode+'/players/'+U.to+'/lids/'+U.cv,null).catch(function(){}); }
       }
       pushMe();
@@ -3470,7 +3472,7 @@ function absorbMine(v){                                // → true when v was an
     if((v.lastCollect||0)>(pl.lastCollect||0)) pl.lastCollect=v.lastCollect;
     ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
     if(v.cq && (!pl.cq || v.cq.k>pl.cq.k || (v.cq.k===pl.cq.k && (v.cq.n||0)>(pl.cq.n||0)))) pl.cq=v.cq;   // chat messages this tick: the higher count wins
-    ['notes','cvGot'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
+    ['notes','cvGot','hxIn','hxOut'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
     if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
     if(v.led) ledMerge(pl,v.led);
   }
@@ -7083,7 +7085,7 @@ function describe(e){
   if(e.k==='br') return who+' started a bridge.';
   if(e.k==='mv') return who+' sent '+(e.n||'a band of')+' soldier'+((e.n||2)>1?'s':'')+' marching.';
   if(e.k==='brk') return e.prev===ME ? who+' <span class="bad">broke your bridge</span>.' : who+' broke a bridge'+(e.prev?' of '+esc(nameOf(e.prev)):'')+'.';
-  if(e.k==='cv'){ var gl=hasGoods(e.g)?goodsLine(e.g):''; return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+(gl||'')+(gl&&e.lt?' and ':'')+(e.lt?'a sealed letter':'')+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan'+(e.lt?' with a sealed letter':'')+'.'; }
+  if(e.k==='cv'){ var gl=cvWhat({g:e.g,lt:e.lt,hv:e.hv}); return e.to===ME ? who+' <span class="good">sent you a caravan</span> &mdash; '+gl+'.' : who+' sent '+esc(nameOf(e.to))+' a caravan'+(e.lt?' with a sealed letter':'')+'.'; }
   if(e.k==='gift') return e.to===ME ? who+' <span class="good">gave you a square of land</span>.' : who+' gave a square of land to '+esc(nameOf(e.to))+'.';
   if(e.k==='m') return who+' marched into new ground.';
   if(e.k==='tbk') return who+' built a trebuchet.';
@@ -10795,6 +10797,7 @@ function cvPanel(){
     .sort(function(a,b){ return G.players[a].name.toLowerCase().localeCompare(G.players[b].name.toLowerCase()); });
   cvPick.setOptions(others.map(function(p){ var o=G.players[p]; return {value:p, label:esc(full(o)), cost:hexDist(pl.q,pl.r,o.q,o.r)+' squares'}; }));
   GOODS.forEach(function(k){ document.getElementById('cvh-'+k).textContent='· '+Math.floor(pl.res[k]||0); });
+  var hf=document.getElementById('cv-hush-f'); if(hf){ hf.classList.toggle('hide',!hushOn()); document.getElementById('cvh-hush').textContent='· '+hushVotes(ME); }
   var to=cvPick.value, eta=document.getElementById('cv-eta');
   if(to){ var a=G.players[ME], b=G.players[to], d=hexDist(a.q,a.r,b.q,b.r);
     eta.innerHTML='The road to <b>'+esc(full(b))+'</b>&rsquo;s keep is '+d+' cells, so a caravan arrives in about <b>'+fmtDur(cvTravel(ME,to))+'</b>.'; }
@@ -10805,7 +10808,7 @@ function cvPanel(){
   document.getElementById('cv-list').innerHTML=mine.map(function(c){
     var out=c.from===ME, who=esc(nameOf(out?c.to:c.from));
     if(c.h) return '<div>'+(out?'&rarr; Trojan horse to <b>'+who+'</b>&rsquo;s tower: '+(hasGoods(c.g)?goodsLine(c.g):'')+(hasGoods(c.g)&&c.a?' and ':'')+(c.a?c.a+' soldier'+(c.a>1?'s':''):''):'&larr; A Trojan horse for your tower from <b>'+who+'</b>: nobody knows what is inside')+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
-    return '<div>'+(out?'&rarr; To <b>'+who+'</b>':'&larr; From <b>'+who+'</b>')+': '+goodsLine(c.g||{})+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
+    return '<div>'+(out?'&rarr; To <b>'+who+'</b>':'&larr; From <b>'+who+'</b>')+': '+(cvWhat(c)||'a wagon')+' <span class="muted">&middot; '+(c.eta>Date.now()?'arrives in '+fmtDur(c.eta-Date.now()):'arriving now')+'</span></div>';
   }).join('');
 }
 function sendCaravan(){
@@ -10818,8 +10821,10 @@ function sendCaravan(){
     if(v>Math.floor(pl.res[k]||0)) short.push(k+' (you have '+Math.floor(pl.res[k]||0)+')');
     g[k]=v; if(v>0) any=true;
   });
+  var hv=hushOn()?Math.max(0,Math.floor(parseFloat(document.getElementById('cv-hush').value)||0)):0;
+  if(hv>hushVotes(ME)) short.push('hush votes (you have '+hushVotes(ME)+')');
   var txt=(document.getElementById('cv-letter').value||'').replace(/\r/g,'').trim().slice(0,LETTER_MAX);
-  if(!any && !txt) return nope('Put something in the wagon first &mdash; goods, or a letter.',btn);
+  if(!any && !txt && !hv) return nope('Put something in the wagon first &mdash; goods, hush votes, or a letter.',btn);
   if(short.length) return nope('<span class="bad">Not enough to send.</span> You&rsquo;re short of '+short.join(' and ')+'.',btn);
   var now=Date.now(), id=ME+'-'+now.toString(36), them=G.players[to];
   if(txt && online && !sendCaravan.letterOk){          // the letter goes first, outside the board; only if it lands does the wagon leave
@@ -10839,14 +10844,15 @@ function sendCaravan(){
   GOODS.forEach(function(k){ pl.res[k]-=g[k]; });
   var c={from:ME, to:to, g:g, t:now, eta:now+cvTravel(ME,to), fq:pl.q, fr:pl.r, tq:them.q, tr:them.r};
   if(txt) c.lt=1;
+  if(hv){ c.hv=hv; pl.hxOut=pl.hxOut||{}; pl.hxOut[id]=hv; document.getElementById('cv-hush').value=''; }
   document.getElementById('cv-letter').value=''; letterCount();
   G.caravans=G.caravans||{}; G.caravans[id]=c;
   GOODS.forEach(function(k){ document.getElementById('cv-'+k).value=''; });
   pushMe().then(function(){ return putPath('/caravans/'+id,c); });
-  logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g, lt:txt?1:null});
+  logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g, lt:txt?1:null, hv:hv||null});
   undoCommit('Caravan sent',uSnap,{cv:id,to:to,lt:txt?1:0});
   render();
-  say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+(any?goodsLine(g):'')+(any&&txt?' and ':'')+(txt?'a sealed letter':'')+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
+  say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+cvWhat(c)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
@@ -10859,9 +10865,10 @@ function settleCaravans(){
     if(!c.h && c.to===ME && !c.got && c.eta<=now && !pl.cvGot[id]){
       GOODS.forEach(function(k){ pl.res[k]=(pl.res[k]||0)+((c.g&&c.g[k])||0); });
       pl.cvGot[id]=now; c.got=now; mine=true;
+      if(c.hv){ pl.hxIn=pl.hxIn||{}; pl.hxIn[id]=c.hv|0; }
       writes.push(['/caravans/'+id+'/got',now]);
-      var line=goodsLine(c.g||{}), from=esc(nameOf(c.from));
-      if(c.lt){ line=(hasGoods(c.g)?line+' and ':'')+'a sealed letter'; setTimeout(loadLetters,400); }
+      var line=cvWhat(c), from=esc(nameOf(c.from));
+      if(c.lt){ setTimeout(loadLetters,400); }
       play({pid:ME,k:'claim',q:pl.q,r:pl.r,n:3,label:'Caravan: +'+line});
       setTimeout(function(){ say('A caravan from <b>'+from+'</b> has arrived at your keep: <span class="good">'+line+'</span>.'); },50);
     }
@@ -10889,7 +10896,7 @@ function renderCaravanAlert(){
   var pl=me(), now=Date.now(), coming=[], here=[];
   Object.keys(G.caravans||{}).forEach(function(id){
     var c=G.caravans[id]; if(!c||c.to!==ME||c.h) return;
-    var what=(hasGoods(c.g)?goodsLine(c.g||{}):'')+(c.lt?(hasGoods(c.g)?' and ':'')+'a sealed letter':'');
+    var what=cvWhat(c);
     if(!c.got && c.eta>now) coming.push('<div class="ca-row"><span class="ca-head">A caravan is coming</span><span class="ca-time">arrives in '+fmtDur(c.eta-now)+'</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>, carrying '+what+'.</span></div>');
     else if(c.got && now-c.got<2*864e5 && !cvSeen(id)) here.push('<div class="ca-row"><span class="ca-head">A caravan has arrived</span></div><div class="ca-row"><span>From <b>'+esc(nameOf(c.from))+'</b>: <b>'+what+'</b>. It is already in your stores'+(c.lt?' &mdash; the letter is in your Letters.':'.')+'</span> <button data-act="cvseen" data-id="'+id+'">Got it</button></div>');
   });
@@ -11882,7 +11889,9 @@ function hushEarned(pid){
   return Math.max(0,L-(b[0]||0))+Math.floor(Math.max(0,K-(b[1]||0))/HUSH_KILLS);
 }
 function hushStart(pid){ var p=G.players[pid]; return (p && (!p.joined || Date.now()-p.joined>=HUSH_AGE))?HUSH_START:0; }
-function hushVotes(pid){ if(!hushOn()||!G.players[pid]) return 0; return Math.max(0,hushStart(pid)+hushEarned(pid)-hushSpent(pid)); }
+function hushXfer(pid){ var p=G.players[pid]||{}, s=function(o){ var n=0; for(var k in (o||{})) n+=o[k]|0; return n; }; return s(p.hxIn)-s(p.hxOut); }   // votes carried to me by caravan, less the ones I sent
+function hushVotes(pid){ if(!hushOn()||!G.players[pid]) return 0; return Math.max(0,hushStart(pid)+hushEarned(pid)+hushXfer(pid)-hushSpent(pid)); }
+function cvWhat(c){ var a=[]; if(hasGoods(c.g)) a.push(goodsLine(c.g||{})); if(c.hv) a.push(c.hv+' hush vote'+(c.hv>1?'s':'')); if(c.lt) a.push('a sealed letter'); return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1]; }
 function hushBtn(m){
   if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||msgRoom(m)==='tav') return '';
   var nm=esc(G.players[m.pid].name), locked=hushLeft(m.pid);
