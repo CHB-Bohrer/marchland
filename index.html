@@ -8695,9 +8695,11 @@ function nlOfferHtml(){
     +'<p>Your old land goes back to the wild, and your old neighbours are left behind. The new ground is fresh from the fire: different fields and forests from the ones you have now.</p>'
     +'<p>Until the move you can change your mind from the banner at the top of the page.</p>';
 }
-function showNewLandOffer(){
-  if(nlAsked||!G||!me()||!nlEligible()||nlPick()||Date.now()>=nlMoveAt()) return false;
-  if(document.querySelector('.rulesnote:not(.hide)')||document.querySelector('.sc-dlg')||document.getElementById('qcine')) return false;
+function showNewLandOffer(force){
+  if((nlAsked&&!force)||!G||!me()||!nlEligible()||nlPick()||Date.now()>=nlMoveAt()) return false;
+  if(document.getElementById('qcine')) return false;
+  if(force){ [].forEach.call(document.querySelectorAll('.sc-dlg:not(.hide)'),function(d){ if(/new start on the new land/i.test(d.textContent)) d.remove(); }); }   // asked for from the banner: it opens over whatever else is showing
+  else if(document.querySelector('.rulesnote:not(.hide)')||document.querySelector('.sc-dlg:not(.hide)')) return false;
   nlAsked=true;
   scrollDialog({eyebrow:'An offer from the gods', title:'&#127755; A new start on the new land?', html:nlOfferHtml(), cancel:false,
     buttons:[{label:'Stay where I am',value:'no'},{label:'Move my kingdom',value:'yes',primary:true}]
@@ -8931,7 +8933,7 @@ document.getElementById('st-strikes').addEventListener('click',function(){ if(is
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
 document.getElementById('st-quake').addEventListener('click',function(){ if(isSteward()) openQuake(); });
-document.getElementById('newlandbar').addEventListener('click',function(e){ var b=e.target.closest('[data-nl]'); if(!b) return; var a=b.getAttribute('data-nl'); if(a==='ask'){ nlAsked=false; showNewLandOffer(); } else nlChoose(a==='yes'); });
+document.getElementById('newlandbar').addEventListener('click',function(e){ var b=e.target.closest('[data-nl]'); if(!b) return; var a=b.getAttribute('data-nl'); if(a==='ask'){ nlAsked=false; showNewLandOffer(true); } else nlChoose(a==='yes'); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('undo-pill').addEventListener('click',doUndo);
 document.getElementById('lt-btn').addEventListener('click',openShelf);
@@ -10274,7 +10276,7 @@ function showRiverNote(){
 }
 /* the order players meet the announcements in */
 function showNext(){ if(document.getElementById('qcine')) return false;   // nothing on top of the earthquake while it plays (it calls showNext when it ends)
-  if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote() || showNewLandOffer(); }
+  if(showNewLandOffer()) return true; if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote() || showNewLandOffer(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
