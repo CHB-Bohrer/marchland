@@ -2589,6 +2589,18 @@ function settleTurkeyInvasion(){
   }).catch(function(){}).then(function(){ tinving=false; });
   return true;
 }
+function tinvCountMine(){ var n=0, d=tinvOn()?tinvD():0; if(!d||!G||!me()) return 0; for(var k in G.cells){ var c=G.cells[k]; if(c.o!==ME) continue; var p=k.split('_'); if(turkeyHere(parseInt(p[0],10),parseInt(p[1],10),c,null,d)) n++; } return n; }
+function tinvHitNote(){                               // once, to a player whose land has been overrun: what it means and what can be done
+  if(!tinvOn() || !tinvCountMine()) return null;
+  return {id:'tinv-hit', eyebrow:'Turkeys on your land', title:'&#129411; The turkeys have landed on your ground',
+    html:'<p>Turkeys now stand on some of your squares. You can see them strutting there, under a brown wash.</p>'
+      +'<ul><li><b>A square with turkeys on it yields nothing</b>: no stone, timber, iron or grain, until they are gone. It still counts as your land, and your castles are never overrun.</li>'
+      +'<li><b>More of them land, hour after hour</b>, and worst of all as Thanksgiving comes.</li>'
+      +'<li><b>Soldiers drive them off.</b> Tap an overrun square and choose <i>Drive off the turkeys</i>. A band of yours must stand on or beside it, and each band can hunt once every 2 hours.</li>'
+      +'<li><b>Trebuchets scatter them.</b> Choose <i>Fire at the turkeys</i>: one stone clears the square it strikes and your overrun squares around it. A trebuchet reloads for 4 hours.</li>'
+      +'<li>Either way the square is clear for <b>12 hours</b>, and then the turkeys may come back.</li></ul>',
+    go:'To the hunt'};
+}
 /* soldiers: a band of mine on or beside the square, not hunted in the last 2 hours */
 function tinvBandFor(q,r){
   var now=Date.now();
@@ -5120,6 +5132,7 @@ function cellTitle(c){
   if(c.o&&c.rd) sub.push(roadUp(c)?'road ready in '+hoursLeft(c.rf):(liveRoads(c.o)[key(c.q,c.r)]?'live road':'dead road, cut off from every castle'));
   else if(c.o===ME&&c.k===CASTLE&&!isRuin(c)) sub.push('counts as road');
   if(c.k===CASTLE&&c.h!=null&&!isRuin(c)) sub.push('health '+castleH(c)+' of '+CASTLE_MAX_H);
+  if(c.o && tinvOn()){ if(turkeyHere(c.q,c.r,c)) sub.push('<span class="bad">&#129411; turkeys here &mdash; it yields nothing</span>'); else if(c.tk>Date.now()) sub.push('turkeys driven off &mdash; clear for '+hoursLeft(c.tk)); }
   if(wet){ var rn=riverName(c.q,c.r); if(rn) sub.push('called '+esc(rn)); }
   return t+(sub.length?'<span class="sc-sub">'+sub.join(' &middot; ')+'</span>':'');
 }
@@ -6801,6 +6814,7 @@ function draw(){
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(G.titan && titanActive() && c.o===G.titan.pid && ((c.b||0)+(c.g||0))>0) titanQ.push([p[0],p[1],q,r]);
     if(tdn && c.o){ var tcl=G.cells[key(q,r)]; if(tcl){ if(turkeyHere(q,r,tcl,tnow,tdn)) tinvQ.push([p[0],p[1],q,r,isFarmCell(tcl,q,r),Math.max(tinvArrive(q,r),tcl.tk||0)]); if(tcl.tk>tnow && tnow-(tcl.tk-TCLEAR_MS)<3600) tburstQ.push([p[0],p[1],q,r,tcl.tk-TCLEAR_MS]); } }
+    if(c.o && tswarmOn() && c.o===G.tswarm.pid) turkeyQ.push([p[0],p[1],q,r,isFarmCell(G.cells[key(q,r)],q,r)]);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
@@ -6859,7 +6873,7 @@ function draw(){
     ctx.restore();
   });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
-  if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); harvestTrot(ctx,now); }   // HARVEST LAYER
+  if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); }   // (the wandering and trotting Thanksgiving turkeys are gone: the only turkeys now are the invasion's)   // HARVEST LAYER
   trebs.forEach(function(e){                         // trebuchets stand to the lower left of the square, out of the band badge's way
     if(S>=12) artTrebuchet(ctx,e[1][0]-S*0.3,e[1][1]+S*0.66,S*0.82,e[2],now,e[0].tb);
     else { ctx.save(); ctx.fillStyle=NAT.wood2; ctx.beginPath(); ctx.moveTo(e[1][0]-S*0.7,e[1][1]+S*0.55); ctx.lineTo(e[1][0]-S*0.3,e[1][1]-S*0.1); ctx.lineTo(e[1][0]+S*0.1,e[1][1]+S*0.55); ctx.closePath(); ctx.fill(); ctx.restore(); }
@@ -6868,7 +6882,7 @@ function draw(){
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
   titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); });
   drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;
-  drawInvasion(S,tnow);   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
+  turkeyQ.forEach(function(e){ drawTurkeys(e[0],e[1],S,e[2],e[3],Date.now()/1000,e[4]); }); turkeyQ.length=0; drawInvasion(S,tnow);   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawWrecks();                                     // a lost Trojan horse lies where it fell for three days
@@ -7701,14 +7715,6 @@ function harvestGround(g,farms,opens,now){
     else { g.save(); g.translate(x,y); g.rotate(sw); if(h<0.75) hvCorn(g,0,0,s*0.42); else hvSheaf(g,0,0,s*0.36); g.restore(); }
     if(artHash(q,r,404)<0.35) hvPumpkin(g,x+s*0.22,y+s*0.04,s*0.08);
     if(artHash(q,r,405)<0.14) hvScarecrow(g,f[0][0]-s*0.28,f[0][1]+s*0.3,s*0.5,sw*1.6);   // now and then a scarecrow keeps watch
-  });
-  opens.forEach(function(o){                                       // turkeys wander the open ground all November, more of them on Thanksgiving Day
-    var q=wrapQ(o[1]), r=wrapR(o[2]); if(artHash(q,r,411)>(st==='day'?0.26:0.16)) return;
-    var ph=mv?now*0.1+artHash(q,r,412)*9:artHash(q,r,412)*9, x=o[0][0]+Math.sin(ph)*s*0.38, y=o[0][1]+s*0.2+Math.cos(ph*0.7)*s*0.06;
-    hvTurkey(g,x,y,s*0.17,Math.cos(ph)>=0?1:-1,mv?Math.sin(now*3+q)>0.6:false);
-    if(mv && S>=20 && Math.floor(now/2.5+artHash(q,r,413)*20)%7===0){                // now and then one gobbles
-      g.save(); g.font='italic 600 '+Math.round(Math.max(10,s*0.2))+'px '+getComputedStyle(document.body).fontFamily; g.textAlign='center'; g.textBaseline='middle';
-      g.fillStyle=T['--ink']; g.globalAlpha=0.85; g.fillText('gobble!',x,y-s*0.42); g.restore(); }
   });
   g.restore();
 }
@@ -10139,10 +10145,11 @@ var NOTES=[
 ];
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
-  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null;
+  var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null, th2=G&&me()?tinvHitNote():null;
   if(Date.now()<TOWER_RULE_T+864e5) out.unshift(towerRuleNote());
   if(qn) out.unshift(qn);
   if(an) out.unshift(an);
+  if(th2) out.unshift(th2);
   if(tn) out.unshift(tn);
   if(mn) out.unshift(mn);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
@@ -11458,6 +11465,7 @@ function coachPlan(){
   var pl=me(), R=ratesFor(ME), done=claimedToday(pl);
   var need=Object.keys(G.claims||{}).filter(function(id){ var c=G.claims[id]; if(!c||c.pid===ME||!(c.voters&&c.voters[ME])||(c.votes&&c.votes[ME])) return false; return claimState(c).s==='disputed'; })[0];
   if(need) return {key:'vote', txt:'<b>'+esc(nameOf(G.claims[need].pid))+'</b>&rsquo;s step claim has been disputed and needs your vote.', el:'claims-panel', go:'Take me there'};
+  if(tinvOn()){ var tnm=tinvCountMine(); if(tnm) return {key:'turkeys', txt:'<b>&#129411; Turkeys have overrun '+tnm+' of your squares.</b> They yield nothing until the turkeys are gone, and more land as Thanksgiving nears. Tap an overrun square to drive them off with soldiers, or fire a trebuchet at them.'}; }
   if(R.gar[0]<R.gar[1] && !fieldOf(ME) && !transitOf(ME) && pl.res.iron>=25 && pl.res.grain>=40){
     var cs=myCastleCells(ME)[0];
     if(cs) return {key:'muster', txt:'Worth knowing: one of your castles is short of men and will crumble. Mustering a soldier at your castle would man it.', mode:'troop', target:cs, label:'Idea: muster here'};
