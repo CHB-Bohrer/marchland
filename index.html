@@ -958,7 +958,7 @@ body.qafter #game{animation:qshake .2s linear 8}
 <section id="chatbar" class="chatbar hide" aria-label="Chat with the other players">
   <div class="cb-tabs hide" id="chat-tabs" role="tablist" aria-label="Chat rooms"><div class="cb-in">
     <button type="button" role="tab" class="cb-tab" id="tab-war" data-room="war" aria-selected="true">&#9876; War <span class="cb-tn hide" id="tn-war"></span></button>
-    <button type="button" role="tab" class="cb-tab" id="tab-tav" data-room="tav" aria-selected="false">&#9749; Starbucks <span class="cb-tn hide" id="tn-tav"></span></button>
+    <button type="button" role="tab" class="cb-tab" id="tab-tav" data-room="tav" aria-selected="false">&#127866; Tavern <span class="cb-tn hide" id="tn-tav"></span></button>
     <span class="cb-thint" id="chat-thint">The game</span>
   </div></div>
   <div class="cb-feed hide" id="chat-feed" aria-live="polite"><div class="cb-in" id="chat-list"></div></div>
@@ -2872,7 +2872,7 @@ function settleMoveRafael(){
   }).catch(function(){}).then(function(){ moving1=false; });
   return true;
 }
-/* ── Starbucks opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
+/* ── the Tavern opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
 var taverning=false;
 var crusadeEnding=false;
 function settleCrusadeEnd(){
@@ -2888,7 +2888,7 @@ function settleCrusadeEnd(){
   }).catch(function(){}).then(function(){ crusadeEnding=false; });
   return true;
 }
-function settleSTARBUCKSKEEP(){
+function settleTavern(){
   if(!online||taverning||!G||!G.players||dirty||ELIM||!boardFresh()||(G.fixes&&G.fixes.tavern1)) return false;
   var now=Date.now(), rec0={t:now};
   taverning=true;
@@ -2896,8 +2896,8 @@ function settleSTARBUCKSKEEP(){
     if(x.halted) return;
     if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.tavern1=x.v; } return; }
     G.fixes=G.fixes||{}; G.fixes.tavern1=rec0; bumpRev().then(ok,fail);
-    plagueChat('The gods have built a STARBUCKS. Open the chat and you will find two doors: ⚔ War, for the game, and ☕ Starbucks, for everything else.',now,'tav1a');
-    plagueChat('Talk of battles, alliances, trades and threats belongs in War. Gossip, jokes and pointless chatter belong in Starbucks, where you may babble as much as you please. Hush votes apply only in War.',now,'tav1b');
+    plagueChat('The gods have built a TAVERN. Open the chat and you will find two doors: ⚔ War, for the game, and 🍺 Tavern, for everything else.',now,'tav1a');
+    plagueChat('Talk of battles, alliances, trades and threats belongs in War. Gossip, jokes and pointless chatter belong in the Tavern, where you may babble as much as you please. Hush votes apply only in War.',now,'tav1b');
   }).catch(function(){}).then(function(){ taverning=false; });
   return true;
 }
@@ -7951,7 +7951,7 @@ function render(){
     settleTowerRuleChat();
     settleNewLandMoves();
     settleBohrerSteps();
-    settleSTARBUCKSKEEP();
+    settleTavern();
     settleCrusadeEnd();
     settlePietro();
     settleTurkey();
@@ -10109,13 +10109,13 @@ var NOTES=[
      +'<li>After that, <b>no crusade can be proclaimed, joined or struck</b>, and any crusade still standing is dissolved.</li>'
      +'<li>What is left in a treasury is <b>handed back</b> to those who paid it in.</li>'
      +'</ul><p>Take the cross while you can.</p>', go:'So be it', forNew:true, when:function(){ return CRUSADE_OK && !!crusadeCut(); }},
-  {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#9749; Starbucks is open',
-   html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built <b>Starbucks</b>.</p>'
+  {id:'nov20-tavern', eyebrow:'The gods have built something', title:'&#127866; The Tavern is open',
+   html:'<p>The gods are tired of hearing gossip when they want to hear of <b>war</b>. So they have built a <b>Tavern</b>.</p>'
      +'<p>Open the chat and you will find <b>two rooms</b>:</p><ul>'
      +'<li><b>&#9876; War</b> is for the game: battles, alliances, trades, threats and the words of the gods. Hush votes apply here.</li>'
-     +'<li><b>&#9749; Starbucks</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in Starbucks, and even a hushed warrior may drink here.</li>'
+     +'<li><b>&#127866; Tavern</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in the Tavern, and even a hushed warrior may drink here.</li>'
      +'<li>Each room shows its own count of new messages. The chat bar only lights up for new messages in <b>War</b>.</li>'
-     +'</ul><p>Keep the chatter in Starbucks, and the war in War.</p>', go:'Pull up a stool'},
+     +'</ul><p>Keep the chatter in the Tavern, and the war in War.</p>', go:'Pull up a stool'},
   {id:'nov20-bless2', eyebrow:'The gods have spoken', title:'&#10022; The blessing is tempered',
    html:'<p><i>&ldquo;We watched the little ones feast&hellip; and perhaps we were too generous.&rdquo;</i></p>'
      +'<p><b>What changed</b></p><ul>'
@@ -11263,11 +11263,11 @@ function chatUsed(){
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
-  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in Starbucks…'; btn.textContent='Send'; return; }
+  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
     inp.disabled=!!hl; btn.disabled=!!hl;
-    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. Starbucks is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
+    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
     btn.textContent='Send'; return;
   }
   var left=CHAT_FREE-chatUsed();
@@ -11284,9 +11284,9 @@ function chatPut(sub,val){
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
 function q36(t){ var s=Math.max(0,Math.floor(t)).toString(36); while(s.length<9) s='0'+s; return s; }   // keys sort by time
-/* Two rooms: War (the game; the gods speak here, and hush votes apply) and Starbucks (everything else: chat freely, no
+/* Two rooms: War (the game; the gods speak here, and hush votes apply) and the Tavern (everything else: chat freely, no
    hush votes, and a hushed warrior may still drink here). A message's room is m.rm ('tav'); old messages are War.
-   The bar's badge and flash count only the War room, so Starbucks never drags anyone away from the game. */
+   The bar's badge and flash count only the War room, so the Tavern never drags anyone away from the game. */
 function msgRoom(m){ return (m&&m.rm==='tav')?'tav':'war'; }
 function chatSeenKey(room){ return 'marchland.chatSeen.'+((room||'war')==='tav'?'tav.':'')+ME; }
 function chatSeenOf(room){ return room==='tav'?chat.seenTav:chat.seen; }
@@ -11322,9 +11322,9 @@ function chatWho(m){ var p=G&&G.players[m.pid]; return p?full(p):(m.n||'someone'
 /* the bar always shows the newest message; the history opens above it */
 function chatPreview(){
   var l=chatList(), m=l[l.length-1], el=document.getElementById('chat-preview');
-  if(!m){ el.innerHTML='<span class="muted">'+(chat.room==='tav'?'Starbucks is quiet &mdash; pull up a stool':'No messages yet &mdash; say hello to everyone on the board')+'</span>'; return; }
+  if(!m){ el.innerHTML='<span class="muted">'+(chat.room==='tav'?'The Tavern is quiet &mdash; pull up a stool':'No messages yet &mdash; say hello to everyone on the board')+'</span>'; return; }
   var txt=String(m.m).slice(0,CHAT_MAX);
-  el.innerHTML=(chat.room==='tav'?'<span aria-hidden="true">&#9749;</span> ':'')+'<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
+  el.innerHTML=(chat.room==='tav'?'<span aria-hidden="true">&#127866;</span> ':'')+'<span class="dot" style="background:'+pColor(m.pid)+'"></span><b>'+esc(chatWho(m))+':</b> '+esc(txt)
     +' <span class="muted">&middot; '+(m.failed?'not sent':m.pending?'sending…':since(m.t))+'</span>';
 }
 function chatRender(){
@@ -11332,7 +11332,7 @@ function chatRender(){
   if(!chat.open){ chatBadge(); return; }
   var feed=document.getElementById('chat-feed'), list=document.getElementById('chat-list'), l=chatList();
   var atEnd=feed.scrollHeight-feed.scrollTop-feed.clientHeight<40;
-  if(!l.length) list.innerHTML='<p class="muted empty">'+(chat.room==='tav'?'Starbucks is quiet. Talk about anything you like here &mdash; it stays out of the War room.':'No messages yet. Say hello &mdash; everyone on the board will see it.')+'</p>';
+  if(!l.length) list.innerHTML='<p class="muted empty">'+(chat.room==='tav'?'The Tavern is quiet. Talk about anything you like here &mdash; it stays out of the War room.':'No messages yet. Say hello &mdash; everyone on the board will see it.')+'</p>';
   else list.innerHTML='<div class="chat-top">'+(chat.noMore?'The start of the chat':(chat.olderBusy?'Loading earlier messages…':'<button type="button" class="chat-older" data-older="1">Show earlier messages</button>'))+'</div>'+l.map(function(m,i){
     var day=chatDay(m.t), sep=(i===0||chatDay(l[i-1].t)!==day)?'<div class="chat-day">'+day+'</div>':'';
     return sep+'<div class="msg'+(m.pid===ME?' mine':'')+(m.pending?' pending':'')+'"><div class="who"><span class="dot" style="background:'+pColor(m.pid)+'"></span>'
@@ -11396,7 +11396,7 @@ function chatSend(){
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   var room=chat.room==='tav'?'tav':'war';
-  if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in Starbucks.'); return; }
+  if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
   var pl=me(), pay=!hushOn() && chatUsed()>=CHAT_FREE;     // (the old chat fee: replaced by hush votes once they begin)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
     var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
@@ -11608,7 +11608,7 @@ function chatStart(){
   var s=0; try{ s=parseInt(localStorage.getItem(chatSeenKey())||'0',10)||0; }catch(e){}
   chat.seen=s||Date.now()-864e5;                      // first time here: the last day counts as new
   var st=0; try{ st=parseInt(localStorage.getItem(chatSeenKey('tav'))||'0',10)||0; }catch(e){}
-  chat.seenTav=st||Date.now();                        // Starbucks is new: nothing in it counts as unread yet
+  chat.seenTav=st||Date.now();                        // the Tavern is new: nothing in it counts as unread yet
   try{ chat.room=localStorage.getItem('marchland.chatRoom.'+ME)==='tav'?'tav':'war'; }catch(e){ chat.room='war'; }
   document.getElementById('chatbar').classList.remove('hide');
   document.body.classList.add('has-chatbar');
