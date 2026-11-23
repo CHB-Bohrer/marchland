@@ -7,7 +7,7 @@
 <title>How to Play Marchland</title>
 <meta name="description" content="A narrated, animated guide to Marchland, the game where walking is the only currency.">
 <meta property="og:title" content="How to Play Marchland">
-<meta property="og:description" content="Twenty short chapters, told by a barbarian. About seven minutes.">
+<meta property="og:description" content="Nineteen short chapters, told by a barbarian. About seven minutes.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -236,7 +236,6 @@ footer a{color:var(--gold2)}
       <dt>Claims</dt><dd>Every claim is public. With a screenshot of your step count it stands. Without one, anyone may dispute it for 24 hours and the others vote for 24 more: more than half of at least 3 votes voids it, and the marches come off your next claim.</dd>
       <dt>Joining</dt><dd>A newcomer picks a sponsor already playing, who vouches for them by real name. Three strikes and a sponsor can vouch no more.</dd>
       <dt>Crusade</dt><dd>November only. Proclaimed against one player for 72 hours; crusaders&rsquo; bands beside the same square strike as one, share losses and spoils, and can pay marches into a shared treasury.</dd>
-      <dt>Trojan horse</dt><dd>12 to 30 November. Tap another player&rsquo;s standing tower and choose Send a Trojan horse here, or use the horse button beside the map. Building it costs 25 iron and 40 grain, as much as a soldier. It rolls from your nearest castle at 30 minutes a square and costs 1 grain every 4 hours. It carries goods, which arrive a tenth bigger, or soldiers from the band at that castle, who storm the tower&rsquo;s square at once (walls don&rsquo;t count). Every horse must carry a letter, read by the tower&rsquo;s owner on arrival or by whoever brings it down. Only the sender sees what else is inside. Only the player it is bound for may strike it down, for free, once it is within 4 squares of one of their standing towers or trebuchets; the wreck lies on the map for 3 days.</dd>
       <dt>The map</dt><dd>One board for everyone, 120 squares across, wrapping at every edge.</dd>
     </dl>
   </details>
@@ -926,65 +925,9 @@ function artCaravan(g,x,y,s,col,t,face){
   g.restore();
   artPerson(g,x+face*(-z*0.95),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});
 }
-/* ── on the map: the horse on the road, and the wreck of one that was lost ── */
-function artHorse(g,x,y,s,col,t,face){
-  var z=s*0.62, roll=t?Math.sin(t*6)*0.012*z:0, W=NAT.wood, D=NAT.wood2;
-  g.save(); g.translate(x,y); g.scale(face,1);
-  blob(g,0,z*0.36,z*1.1,z*0.15,NAT.shadow);
-  g.lineJoin='round';
-  poly(g,[[-z*0.78,z*0.1],[z*0.78,z*0.1],[z*0.78,z*0.2],[-z*0.78,z*0.2]],D,NAT.line,Math.max(0.5,z*0.03));                    // the cart it rolls on
-  [[-z*0.5],[z*0.5]].forEach(function(o){                                                                                      // wheels, turning as it rolls
-    g.beginPath(); g.arc(o[0],z*0.24,z*0.17,0,6.284); g.fillStyle=D; g.fill();
-    g.beginPath(); g.arc(o[0],z*0.24,z*0.12,0,6.284); g.fillStyle=W; g.fill();
-    g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath();
-    for(var i=0;i<4;i++){ var a=i*Math.PI/4+(t||0)*3; g.moveTo(o[0]+Math.cos(a)*z*0.12,z*0.24+Math.sin(a)*z*0.12); g.lineTo(o[0]-Math.cos(a)*z*0.12,z*0.24-Math.sin(a)*z*0.12); }
-    g.stroke();
-  });
-  [-0.5,-0.28,0.3,0.52].forEach(function(lx){ g.fillStyle=W; g.fillRect(z*lx-z*0.06,-z*0.08+roll,z*0.12,z*0.2); g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.strokeRect(z*lx-z*0.06,-z*0.08+roll,z*0.12,z*0.2); });   // four stiff legs
-  g.beginPath(); g.ellipse(0,-z*0.2+roll,z*0.62,z*0.3,0,0,6.284); g.fillStyle=W; g.fill(); g.strokeStyle=D; g.lineWidth=Math.max(0.7,z*0.045); g.stroke();   // the body
-  g.beginPath(); for(var i=-2;i<=2;i++){ g.moveTo(z*i*0.2,-z*0.46+roll+Math.abs(i)*z*0.03); g.lineTo(z*i*0.2,-z*0.0+roll-Math.abs(i)*z*0.02); } g.stroke();       // planks
-  poly(g,[[z*0.32,-z*0.36+roll],[z*0.56,-z*0.92+roll],[z*0.9,-z*0.98+roll],[z*0.98,-z*0.78+roll],[z*0.7,-z*0.68+roll],[z*0.58,-z*0.3+roll]],W,D,Math.max(0.7,z*0.045));   // neck and head
-  poly(g,[[z*0.56,-z*0.92+roll],[z*0.62,-z*1.08+roll],[z*0.7,-z*0.94+roll]],D,D,1);                                                                                    // an ear
-  g.strokeStyle=NAT.line; g.lineWidth=Math.max(1,z*0.07); g.lineCap='round'; g.beginPath(); g.moveTo(z*0.36,-z*0.4+roll); g.quadraticCurveTo(z*0.44,-z*0.7+roll,z*0.58,-z*0.92+roll); g.stroke();   // the mane
-  g.fillStyle=NAT.line; g.beginPath(); g.arc(z*0.78,-z*0.84+roll,Math.max(0.8,z*0.035),0,6.284); g.fill();                                                               // an eye
-  g.beginPath(); g.moveTo(-z*0.6,-z*0.3+roll); g.quadraticCurveTo(-z*0.9,-z*0.2+roll,-z*0.82,z*0.0+roll); g.stroke();                                                    // the tail
-  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04); g.beginPath(); g.moveTo(-z*0.2,-z*0.46+roll); g.lineTo(-z*0.2,-z*1.0+roll); g.stroke();                       // a pennant in the sender's colour
-  poly(g,[[-z*0.2,-z*1.0+roll],[z*0.1,-z*0.92+roll],[-z*0.2,-z*0.84+roll]],col,NAT.line,Math.max(0.5,z*0.025));
-  g.restore();
-  if(s>=18) artPerson(g,x+face*(-z*1.0),y+z*0.32,Math.max(7,s*0.36),col,{face:face, ph:(t||0)*7});                                                                         // a driver walking behind
-}
-/* the wreck: the cart overturned, its wheels off, and the load spilled on the ground */
-function artWreck(g,x,y,s,col,alpha,age){
-  var z=s*0.62, W=NAT.wood, D=NAT.wood2;
-  g.save(); g.translate(x,y); g.globalAlpha*=alpha; g.lineJoin='round';
-  blob(g,0,z*0.3,z*1.25,z*0.2,NAT.shadow);
-  g.save(); g.translate(-z*0.15,z*0.02); g.rotate(2.85);                                                                          // the bed, upside down and tilted
-  poly(g,[[-z*0.62,-z*0.18],[z*0.5,-z*0.18],[z*0.5,z*0.12],[-z*0.62,z*0.12]],W,D,Math.max(0.6,z*0.04));
-  g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath(); for(var i=-2;i<=1;i++){ g.moveTo(z*i*0.25,-z*0.18); g.lineTo(z*i*0.25,z*0.12); } g.stroke();
-  g.restore();
-  g.save(); g.translate(z*0.3,-z*0.2); g.rotate(0.4);                                                                             // a wheel still in the air
-  g.beginPath(); g.arc(0,0,z*0.2,0,6.284); g.fillStyle=D; g.fill(); g.beginPath(); g.arc(0,0,z*0.15,0,6.284); g.fillStyle=W; g.fill();
-  g.strokeStyle=D; g.lineWidth=Math.max(0.5,z*0.03); g.beginPath(); for(var j=0;j<4;j++){ var a=j*Math.PI/4; g.moveTo(Math.cos(a)*z*0.15,Math.sin(a)*z*0.15); g.lineTo(-Math.cos(a)*z*0.15,-Math.sin(a)*z*0.15); } g.stroke();
-  g.restore();
-  g.save(); g.translate(z*0.78,z*0.3);                                                                                            // a wheel that came off and lies flat
-  g.beginPath(); g.ellipse(0,0,z*0.2,z*0.08,0,0,6.284); g.fillStyle=D; g.fill(); g.beginPath(); g.ellipse(0,0,z*0.14,z*0.05,0,0,6.284); g.fillStyle=W; g.fill();
-  g.restore();
-  g.strokeStyle=D; g.lineWidth=Math.max(1,z*0.06); g.lineCap='round'; g.beginPath(); g.moveTo(-z*0.6,z*0.3); g.lineTo(-z*1.05,z*0.38); g.stroke();   // a snapped shaft
-  [[-0.95,0.22,0.12],[-0.78,0.36,0.09],[0.0,0.38,0.1],[0.42,0.4,0.08],[1.05,0.22,0.1]].forEach(function(p,i){                      // stone, spilled
-    poly(g,[[z*p[0]-z*p[2],z*p[1]],[z*p[0]-z*p[2]*0.3,z*p[1]-z*p[2]],[z*p[0]+z*p[2],z*p[1]-z*p[2]*0.4],[z*p[0]+z*p[2]*0.8,z*p[1]+z*p[2]*0.5]],i%2?NAT.stone:NAT.stone2,NAT.line,Math.max(0.4,z*0.02));
-  });
-  g.lineCap='round';                                                                                                              // timber logs
-  [[-0.5,0.44,0.0],[-0.28,0.5,0.3],[0.62,0.5,-0.25]].forEach(function(p){ g.save(); g.translate(z*p[0],z*p[1]); g.rotate(p[2]); g.fillStyle=NAT.trunk; g.fillRect(-z*0.2,-z*0.04,z*0.4,z*0.08); g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.4,z*0.02); g.strokeRect(-z*0.2,-z*0.04,z*0.4,z*0.08); g.restore(); });
-  [[0.18,0.5,0.2],[0.34,0.54,-0.15],[-0.1,0.55,0.05]].forEach(function(p){ g.save(); g.translate(z*p[0],z*p[1]); g.rotate(p[2]); g.fillStyle=NAT.ironRock2; g.fillRect(-z*0.14,-z*0.025,z*0.28,z*0.05); g.restore(); });   // iron bars
-  g.fillStyle=NAT.wheat; for(var m=0;m<14;m++){ var gx=z*(0.7+0.1*((m*37)%7)/7*3+((m%3)-1)*0.07), gy=z*(0.48+((m*13)%5)*0.025); g.beginPath(); g.arc(gx-z*0.2,gy,Math.max(0.6,z*0.025),0,6.284); g.fill(); }   // spilled grain
-  poly(g,[[z*0.9,z*0.4],[z*1.12,z*0.34],[z*1.2,z*0.46],[z*1.0,z*0.52]],NAT_DARK?'#E4DCC6':'#FBF6E8',NAT.line,Math.max(0.4,z*0.02));   // the split sack
-  g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.7,z*0.04); g.beginPath(); g.moveTo(-z*0.35,z*0.1); g.lineTo(-z*0.5,-z*0.35); g.stroke();   // a broken pennant on the ground
-  poly(g,[[-z*0.5,-z*0.35],[-z*0.28,-z*0.29],[-z*0.45,-z*0.2]],col,NAT.line,Math.max(0.4,z*0.02));
-  g.restore();
-}
 
-var DUR={"w1":1.91,"w2":5.96,"w3":4.76,"w4":3.19,"w5":2.07,"k1":3.86,"k2":5.34,"k3":4.12,"s1":2.18,"s2":3.1,"s3":5.28,"s4":6.59,"s5":4.32,"l1":3.79,"l2":3.97,"l3":5.89,"l4":2.95,"u1":3.43,"u2":4.72,"u3":4.55,"u4":3.06,"u5":4.04,"r1":3.99,"r2":4.58,"r3":2.49,"r4":4.22,"r5":4.28,"d1":5.4,"d2":4.27,"d3":5.44,"d4":3.75,"d5":4.29,"b1":4.27,"b2":3.15,"b3":5.35,"b4":3.96,"b5":3.73,"b6":4.72,"f1":4.97,"f2":3.94,"f3":5.16,"f4":3.4,"f5":4.67,"t1":3.43,"t2":3.71,"t3":3.28,"t4":3.47,"t5":4.67,"o1":2.52,"o2":4.77,"o3":3.59,"o4":5.44,"c1":4.67,"c2":3.33,"c3":4.9,"c4":5.18,"h1":2.24,"h2":3.54,"h3":3.08,"h4":2.75,"h5":3.7,"x1":6.8,"x2":6.5,"x3":2.76,"v1":3.58,"v2":6.09,"v3":4.76,"v4":4.09,"v5":3.69,"n1":2.92,"n2":3.87,"n3":4.1,"n4":5.11,"n5":3.99,"j1":6.4,"j2":3.48,"j3":3.92,"q1":2.89,"q2":5.23,"q3":4.18,"q4":2.85,"z1":2.82,"z2":3.45,"z3":2.87,"z4":2.25,"y1":3.52,"y2":5.44,"y3":6.24,"y4":4.99};
-var TEXT={"w1":"Hear me, wanderer!","w2":"In this land, your legs are your treasury. Every step you walk becomes ground you rule.","w3":"Raise a keep. Muster your warriors. Shove your border across the world!","w4":"Rivals will rise. Bridges will burn.","w5":"This... is Marchland!","k1":"You begin with one keep, and a scrap of dirt around it.","k2":"The map is one great board, shared by all. It is not the real world.","k3":"Your rivals start far away. March out, and find them!","s1":"Your steps are your coin.","s2":"Once a day, read your step count, and claim it.","s3":"The game turns steps into marches. Ten thousand steps earns fourteen.","s4":"Walk more, earn more. But each extra mile pays a little less, so the slow ones stay in the fight!","s5":"Miss a day, and those steps are gone. Nothing carries over.","l1":"Each march takes one square, right beside your own.","l2":"Your border creeps outward. No leaping across the map!","l3":"Forests give timber. Quarries give stone. Mines give iron. Farms give grain.","l4":"Every four hours, your land pays you.","u1":"But hear this. Land gives nothing on its own.","u2":"A square pays only if unbroken ground leads home to your castle.","u3":"Let an enemy cut the neck, and everything beyond it goes dark.","u4":"You keep the land. You lose the harvest.","u5":"Cut a supply line, and you starve a kingdom without a fight.","r1":"Rivers cut the land. No one marches into water.","r2":"To cross, build a bridge. One march, some timber, and some stone.","r3":"It takes a full day to build.","r4":"Then it is plain ground, and your border runs right across.","r5":"But guard it! An enemy band can smash a bridge to splinters.","d1":"Marches claim empty ground. To take a rival's ground, you need soldiers.","d2":"Muster them at your castle. Each one costs iron, and grain.","d3":"They stand together as a band, and walk where you send them. Three hours a square.","d4":"A band that stands still guards every square around it.","d5":"And remember. Soldiers eat. Every one of them, day and night.","b1":"Now, blood! Stand your band beside an enemy square, and strike.","b2":"It costs two marches, win or lose.","b3":"Your men fight their line one duel at a time. Walls first. Then the guards.","b4":"Before you charge, a scroll shows your odds. Read it!","b5":"Win, and you take the square, and a share of their stores.","b6":"Even one man can beat five. But do not bet your kingdom on it.","f1":"So defend what is yours! Stone builds walls, three courses high.","f2":"Every course is one more duel the enemy must win.","f3":"A tower needs no men inside. It makes every attack near it harder.","f4":"But a tower eats grain, and it can be broken.","f5":"Change your mind? Tear down your own works, and half the cost comes back.","t1":"And here is how you break things. The trebuchet!","t2":"Build it at a castle. It hurls stone three squares.","t3":"It batters walls, towers, even castles.","t4":"You fire it yourself, once every four hours.","t5":"But it cannot fight. Leave it unguarded, and it dies like a goat.","o1":"Roads make your warriors swift.","o2":"Off the road, a band walks three hours a square. On it, only one.","o3":"A road costs a march, and takes a day to build.","o4":"But it must lead back to a standing castle. Cut it off, and it is only dirt.","c1":"One keep is not a kingdom. But a second castle is hard won.","c2":"First, hold all six squares around the site.","c3":"It takes a day to rise. Then one of your soldiers walks in to hold it.","c4":"Your castles may not crowd together. And each one costs more than the last.","h1":"A castle must be fed.","h2":"Link it, by your own ground, to a farm you hold.","h3":"Cut it off from every farm, and it starves.","h4":"In five days, it falls to ruin.","h5":"And whoever seizes the ruin wins fifty marches!","x1":"No castle standing, and no soldiers left? Then you are finished. Your land crumbles to dust.","x2":"And do not grow lazy! Stay away three days, and your empty land slips away, one square a day.","x3":"Open the game, and the rot stops.","v1":"Not every neighbor is an enemy. Send a caravan!","v2":"It carries stone, timber, iron or grain to another warrior, and costs no marches.","v3":"The wagon takes time on the road, and eats a little grain as it goes.","v4":"It can carry a sealed letter, too. Only they can read it.","v5":"You can even give away land, one square at a time.","n1":"Now. There are no liars in Marchland.","n2":"Every claim goes on a public log, for all to see.","n3":"Attach a screenshot of your step count, and your claim stands.","n4":"No proof? For one day, any warrior may dispute it. Then the others vote.","n5":"Lose the vote, and those marches come off your next claim.","j1":"No stranger walks in alone. A new warrior needs a sponsor, someone already in the game.","j2":"The sponsor vouches for them, by their real name.","j3":"Vouch for cheats, and you lose the right to vouch at all.","q1":"This November only: the crusade!","q2":"Proclaim one against a rival. For three days, others may join your banner.","q3":"Crusaders beside the same square strike as one army.","q4":"Losses are shared. So are the spoils.","z1":"Now you know the ways of Marchland.","z2":"Walk far. Choose your ground. Feed your castles.","z3":"And when the borders meet, show no mercy!","z4":"Now go. Walk, warrior!","y1":"And until November ends: the Trojan horse!","y2":"Roll it to a rival's tower. It may carry gifts. Or it may carry soldiers.","y3":"Only you know what hides inside. If it is soldiers, they burst out, and storm the square!","y4":"But beware. A tower or a trebuchet close by can smash it on the road."};
+var DUR={"w1":1.91,"w2":5.96,"w3":4.76,"w4":3.19,"w5":2.07,"k1":3.86,"k2":5.34,"k3":4.12,"s1":2.18,"s2":3.1,"s3":5.28,"s4":6.59,"s5":4.32,"l1":3.79,"l2":3.97,"l3":5.89,"l4":2.95,"u1":3.43,"u2":4.72,"u3":4.55,"u4":3.06,"u5":4.04,"r1":3.99,"r2":4.58,"r3":2.49,"r4":4.22,"r5":4.28,"d1":5.4,"d2":4.27,"d3":5.44,"d4":3.75,"d5":4.29,"b1":4.27,"b2":3.15,"b3":5.35,"b4":3.96,"b5":3.73,"b6":4.72,"f1":4.97,"f2":3.94,"f3":5.16,"f4":3.4,"f5":4.67,"t1":3.43,"t2":3.71,"t3":3.28,"t4":3.47,"t5":4.67,"o1":2.52,"o2":4.77,"o3":3.59,"o4":5.44,"c1":4.67,"c2":3.33,"c3":4.9,"c4":5.18,"h1":2.24,"h2":3.54,"h3":3.08,"h4":2.75,"h5":3.7,"x1":6.8,"x2":6.5,"x3":2.76,"v1":3.58,"v2":6.09,"v3":4.76,"v4":4.09,"v5":3.69,"n1":2.92,"n2":3.87,"n3":4.1,"n4":5.11,"n5":3.99,"j1":6.4,"j2":3.48,"j3":3.92,"q1":2.89,"q2":5.23,"q3":4.18,"q4":2.85,"z1":2.82,"z2":3.45,"z3":2.87,"z4":2.25};
+var TEXT={"w1":"Hear me, wanderer!","w2":"In this land, your legs are your treasury. Every step you walk becomes ground you rule.","w3":"Raise a keep. Muster your warriors. Shove your border across the world!","w4":"Rivals will rise. Bridges will burn.","w5":"This... is Marchland!","k1":"You begin with one keep, and a scrap of dirt around it.","k2":"The map is one great board, shared by all. It is not the real world.","k3":"Your rivals start far away. March out, and find them!","s1":"Your steps are your coin.","s2":"Once a day, read your step count, and claim it.","s3":"The game turns steps into marches. Ten thousand steps earns fourteen.","s4":"Walk more, earn more. But each extra mile pays a little less, so the slow ones stay in the fight!","s5":"Miss a day, and those steps are gone. Nothing carries over.","l1":"Each march takes one square, right beside your own.","l2":"Your border creeps outward. No leaping across the map!","l3":"Forests give timber. Quarries give stone. Mines give iron. Farms give grain.","l4":"Every four hours, your land pays you.","u1":"But hear this. Land gives nothing on its own.","u2":"A square pays only if unbroken ground leads home to your castle.","u3":"Let an enemy cut the neck, and everything beyond it goes dark.","u4":"You keep the land. You lose the harvest.","u5":"Cut a supply line, and you starve a kingdom without a fight.","r1":"Rivers cut the land. No one marches into water.","r2":"To cross, build a bridge. One march, some timber, and some stone.","r3":"It takes a full day to build.","r4":"Then it is plain ground, and your border runs right across.","r5":"But guard it! An enemy band can smash a bridge to splinters.","d1":"Marches claim empty ground. To take a rival's ground, you need soldiers.","d2":"Muster them at your castle. Each one costs iron, and grain.","d3":"They stand together as a band, and walk where you send them. Three hours a square.","d4":"A band that stands still guards every square around it.","d5":"And remember. Soldiers eat. Every one of them, day and night.","b1":"Now, blood! Stand your band beside an enemy square, and strike.","b2":"It costs two marches, win or lose.","b3":"Your men fight their line one duel at a time. Walls first. Then the guards.","b4":"Before you charge, a scroll shows your odds. Read it!","b5":"Win, and you take the square, and a share of their stores.","b6":"Even one man can beat five. But do not bet your kingdom on it.","f1":"So defend what is yours! Stone builds walls, three courses high.","f2":"Every course is one more duel the enemy must win.","f3":"A tower needs no men inside. It makes every attack near it harder.","f4":"But a tower eats grain, and it can be broken.","f5":"Change your mind? Tear down your own works, and half the cost comes back.","t1":"And here is how you break things. The trebuchet!","t2":"Build it at a castle. It hurls stone three squares.","t3":"It batters walls, towers, even castles.","t4":"You fire it yourself, once every four hours.","t5":"But it cannot fight. Leave it unguarded, and it dies like a goat.","o1":"Roads make your warriors swift.","o2":"Off the road, a band walks three hours a square. On it, only one.","o3":"A road costs a march, and takes a day to build.","o4":"But it must lead back to a standing castle. Cut it off, and it is only dirt.","c1":"One keep is not a kingdom. But a second castle is hard won.","c2":"First, hold all six squares around the site.","c3":"It takes a day to rise. Then one of your soldiers walks in to hold it.","c4":"Your castles may not crowd together. And each one costs more than the last.","h1":"A castle must be fed.","h2":"Link it, by your own ground, to a farm you hold.","h3":"Cut it off from every farm, and it starves.","h4":"In five days, it falls to ruin.","h5":"And whoever seizes the ruin wins fifty marches!","x1":"No castle standing, and no soldiers left? Then you are finished. Your land crumbles to dust.","x2":"And do not grow lazy! Stay away three days, and your empty land slips away, one square a day.","x3":"Open the game, and the rot stops.","v1":"Not every neighbor is an enemy. Send a caravan!","v2":"It carries stone, timber, iron or grain to another warrior, and costs no marches.","v3":"The wagon takes time on the road, and eats a little grain as it goes.","v4":"It can carry a sealed letter, too. Only they can read it.","v5":"You can even give away land, one square at a time.","n1":"Now. There are no liars in Marchland.","n2":"Every claim goes on a public log, for all to see.","n3":"Attach a screenshot of your step count, and your claim stands.","n4":"No proof? For one day, any warrior may dispute it. Then the others vote.","n5":"Lose the vote, and those marches come off your next claim.","j1":"No stranger walks in alone. A new warrior needs a sponsor, someone already in the game.","j2":"The sponsor vouches for them, by their real name.","j3":"Vouch for cheats, and you lose the right to vouch at all.","q1":"This November only: the crusade!","q2":"Proclaim one against a rival. For three days, others may join your banner.","q3":"Crusaders beside the same square strike as one army.","q4":"Losses are shared. So are the spoils.","z1":"Now you know the ways of Marchland.","z2":"Walk far. Choose your ground. Feed your castles.","z3":"And when the borders meet, show no mercy!","z4":"Now go. Walk, warrior!"};
 
 /* ═══ the stage ═════════════════════════════════════════════════════════
    The tutorial is always firelit: one dark palette, whatever the device theme.
@@ -2224,66 +2167,6 @@ chapter({
       CRU.forEach(function(c,i){ var d=CRU[(i+1)%3]; ctx.beginPath(); ctx.moveTo(hx(c[1],c[2]),hy(c[1],c[2])); ctx.lineTo(hx(d[1],d[2]),hy(d[1],d[2])); ctx.stroke(); }); ctx.restore(); spot(1,0,now,'#FF6A4A',1); }
     CRU.forEach(function(c){ var t=M.ban[c[0]]; if(t!=null) banner(hx(c[1],c[2])-S*0.62,hy(c[1],c[2])+S*0.3,S*0.85,(now-t)/0.35); });
     if(M.clock) dial(hx(1,-2.6),hy(1,-2.6)+S*0.6,19,(now-M.clock[0])/(M.clock[1]-M.clock[0]),'open 72 hours');
-  }
-});
-
-/* ── 18 · the Trojan horse (12–30 November) ───────────────────────────── */
-var HZ_A=[-3,0], HZ_T=[2,0], HZ_B=[1,-1];
-function hzX(k){ return lerp(hx(HZ_A[0],HZ_A[1])+S*0.75, hx(HZ_T[0],HZ_T[1])-S*0.8, k); }
-chapter({
-  id:'horse', tag:'Trojan horse', title:'This Month: The Trojan Horse',
-  facts:['Until <b>30 November</b>','Sent to a rival&rsquo;s <b>tower</b>','Gifts or hidden <b>soldiers</b>','Only its <b>target</b> can wreck it, from nearby'],
-  init:function(){
-    M=blank(); homeLand(HZ_A[0],HZ_A[1],'you'); cell(HZ_A[0],HZ_A[1]).b=4;
-    [[3,0],[3,-1],[2,-1],[2,1],[1,1],[3,1],[1,-2],[2,-2],[4,-1]].forEach(function(p){ put(p[0],p[1],{o:'rival'}); });
-    put(HZ_T[0],HZ_T[1],{o:'rival',k:'tower',hp:1}); put(HZ_B[0],HZ_B[1],{o:'rival',k:'tower',hp:1}); put(4,0,{o:'rival',k:'castle'});
-    M.hz=null; M.hz2=null; hud([]); cam.rate=1.6; shot(-2.2,-0.1,5.6,3.7,true);
-  },
-  lines:[
-    ['y1',function(n,d){ later(n+d*0.5,function(t){ M.hz={t0:t,k:0}; sfx.drum(0.9); sfx.thud(); shake(5); burst('dust',hzX(0),hy(0,0)+S*0.5,12); hud([['Trojan horse','ready at your castle']]); }); }],
-    ['y2',function(n,d){
-      cam.rate=1.1; shot(-0.3,-0.2,7.6,4.4); M.aim=n+0.1; M.roll=[n+d*0.2,n+d+LD('y3')*0.42]; M.what=n+d*0.3;
-      hud([['Trojan horse','rolling to their tower']]); later(n+d*0.2,function(){ cell(HZ_A[0],HZ_A[1]).b=1; });
-    }],
-    ['y3',function(n,d){
-      later(n+d*0.42,function(t){
-        M.roll=null; M.what=null; M.aim=null; var x=hzX(1), y=hy(0,0)+S*0.5; M.hz=null; cam.rate=1.8; shot(1.6,-0.2,5.2,3.5);
-        sfx.crack(); sfx.drum(1); shake(8); burst('plank',x,y-S*0.4,22,1.2); burst('dust',x,y,10);
-        fight(HZ_T,[1,0],'you',t-0.75,{def:'rival',loss:1,left:2,then:function(t2){ burst('chip',hx(2,0),hy(2,0)-10,18,1.2); sfx.crash();
-          floatUp(2,0,'Tower destroyed',GOLD2,t2+0.1,{dy:-30,size:16,life:2.6}); hud([['Their tower','destroyed'],['The square','yours']]); }});
-      });
-    }],
-    ['y4',function(n,d){
-      cam.rate=1.4; shot(-0.6,-0.4,6.6,4.2); hud([['A second horse','on the road']]);
-      M.hz2={t0:n+0.1,t1:n+d*0.52,k1:0.56}; M.watch=n+d*0.2;
-      later(n+d*0.52-0.45,function(t){ M.rock=t; sfx.whoosh(); });
-      later(n+d*0.52,function(t){ M.hz2.wreck=t; M.watch=null; var x=hzX(0.56), y=hy(0,0)+S*0.5; sfx.crack(); sfx.thud(); shake(10);
-        burst('plank',x,y-S*0.3,24,1.3); burst('dust',x,y,12); burst('chip',x,y-S*0.3,8);
-        floatXY(x,y-S*1.2,'Wrecked',' #FF9C88'.trim(),t+0.1,{size:18,life:2.6}); hud([['The horse','smashed on the road']]); });
-    }]
-  ],
-  draw:function(now){
-    var y=hy(0,0)+S*0.5;
-    if(M.aim!=null) spot(HZ_T[0],HZ_T[1],now,'#FF6A4A',clamp((now-M.aim)/0.3,0,1));
-    if(M.hz){
-      var k=M.roll?easeIO((now-M.roll[0])/(M.roll[1]-M.roll[0])):M.hz.k, x=hzX(k), sc=back((now-M.hz.t0)/0.4); M.hz.k=k;
-      ctx.save(); ctx.translate(x,y); ctx.scale(sc,sc); artHorse(ctx,0,0,S*1.25,T.p0,M.roll&&k>0&&k<1?now:0,1); ctx.restore();
-      if(M.roll&&k>0.01&&k<0.99&&!REDUCED&&Math.random()<0.2) emit({k:'dust',x:x-S*0.6,y:y+S*0.2,vx:rnd(-16,-4),vy:rnd(-8,-2),life:0.7,r:rnd(3,6)});
-      if(M.what!=null){                                       /* what is inside? gifts, or soldiers */
-        var u=now-M.what, a=clamp(u/0.3,0,1), flip=Math.floor(u/0.9)%2, bx=x, by=y-S*1.7+Math.sin(now*3)*2;
-        ctx.save(); ctx.globalAlpha=a; ctx.beginPath(); ctx.arc(bx,by,S*0.42,0,6.284); ctx.fillStyle='rgba(8,12,13,0.88)'; ctx.fill(); ctx.strokeStyle=GOLD; ctx.lineWidth=2; ctx.stroke();
-        ctx.beginPath(); ctx.arc(bx-S*0.2,by+S*0.52,3.5,0,6.284); ctx.arc(bx-S*0.3,by+S*0.7,2,0,6.284); ctx.fillStyle=GOLD; ctx.fill();
-        if(flip) icon('sword',bx,by,S*0.5); else { icon('timber',bx-6,by-3,S*0.34); icon('grain',bx+8,by+2,S*0.34); }
-        ctx.restore(); label(bx,by-S*0.72,flip?'soldiers?':'gifts?',13,T.ink,a);
-      }
-    }
-    if(M.hz2){
-      var x2=hzX(M.hz2.k1*easeIO((now-M.hz2.t0)/(M.hz2.t1-M.hz2.t0)));
-      if(M.hz2.wreck!=null) artWreck(ctx,hzX(M.hz2.k1),y,S*1.25,T.p0,1,0); else if(now>=M.hz2.t0) artHorse(ctx,x2,y,S*1.25,T.p0,now,1);
-    }
-    if(M.watch!=null){ var a2=clamp((now-M.watch)/0.3,0,1); spot(HZ_B[0],HZ_B[1],now,'#FF6A4A',a2); label(hx(HZ_B[0],HZ_B[1]),hy(HZ_B[0],HZ_B[1])-S*1.25,'their tower is watching',13,'#FF9C88',a2); }
-    if(M.rock!=null){ var rk=(now-M.rock)/0.45; if(rk>0&&rk<1){ var ax=hx(HZ_B[0],HZ_B[1]), ay=hy(HZ_B[0],HZ_B[1])-S*0.7, tx=hzX(M.hz2.k1), ty=y-S*0.4;
-      for(var j=4;j>=0;j--){ var kk=rk-j*0.03; if(kk<=0) continue; ctx.beginPath(); ctx.arc(lerp(ax,tx,kk),lerp(ay,ty,kk)-S*1.3*4*kk*(1-kk),j?4-j*0.6:5.5,0,6.284); ctx.fillStyle=j?'rgba(190,190,180,'+(0.3-j*0.05)+')':NAT.rockHi; ctx.fill(); } } }
   }
 });
 
