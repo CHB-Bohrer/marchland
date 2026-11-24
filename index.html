@@ -1344,6 +1344,7 @@ function castleFedCached(c){
    them back from its old copy of the board, the next up-to-date screen takes it away again.
    30_45: Elisa's first keep, placed on Bohrer's ground by the old seating bug and moved to -8_-41. */
 var REMOVED_KEEPS={'30_45':'p1xlplnb'};
+var siteOk={}, siteBusy={};                          // castle sites checked against the database just now (see settleCastles)
 function settleCastles(){
   if(!G||!boardFresh()) return 0;
   var now=Date.now(), changed=0;
@@ -1396,6 +1397,16 @@ function settleCastles(){
     } }
     if(!live){ delete sc.cb; delete sc.cbo; pushCell(sq,sr); changed++; if(so===ME) say('<span class="bad">Your castle at that site stopped</span> &mdash; one of the six squares around it was lost. Nothing was paid.'); continue; }
     if(so===ME && sc.cb<=now){
+      /* Before a site is finished, ask the database whether it really is still my site (once a minute). A screen whose copy of the
+         board is out of step with the real one (an old page left open across an earthquake) used to finish castles on squares that
+         were someone else's, writing over them: Sir Charlton lost two castles and a tower that way on 23 Nov 2026. */
+      if(online && !(siteOk[sk]>now-60000)){
+        if(!siteBusy[sk]){ siteBusy[sk]=1; (function(k2,q2,r2){ cellFresh(q2,r2).then(function(f){ siteBusy[k2]=0; var fc=f.c;
+          if(fc && fc.o===ME && fc.cb && fc.cbo===ME) siteOk[k2]=Date.now();
+          else { if(fc) G.cells[k2]=fc; else delete G.cells[k2]; cellsGen++; }
+        }).catch(function(){ siteBusy[k2]=0; }); })(sk,sq,sr); }
+        continue;
+      }
       var scost=castleCost(ME), spl=me(), can=fieldOf(ME)>=SPEC[CASTLE].gar[1];
       for(var sg in scost){ if((spl.res[sg]||0)<scost[sg]) can=false; }
       if(!can) continue;
@@ -3635,21 +3646,6 @@ function caffaShot(q,r){
 }
 function plagueBringer(pid){ var b=G&&G.pest&&G.pest.br&&G.pest.br[pid]; return !!(b&&Date.now()-b<BRINGER_MS); }
 
-/* ── the guide: every rule, on scrolls ── */
-function faithTutorial(){
-  var html='<p><b>Churches.</b> A church costs '+costLine(CHURCH_COST)+', takes 12 hours to raise, and eats '+CHURCH_GRAIN+' grain a tick. You can have '+CHURCH_MAX+', each holding '+CHURCH_SLOTS+' priests. The first priest comes free, at wisdom '+WISE0+'.</p>'
-   +'<p><b>Priests.</b> Barefoot and unarmed, they walk one square an hour over any ground, rivers and bridges as soldiers do. Tap any square and choose <b>Send a priest here</b>. A new priest costs '+TRAIN_COST.grain+' grain and '+TRAIN_MARCH+' marches and a day, and has the wisdom the church can teach (it starts at '+WISE0+'). Each priest who dies lowers that church&rsquo;s wisdom by '+WISE_DROP+' (never below '+WISE_FLOOR+'). <b>Study</b> at the church ('+STUDY_COST.grain+' grain, '+STUDY_MARCH+' marches, 2 days) raises it by 1, up to '+WISE0+'.</p>'
-   +'<p><b>Death.</b> A priest dies if an enemy band stands on his square, unless a band of yours is with him. If a blessed band loses its fight, one priest with it may die (1 in 4).</p>'
-   +'<p><b>Blessing.</b> A priest standing with a band can bless it for '+BLESS_GRAIN+' grain: until it next fights, or a day. In the odds it counts wisdom &divide; '+BLESS_DIV+' extra soldiers. A band can be blessed once a day. Moving a band ends the blessing.</p>'
-   +'<p><b>Burying the dead.</b> A priest standing on a square with crosses can bury the fallen for '+BURY_IRON+' iron each, and the crosses are gone.</p>'
-   +'<p><b>Tithes.</b> Priests inside their churches give grain every tick: all their wisdom added up, divided by '+TITHE_DIV+', rounded down.</p>';
-  if(pestEver()) html+='<hr><p><b>The plague.</b> A sick square gives half its harvest for 3 days, then recovers and can&rsquo;t be caught for 2 days; after that it can be caught again. Sick bands lose a man every 2 ticks. It spreads to a neighbour about 20% a tick (35% road to road), a little less the farther from where it began; a wall makes it 50%, 35% or 25% by level but never stops it. Cut a road and the road&rsquo;s extra chance is gone.</p>'
-   +'<p><b>Priests and the plague.</b> A priest cuts the chance of catching it on his square and beside it, cures 8% of his wisdom each tick, and keeps bands near him from dying. But tending the sick can kill him (4% for each sick square near him, at most 30% a tick).</p>'
-   +'<p><b>Burning.</b> Burn your own sick square: it burns 2 days, the sickness is gone, and it can&rsquo;t be caught while it burns.</p>'
-   +'<p><b>The Siege of Caffa.</b> A trebuchet can hurl a plague corpse (1 stone and 1 corpse; soldiers who die of plague leave corpses, at most '+CORPSE_CAP+' for you) at an enemy square within '+CAFFA_RANGE+', and it and its neighbours fall sick. Whoever does it is marked a plague-bringer for 3 days.</p>';
-  scrollDialog({eyebrow:'The Church', title:'Churches, priests'+(pestEver()?' and the plague':''), html:html, cancel:null, buttons:[{label:'Got it',value:null,primary:true}]});
-}
-
 /* ── the menu entries ── */
 function faithActions(q,r,c,A,wet){
   if(!faithOn()) return;
@@ -3755,35 +3751,238 @@ function settlePest(){
   }).catch(function(){}).then(function(){ done(); render(); });
 }
 
-/* ── drawn on the map: churches, sick squares, priests ── */
+/* ── the art: a church with a bell that swings and a window that glows; barefoot priests; the sick land ── */
+var FC_GLASS=['#c0392b','#e0a526','#2f7fb8','#3f9a5b','#8a4fa8','#d9702b','#2f7fb8','#e0a526'];
+function artChurch(g,x,y,s,col,t,o){
+  o=o||{}; g.save(); g.translate(x,y);
+  var lw=Math.max(0.8,s*0.03), sg, k=o.k==null?1:o.k, pulse=0.8+0.2*Math.sin(t*2.3), i;
+  blob(g,s*0.04,s*0.45,s*0.62,s*0.12,NAT.shadow);
+  if(k<1) g.globalAlpha=0.5;
+  // the bell tower behind, with its belfry and a swinging bell
+  sg=g.createLinearGradient(-s*0.42,0,-s*0.18,0); sg.addColorStop(0,NAT.stoneHi); sg.addColorStop(0.5,NAT.stone); sg.addColorStop(1,NAT.stone2);
+  poly(g,[[-s*0.43,s*0.42],[-s*0.41,-s*0.52],[-s*0.19,-s*0.52],[-s*0.17,s*0.42]],sg,NAT.stone2,lw);
+  stoneLines(g,-s*0.42,-s*0.52,s*0.24,s*0.94,7);
+  g.beginPath(); g.moveTo(-s*0.38,-s*0.34); g.lineTo(-s*0.38,-s*0.44); g.arc(-s*0.3,-s*0.44,s*0.08,Math.PI,0); g.lineTo(-s*0.22,-s*0.34); g.closePath(); g.fillStyle=NAT.gate; g.fill();
+  g.save(); g.translate(-s*0.3,-s*0.47); g.rotate(Math.sin(t*1.7)*0.28);
+  poly(g,[[-s*0.045,s*0.1],[-s*0.03,s*0.01],[0,-s*0.03],[s*0.03,s*0.01],[s*0.045,s*0.1]],'#d9b24a',NAT.line,lw*0.5); blob(g,0,s*0.105,s*0.012,s*0.012,NAT.line);
+  g.restore();
+  poly(g,[[-s*0.45,-s*0.52],[-s*0.3,-s*0.88],[-s*0.15,-s*0.52]],null);
+  coneRoof(g,-s*0.3,-s*0.52,s*0.17,s*0.36,col,lw*0.8);
+  g.strokeStyle='#e7c45a'; g.lineWidth=Math.max(1,s*0.035); g.lineCap='round';                       // a gilded cross on the spire
+  g.beginPath(); g.moveTo(-s*0.3,-s*0.88); g.lineTo(-s*0.3,-s*1.02); g.moveTo(-s*0.35,-s*0.96); g.lineTo(-s*0.25,-s*0.96); g.stroke();
+  // the nave, end-on: a stone gable in the owner's colours, buttressed
+  poly(g,[[-s*0.2,s*0.42],[-s*0.2,-s*0.04],[s*0.4,-s*0.04],[s*0.4,s*0.42]],null);
+  sg=g.createLinearGradient(-s*0.2,0,s*0.4,0); sg.addColorStop(0,NAT.stoneHi); sg.addColorStop(0.45,NAT.stone); sg.addColorStop(1,NAT.stone2);
+  poly(g,[[-s*0.2,s*0.42],[-s*0.2,-s*0.04],[s*0.4,-s*0.04],[s*0.4,s*0.42]],sg,NAT.stone2,lw);
+  stoneLines(g,-s*0.2,-s*0.04,s*0.6,s*0.46,5);
+  [[-s*0.2,-1],[s*0.4,1]].forEach(function(b){ poly(g,[[b[0],s*0.42],[b[0],s*0.0],[b[0]+b[1]*s*0.07,s*0.12],[b[0]+b[1]*s*0.07,s*0.42]],NAT.stone2,NAT.line,lw*0.5); });
+  poly(g,[[-s*0.25,-s*0.04],[s*0.1,-s*0.5],[s*0.45,-s*0.04]],col);
+  poly(g,[[s*0.1,-s*0.5],[s*0.45,-s*0.04],[s*0.14,-s*0.04]],'rgba(0,0,0,0.24)');
+  poly(g,[[s*0.1,-s*0.5],[s*0.05,-s*0.04],[-s*0.25,-s*0.04]],'rgba(255,255,255,0.2)');
+  poly(g,[[-s*0.25,-s*0.04],[s*0.1,-s*0.5],[s*0.45,-s*0.04]],null,NAT.line,lw);
+  g.strokeStyle='#e7c45a'; g.lineWidth=Math.max(1,s*0.032);
+  g.beginPath(); g.moveTo(s*0.1,-s*0.5); g.lineTo(s*0.1,-s*0.62); g.moveTo(s*0.055,-s*0.57); g.lineTo(s*0.145,-s*0.57); g.stroke();
+  // the rose window: eight panes of coloured glass, glowing from within
+  var rx=s*0.1, ry=s*0.14, rr=s*0.095;
+  g.beginPath(); g.arc(rx,ry-s*0.28,rr+s*0.02,0,6.284); g.fillStyle=NAT.stoneHi; g.fill(); g.strokeStyle=NAT.stone2; g.lineWidth=lw*0.8; g.stroke();
+  for(i=0;i<8;i++){ g.beginPath(); g.moveTo(rx,ry-s*0.28); g.arc(rx,ry-s*0.28,rr,i*Math.PI/4,(i+1)*Math.PI/4); g.closePath(); g.fillStyle=FC_GLASS[i]; g.globalAlpha=(k<1?0.5:1)*(0.75+0.25*pulse); g.fill(); }
+  g.globalAlpha=k<1?0.5:1; g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.6,s*0.014);
+  g.beginPath(); for(i=0;i<4;i++){ g.moveTo(rx+Math.cos(i*Math.PI/4)*rr,ry-s*0.28+Math.sin(i*Math.PI/4)*rr); g.lineTo(rx-Math.cos(i*Math.PI/4)*rr,ry-s*0.28-Math.sin(i*Math.PI/4)*rr); } g.stroke();
+  blob(g,rx,ry-s*0.28,rr*0.22,rr*0.22,NAT.glow);
+  // lancet windows and the great door, with candlelight spilling out
+  [-s*0.08,s*0.28].forEach(function(wx){ g.beginPath(); g.moveTo(wx-s*0.028,s*0.2); g.lineTo(wx-s*0.028,s*0.08); g.arc(wx,s*0.08,s*0.028,Math.PI,0); g.lineTo(wx+s*0.028,s*0.2); g.closePath(); g.fillStyle=NAT.gate; g.fill();
+    g.beginPath(); g.moveTo(wx-s*0.018,s*0.19); g.lineTo(wx-s*0.018,s*0.085); g.arc(wx,s*0.085,s*0.018,Math.PI,0); g.lineTo(wx+s*0.018,s*0.19); g.closePath(); g.fillStyle=NAT.glow; g.globalAlpha=(k<1?0.5:1)*(0.6+0.4*pulse); g.fill(); g.globalAlpha=k<1?0.5:1; });
+  g.beginPath(); g.moveTo(-s*0.03,s*0.42); g.lineTo(-s*0.03,s*0.26); g.arc(s*0.1,s*0.26,s*0.13,Math.PI,0); g.lineTo(s*0.23,s*0.42); g.closePath(); g.fillStyle=NAT.stoneHi; g.fill(); g.strokeStyle=NAT.stone2; g.lineWidth=lw*0.8; g.stroke();
+  g.beginPath(); g.moveTo(s*0.0,s*0.42); g.lineTo(s*0.0,s*0.26); g.arc(s*0.1,s*0.26,s*0.1,Math.PI,0); g.lineTo(s*0.2,s*0.42); g.closePath(); g.fillStyle=NAT.wood2; g.fill();
+  g.save(); g.clip(); g.strokeStyle=NAT.line; g.lineWidth=Math.max(0.5,s*0.012); g.beginPath(); g.moveTo(s*0.1,s*0.14); g.lineTo(s*0.1,s*0.42); for(i=0;i<3;i++){ g.moveTo(s*0.0,s*(0.22+i*0.07)); g.lineTo(s*0.2,s*(0.22+i*0.07)); } g.stroke();
+  var gl=g.createRadialGradient(s*0.1,s*0.4,0,s*0.1,s*0.4,s*0.2); gl.addColorStop(0,'rgba(255,201,107,'+(0.5*pulse)+')'); gl.addColorStop(1,'rgba(255,201,107,0)'); g.fillStyle=gl; g.fillRect(-s*0.1,s*0.2,s*0.4,s*0.25); g.restore();
+  // a candle on the step for every priest at home
+  var n=Math.min(3,o.cand||0);
+  for(i=0;i<n;i++){ var cx=s*(0.0+i*0.1), fl=0.8+0.2*Math.sin(t*9+i*2); g.fillStyle='#efe6d2'; g.fillRect(cx-s*0.012,s*0.42,s*0.024,s*0.05); blob(g,cx,s*0.41,s*0.014,s*0.02*fl+s*0.01,NAT.glow); }
+  g.globalAlpha=1;
+  if(k<1){                                                      // still being raised: a scaffold of timber
+    g.strokeStyle=NAT.wood2; g.lineWidth=Math.max(1,s*0.03); g.beginPath();
+    for(i=0;i<4;i++){ g.moveTo(-s*0.45+i*s*0.28,s*0.44); g.lineTo(-s*0.45+i*s*0.28,-s*0.3); }
+    for(i=0;i<3;i++){ g.moveTo(-s*0.45,s*0.3-i*s*0.28); g.lineTo(s*0.4,s*0.3-i*s*0.28); } g.stroke();
+  }
+  g.restore();
+}
+/* a priest: cream robe, the owner's colours on hood and sash, bare feet, a staff topped by a cross. o: {face, ph (walking), glow, bless} */
+function artPriest(g,x,y,h,col,o){
+  o=o||{};
+  if(h<7){ blob(g,x,y-h*0.5,Math.max(1.8,h*0.32),Math.max(1.8,h*0.32),'#efe6d2'); blob(g,x,y-h*0.5,Math.max(0.9,h*0.15),Math.max(0.9,h*0.15),col); return; }
+  var f=o.face||1, ph=o.ph||0, lw=Math.max(1,h*0.08), hem=-h*0.06, sh=-h*0.74, sw=Math.sin(ph)*h*0.13, sway=Math.sin(ph*0.5)*h*0.02;
+  g.save(); g.translate(x,y); g.scale(f,1);
+  if(o.glow){ var ra=g.createRadialGradient(0,-h*0.5,0,0,-h*0.5,h*0.95); ra.addColorStop(0,'rgba(255,214,120,0.55)'); ra.addColorStop(1,'rgba(255,214,120,0)'); g.fillStyle=ra; g.beginPath(); g.arc(0,-h*0.5,h*0.95,0,6.284); g.fill(); }
+  blob(g,0,0,h*0.24,h*0.06,NAT.shadow);
+  g.lineCap='round'; g.lineJoin='round';
+  g.fillStyle=NAT.skin; g.strokeStyle=NAT.line; g.lineWidth=lw*0.35;                    // bare feet
+  blob(g,-h*0.07-sw*0.6,-h*0.015,h*0.07,h*0.032,NAT.skin); blob(g,h*0.09+sw*0.6,-h*0.015,h*0.07,h*0.032,NAT.skin);
+  var bx=Math.sin(ph)*h*0.04;
+  poly(g,[[-h*0.13,sh],[h*0.13,sh],[h*0.22+bx,hem],[h*0.06,hem+h*0.03+sway],[-h*0.06,hem+h*0.02],[-h*0.22+bx,hem]],'#efe6d2',NAT.line,lw*0.5);            // the robe, its hem swaying
+  poly(g,[[-h*0.13,sh],[-h*0.02,sh],[-h*0.06,hem],[-h*0.22+bx,hem]],'rgba(0,0,0,0.16)');
+  poly(g,[[-h*0.145,sh+h*0.2],[h*0.145,sh+h*0.2],[h*0.15,sh+h*0.26],[-h*0.15,sh+h*0.26]],col,NAT.line,lw*0.4);                                         // the sash in the owner's colours
+  poly(g,[[-h*0.15,sh+h*0.02],[0,sh-h*0.18],[h*0.15,sh+h*0.02],[h*0.1,sh+h*0.1],[-h*0.1,sh+h*0.1]],col,NAT.line,lw*0.5);                              // the hood
+  blob(g,h*0.012,sh-h*0.03,h*0.07,h*0.08,NAT.skin);
+  var ax=h*0.24, ay=sh+h*0.2-(o.bless?h*0.16:0);                                         // the arm holding the staff, or raised to bless
+  g.strokeStyle=NAT.line; g.lineWidth=lw*0.8; g.beginPath(); g.moveTo(h*0.08,sh+h*0.1); g.lineTo(ax,ay); g.stroke();
+  g.strokeStyle=NAT.wood2; g.lineWidth=lw*0.8; g.beginPath(); g.moveTo(ax,ay+h*0.34); g.lineTo(ax,sh-h*0.2); g.stroke();                                // the staff
+  g.strokeStyle='#e7c45a'; g.lineWidth=lw*0.75; g.beginPath(); g.moveTo(ax,sh-h*0.2); g.lineTo(ax,sh-h*0.38); g.moveTo(ax-h*0.07,sh-h*0.31); g.lineTo(ax+h*0.07,sh-h*0.31); g.stroke();
+  if(o.bless){ g.strokeStyle='rgba(255,214,120,0.9)'; g.lineWidth=lw*0.5; g.beginPath(); g.moveTo(-h*0.09,sh+h*0.05); g.lineTo(-h*0.3,sh-h*0.14); g.stroke(); }
+  g.restore();
+}
+/* the sickness: a green wash on the square, wisps turning, flies, a little skull; and after it a pale healing shimmer */
+function artMiasma(g,x,y,s,t,seed){
+  var i, a;
+  g.save();
+  var gr=g.createRadialGradient(x,y,s*0.1,x,y,s*0.95); gr.addColorStop(0,'rgba(125,154,30,0.5)'); gr.addColorStop(1,'rgba(70,95,14,0.18)');
+  g.fillStyle=gr; hexPath(x,y,s*0.92); g.fill();
+  g.strokeStyle='rgba(54,72,10,0.55)'; g.lineWidth=Math.max(1,s*0.05); hexPath(x,y,s*0.9); g.stroke();
+  for(i=0;i<6;i++){ a=t*0.55+i*1.047+seed; var rr=s*(0.34+0.14*Math.sin(t*0.9+i+seed)); blob(g,x+Math.cos(a)*rr,y+Math.sin(a)*rr*0.6,s*0.2,s*0.11,'rgba(150,175,50,'+(0.2+0.08*Math.sin(t+i))+')'); }
+  if(s>=11){ g.fillStyle='rgba(30,36,10,0.85)'; for(i=0;i<4;i++){ a=t*3.1+i*1.57+seed; g.beginPath(); g.arc(x+Math.cos(a)*s*0.5*Math.cos(t*0.7+i),y+Math.sin(a*1.3)*s*0.35,Math.max(0.7,s*0.025),0,6.284); g.fill(); } }
+  if(s>=13){                                                    // a bleached skull
+    var sx=x,sy=y-s*0.05,k=s*0.26; g.fillStyle='#e8e2cf'; g.strokeStyle='#3a3320'; g.lineWidth=Math.max(0.8,s*0.025);
+    g.beginPath(); g.arc(sx,sy-k*0.15,k*0.72,Math.PI,0); g.lineTo(sx+k*0.55,sy+k*0.4); g.lineTo(sx+k*0.3,sy+k*0.4); g.lineTo(sx+k*0.3,sy+k*0.62); g.lineTo(sx-k*0.3,sy+k*0.62); g.lineTo(sx-k*0.3,sy+k*0.4); g.lineTo(sx-k*0.55,sy+k*0.4); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle='#2a2616'; blob(g,sx-k*0.28,sy-k*0.05,k*0.19,k*0.22,'#2a2616'); blob(g,sx+k*0.28,sy-k*0.05,k*0.19,k*0.22,'#2a2616');
+    g.fillRect(sx-k*0.05,sy+k*0.15,k*0.1,k*0.14);
+  }
+  g.restore();
+}
+function artRecover(g,x,y,s,t){
+  g.save(); g.strokeStyle='rgba(120,190,170,0.75)'; g.lineWidth=Math.max(1,s*0.06); g.setLineDash([s*0.2,s*0.14]); g.lineDashOffset=-t*8; hexPath(x,y,s*0.9); g.stroke(); g.setLineDash([]);
+  for(var i=0;i<3;i++){ var k=((t*0.35+i/3)%1); g.fillStyle='rgba(170,225,205,'+(0.7*(1-k))+')'; g.beginPath(); g.arc(x+Math.sin(i*2.1+t)*s*0.3,y+s*0.3-k*s*0.7,Math.max(1,s*0.05),0,6.284); g.fill(); }
+  g.restore();
+}
+function artBlessing(g,x,y,s,t){                               // a golden halo over a blessed band, with sparks turning in it
+  g.save(); var pulse=0.7+0.3*Math.sin(t*2.6);
+  g.strokeStyle='rgba(240,200,90,'+(0.85*pulse)+')'; g.lineWidth=Math.max(1.2,s*0.06); g.beginPath(); g.ellipse(x,y-s*0.52,s*0.3,s*0.1,0,0,6.284); g.stroke();
+  var rg=g.createRadialGradient(x,y,0,x,y,s*0.85); rg.addColorStop(0,'rgba(255,225,130,'+(0.3*pulse)+')'); rg.addColorStop(1,'rgba(255,225,130,0)'); g.fillStyle=rg; g.beginPath(); g.arc(x,y,s*0.85,0,6.284); g.fill();
+  for(var i=0;i<5;i++){ var a=t*1.4+i*1.256; g.fillStyle='rgba(255,236,160,'+(0.55+0.4*Math.sin(t*4+i))+')'; g.beginPath(); g.arc(x+Math.cos(a)*s*0.3,y-s*0.52+Math.sin(a)*s*0.1,Math.max(0.8,s*0.03),0,6.284); g.fill(); }
+  g.restore();
+}
+/* ── drawn on the map ── */
 function drawFaith(now){
   if(!G) return;
-  var show=faithOn(), k, c, a, P, id;
+  var show=faithOn(), t=clock(), nowMs=Date.now(), k, c, a, P, id, ds=S>=12;
   for(k in G.cells){
-    c=G.cells[k]; var sk=infected(c), rc=recovering(c), ch=show&&isChurch(c); if(!sk&&!rc&&!ch) continue;
+    c=G.cells[k]; var sk=infected(c,nowMs), rc=!sk&&recovering(c,nowMs), ch=show&&isChurch(c), bl=show&&c.b>0&&c.bs>nowMs;
+    if(!sk&&!rc&&!ch&&!bl) continue;
     a=pkey(k); P=toNear(a[0],a[1]); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
-    ctx.save();
-    if(sk){ ctx.globalAlpha=0.35+0.1*Math.sin(now*3); ctx.fillStyle='#7d9a1e'; hexPath(P[0],P[1],S*0.92); ctx.fill(); ctx.globalAlpha=0.9; if(S>=12){ ctx.fillStyle='#2f3d06'; ctx.font='700 '+Math.round(S*0.5)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('☠',P[0],P[1]-S*0.45); } }
-    else if(rc){ ctx.globalAlpha=0.6; ctx.strokeStyle='#7d9a1e'; ctx.lineWidth=Math.max(1,S*0.06); ctx.setLineDash([3,3]); hexPath(P[0],P[1],S*0.9); ctx.stroke(); ctx.setLineDash([]); }
+    if(sk) artMiasma(ctx,P[0],P[1],S,t,a[0]*0.7+a[1]*1.3);
+    else if(rc) artRecover(ctx,P[0],P[1],S,t);
+    if(bl) artBlessing(ctx,P[0],P[1],S,t);
     if(ch){
-      var col=pColor(c.o), w=S*0.5, h=S*0.4, x=P[0]-S*0.55, y=P[1]-S*0.55; ctx.globalAlpha=c.ch.f>Date.now()?0.45:1;
-      ctx.fillStyle='#efe6d2'; ctx.strokeStyle=col; ctx.lineWidth=Math.max(1,S*0.06); ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h);
-      ctx.beginPath(); ctx.moveTo(x-S*0.05,y); ctx.lineTo(x+w/2,y-S*0.3); ctx.lineTo(x+w+S*0.05,y); ctx.closePath(); ctx.fillStyle=col; ctx.fill();
-      ctx.strokeStyle=col; ctx.beginPath(); ctx.moveTo(x+w/2,y-S*0.3); ctx.lineTo(x+w/2,y-S*0.5); ctx.moveTo(x+w/2-S*0.08,y-S*0.42); ctx.lineTo(x+w/2+S*0.08,y-S*0.42); ctx.stroke();
+      var col=pColor(c.o), done=!(c.ch.f>nowMs), prog=done?1:Math.max(0.05,1-(c.ch.f-nowMs)/CHURCH_BUILD_MS), cand=0;
+      for(id in (G.priests||{})){ var pp=G.priests[id]; if(pp&&pp.h===k&&pp.st==='h') cand++; }
+      if(ds) artChurch(ctx,P[0],P[1]+S*0.1,S*0.8,col,t,{k:done?1:0.7,cand:cand});
+      else { ctx.save(); ctx.fillStyle=col; ctx.fillRect(P[0]-S*0.3,P[1]-S*0.12,S*0.6,S*0.5); ctx.beginPath(); ctx.moveTo(P[0]-S*0.38,P[1]-S*0.12); ctx.lineTo(P[0],P[1]-S*0.55); ctx.lineTo(P[0]+S*0.38,P[1]-S*0.12); ctx.closePath(); ctx.fill(); ctx.restore(); }
+      if(!done&&S>=14){                                      // a progress bar, like a castle going up
+        var bw=S*1.1, bh=Math.max(3,S*0.14), bx=P[0]-bw/2, by=P[1]+S*0.52;
+        ctx.save(); ctx.globalAlpha=.9; ctx.fillStyle=T['--surface']; ctx.fillRect(bx-1,by-1,bw+2,bh+2); ctx.fillStyle=col; ctx.fillRect(bx,by,bw*prog,bh); ctx.strokeStyle=col; ctx.lineWidth=1; ctx.strokeRect(bx-.5,by-.5,bw+1,bh+1);
+        if(S>=18){ ctx.font='600 '+Math.round(S*0.28)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=col; ctx.fillText(hoursLeft(c.ch.f),P[0],by+bh+2); }
+        ctx.restore();
+      }
     }
-    ctx.restore();
   }
   if(!show) return;
   for(id in (G.priests||{})){
     var p=G.priests[id]; if(!p||p.st==='h') continue;
-    var pos=priestPos(p,now), q=pos[0], r=pos[1]; P=toNear(q,r); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
-    var col2=pColor(p.o), s=Math.max(6,S*0.5), x2=P[0]+S*0.35, y2=P[1]+S*0.1;
-    ctx.save(); ctx.fillStyle='#efe6d2'; ctx.strokeStyle=col2; ctx.lineWidth=Math.max(1,S*0.07);
-    ctx.beginPath(); ctx.moveTo(x2,y2-s*0.2); ctx.lineTo(x2-s*0.3,y2+s*0.5); ctx.lineTo(x2+s*0.3,y2+s*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(x2,y2-s*0.35,s*0.16,0,6.284); ctx.fill(); ctx.stroke();
-    if(S>=12){ ctx.beginPath(); ctx.moveTo(x2,y2-s*0.9); ctx.lineTo(x2,y2-s*0.6); ctx.moveTo(x2-s*0.1,y2-s*0.8); ctx.lineTo(x2+s*0.1,y2-s*0.8); ctx.stroke(); }
-    ctx.restore();
+    var pos=priestPos(p,nowMs); P=toNear(pos[0],pos[1]); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
+    var path=priestPath(p), moving=!priestArrived(p,nowMs), col2=pColor(p.o), face=1, blessed=false, cc=G.cells[key(pos[0],pos[1])];
+    if(cc&&cc.o===p.o&&cc.b>0&&cc.bs>nowMs) blessed=true;
+    if(moving){
+      var last=path[path.length-1], LP=toNear(last[0],last[1]); face=LP[0]>=P[0]?1:-1;
+      if(p.o===ME||true){ ctx.save(); ctx.strokeStyle='rgba(231,196,90,0.85)'; ctx.lineWidth=Math.max(1.2,S*0.07); ctx.setLineDash([Math.max(3,S*0.22),Math.max(3,S*0.16)]); ctx.lineDashOffset=-clock()*14;
+        ctx.beginPath(); ctx.moveTo(P[0],P[1]); var i0=Math.min(path.length-1,Math.floor((nowMs-(p.t||0))/PRIEST_STEP_MS)+1); for(var pi=i0;pi<path.length;pi++){ var QQ=toNear(path[pi][0],path[pi][1]); ctx.lineTo(QQ[0],QQ[1]); } ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle='rgba(231,196,90,0.95)'; ctx.beginPath(); ctx.arc(LP[0],LP[1],Math.max(3,S*0.14),0,6.284); ctx.fill(); ctx.restore(); }
+    }
+    var hh=Math.max(8,S*0.78), px=P[0]+S*0.34, py=P[1]+S*0.46;
+    artPriest(ctx,px,py,hh,col2,{face:face,ph:moving?clock()*9+id.length:0,glow:blessed,bless:blessed});
+    if(S>=16&&p.o===ME){ ctx.save(); ctx.font='600 '+Math.round(S*0.26)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=col2; ctx.globalAlpha=.95; ctx.fillText('✠'+(p.w||0)+(moving?' · '+fmtDur(Math.max(0,(p.t||0)+(path.length-1)*PRIEST_STEP_MS-nowMs)):''),px,py+S*0.06); ctx.restore(); }
   }
+}
+
+/* ── the guide: scrolls with pictures, like the trebuchet and crusade guides ── */
+function fcChurchSvg(x,y,k,col){
+  var S0='#cfc8b6', S1='#9c9686', S2='#e3ddcc', G0='#e7c45a';
+  var wedges=''; for(var i=0;i<8;i++){ var a0=i*Math.PI/4, a1=(i+1)*Math.PI/4; wedges+='<path d="M'+(x+4*k)+' '+(y-30*k)+' L'+(x+4*k+8*k*Math.cos(a0))+' '+(y-30*k+8*k*Math.sin(a0))+' A'+8*k+' '+8*k+' 0 0 1 '+(x+4*k+8*k*Math.cos(a1))+' '+(y-30*k+8*k*Math.sin(a1))+' Z" fill="'+FC_GLASS[i]+'"/>'; }
+  return '<g stroke="#3a2f18" stroke-width="1.2" stroke-linejoin="round">'
+    +'<path d="M'+(x-27*k)+' '+y+' L'+(x-26*k)+' '+(y-52*k)+' L'+(x-12*k)+' '+(y-52*k)+' L'+(x-11*k)+' '+y+' Z" fill="'+S1+'"/>'
+    +'<path d="M'+(x-29*k)+' '+(y-52*k)+' L'+(x-19*k)+' '+(y-76*k)+' L'+(x-9*k)+' '+(y-52*k)+' Z" fill="'+col+'"/>'
+    +'<path d="M'+(x-19*k)+' '+(y-76*k)+' V'+(y-88*k)+' M'+(x-23*k)+' '+(y-83*k)+' H'+(x-15*k)+'" stroke="'+G0+'" stroke-width="'+2*k+'" fill="none"/>'
+    +'<rect x="'+(x-12*k)+'" y="'+(y-30*k)+'" width="'+40*k+'" height="'+30*k+'" fill="'+S0+'"/>'
+    +'<path d="M'+(x-15*k)+' '+(y-30*k)+' L'+(x+8*k)+' '+(y-56*k)+' L'+(x+31*k)+' '+(y-30*k)+' Z" fill="'+col+'"/>'
+    +'<circle cx="'+(x+4*k)+'" cy="'+(y-30*k)+'" r="'+9.5*k+'" fill="'+S2+'"/></g>'+wedges
+    +'<path d="M'+(x-1*k)+' '+y+' V'+(y-12*k)+' A'+9*k+' '+9*k+' 0 0 1 '+(x+17*k)+' '+(y-12*k)+' V'+y+' Z" fill="#6f4d2b" stroke="#3a2f18" stroke-width="1.2"/>'
+    +'<path d="M'+(x+8*k)+' '+(y-20*k)+' V'+y+'" stroke="#3a2f18" stroke-width="1"/>';
+}
+function fcPriestSvg(x,y,k,col,pose){
+  var cross='<path d="M'+(x+13*k)+' '+(y-18*k)+' V'+(y-48*k)+' M'+(x+9*k)+' '+(y-42*k)+' H'+(x+17*k)+'" stroke="#8a6a1c" stroke-width="'+1.8*k+'" fill="none"/>';
+  return '<g stroke="#3a2f18" stroke-width="1.1" stroke-linejoin="round">'
+    +'<ellipse cx="'+(x-5*k)+'" cy="'+(y-1*k)+'" rx="'+4.5*k+'" ry="'+2.2*k+'" fill="#e0b48e"/><ellipse cx="'+(x+6*k)+'" cy="'+(y-1*k)+'" rx="'+4.5*k+'" ry="'+2.2*k+'" fill="#e0b48e"/>'
+    +'<path d="M'+(x-8*k)+' '+(y-38*k)+' L'+(x+8*k)+' '+(y-38*k)+' L'+(x+14*k)+' '+(y-3*k)+' L'+(x-14*k)+' '+(y-3*k)+' Z" fill="#efe6d2"/>'
+    +'<rect x="'+(x-9*k)+'" y="'+(y-24*k)+'" width="'+18*k+'" height="'+4*k+'" fill="'+col+'"/>'
+    +'<path d="M'+(x-9*k)+' '+(y-37*k)+' L'+x+' '+(y-52*k)+' L'+(x+9*k)+' '+(y-37*k)+' L'+(x+6*k)+' '+(y-32*k)+' L'+(x-6*k)+' '+(y-32*k)+' Z" fill="'+col+'"/>'
+    +'<ellipse cx="'+x+'" cy="'+(y-39*k)+'" rx="'+4*k+'" ry="'+4.6*k+'" fill="#e0b48e"/>'
+    +'<path d="M'+(x+13*k)+' '+(y-2*k)+' V'+(y-48*k)+'" stroke="#6f4d2b" stroke-width="'+1.8*k+'" fill="none"/></g>'+cross;
+}
+function fcHalo(x,y,r){ return '<ellipse cx="'+x+'" cy="'+y+'" rx="'+r+'" ry="'+r*0.33+'" fill="none" stroke="#e0a526" stroke-width="2.4"/><circle cx="'+(x-r*0.8)+'" cy="'+(y-4)+'" r="2" fill="#f2d86a"/><circle cx="'+(x+r*0.8)+'" cy="'+(y+3)+'" r="2" fill="#f2d86a"/>'; }
+function fcSoldier(x,y,col){ return '<circle cx="'+x+'" cy="'+(y-9)+'" r="3.4" fill="#e0b48e" stroke="#3a2f18"/><path d="M'+(x-4.5)+' '+(y-5)+' h9 l2 9 h-13 z" fill="'+col+'" stroke="#3a2f18"/>'; }
+function fcCross(x,y){ return '<path d="M'+x+' '+(y-9)+' V'+(y+3)+' M'+(x-4)+' '+(y-5)+' H'+(x+4)+'" stroke="#5a4a2a" stroke-width="2.2" fill="none"/>'; }
+function fcSick(x,y,r){ return crHex(x,y,r,'#a9c25a','#4d6612',2)+'<circle cx="'+x+'" cy="'+(y-1)+'" r="'+r*0.3+'" fill="#e8e2cf" stroke="#3a3320"/><rect x="'+(x-r*0.12)+'" y="'+(y+r*0.18)+'" width="'+r*0.24+'" height="'+r*0.18+'" fill="#e8e2cf" stroke="#3a3320" stroke-width=".6"/><circle cx="'+(x-r*0.11)+'" cy="'+(y-2)+'" r="'+r*0.07+'" fill="#2a2616"/><circle cx="'+(x+r*0.11)+'" cy="'+(y-2)+'" r="'+r*0.07+'" fill="#2a2616"/>'; }
+var FAITH_STEPS=[
+  {title:'Raise a church', pic:function(){
+     return crSvg(crHex(78,70,44,'#e9dcb6')+fcChurchSvg(78,98,0.8,'#8E1B1B')+crTxt(190,44,CHURCH_COST.stone+' stone',12,'start')+crTxt(190,62,CHURCH_COST.timber+' timber',12,'start')+crTxt(190,80,'12 hours to build',12,'start')+crTxt(190,98,CHURCH_GRAIN+' grain a tick',12,'start')); },
+   html:'<p>On an empty square of yours, tap <b>Build a church</b>. You can have <b>'+CHURCH_MAX+'</b>, and each holds <b>'+CHURCH_SLOTS+' priests</b>.</p><p>It stands at once but can be attacked like any square, and does nothing until the 12 hours are up. If an enemy takes the square the church falls and every priest inside dies.</p>'},
+  {title:'Priests walk barefoot', pic:function(){
+     return crSvg(crHex(34,62,18,'#e9dcb6')+crHex(86,48,18,'#dfe8d0')+crHex(138,62,18,'#dfe8d0')+crHex(190,48,18,'#dfe8d0')+crHex(242,62,18,'#e9dcb6','#8E1B1B',2)
+       +fcPriestSvg(86,70,0.62,'#8E1B1B')+crTxt(60,102,'1 hour',10)+crTxt(112,102,'1 hour',10)+crTxt(164,102,'1 hour',10)+crTxt(216,102,'1 hour',10)+'<path d="M34 62 L86 48 L138 62 L190 48 L242 62" stroke="#c9a94a" stroke-width="2" stroke-dasharray="4 3" fill="none"/>'); },
+   html:'<p>A priest is <b>unarmed and barefoot</b> and walks <b>one square an hour</b> over any ground, rivers and bridges as soldiers do, roads or no roads.</p><p>Tap any square and choose <b>Send a priest here</b>. He walks the shortest way. Send him to one of your churches and he goes home.</p>'},
+  {title:'Wisdom', pic:function(){
+     return crSvg(fcPriestSvg(46,96,0.95,'#8E1B1B')+'<rect x="92" y="34" width="150" height="14" rx="7" fill="#e9dcb6" stroke="#5a4a2a"/><rect x="92" y="34" width="150" height="14" rx="7" fill="#d9a62b" stroke="#5a4a2a"/>'
+       +crTxt(92,28,'wisdom 10 (the most a church can teach)',10,'start')+'<rect x="92" y="62" width="90" height="14" rx="7" fill="#d9a62b" stroke="#5a4a2a"/><rect x="182" y="62" width="60" height="14" rx="7" fill="#e9dcb6" stroke="#5a4a2a"/>'
+       +crTxt(92,92,'after a priest dies: 8  (&minus;'+WISE_DROP+')',10,'start')+crTxt(92,108,'study brings it back: +1',10,'start')); },
+   html:'<p>Every priest has a <b>wisdom</b>, and each church can teach only so much. A new church teaches <b>'+WISE0+'</b>. A priest you train has that wisdom; the first priest comes free at '+WISE0+'.</p>'
+     +'<p>Each priest who dies lowers that church&rsquo;s wisdom by <b>'+WISE_DROP+'</b> (never below '+WISE_FLOOR+'). <b>Study</b> at the church ('+STUDY_COST.grain+' grain, '+STUDY_MARCH+' marches, 2 days) raises it by 1, up to '+WISE0+'. Training a priest costs '+TRAIN_COST.grain+' grain, '+TRAIN_MARCH+' marches and a day.</p>'},
+  {title:'Blessing', pic:function(){
+     return crSvg(crHex(100,70,34,'#dfe8d0')+fcHalo(100,34,22)+fcSoldier(88,80,'#2f6fa8')+fcSoldier(100,84,'#2f6fa8')+fcSoldier(112,80,'#2f6fa8')+fcPriestSvg(140,92,0.7,'#2f6fa8')
+       +crTxt(190,54,'3 soldiers',12,'start')+crTxt(190,74,'+ wisdom ÷ '+BLESS_DIV,12,'start')+crTxt(190,94,'in the odds',12,'start')); },
+   html:'<p>Walk a priest to a band, tap the square and choose <b>Bless this band</b> for <b>'+BLESS_GRAIN+' grain</b>. It lasts until the band next fights, or a day. In the odds it counts <b>wisdom &divide; '+BLESS_DIV+'</b> extra soldiers (a wisdom of '+WISE0+' is '+Math.floor(WISE0/BLESS_DIV)+').</p>'
+     +'<p>A band can be blessed once a day, and moving it ends the blessing. If a blessed band <b>loses</b>, the priest with it has a 1 in 4 chance of dying.</p>'},
+  {title:'Bury the fallen', pic:function(){
+     return crSvg(crHex(70,64,36,'#d9d4c4')+fcCross(52,70)+fcCross(70,78)+fcCross(86,68)+'<path d="M118 64 H150" stroke="#3a2f18" stroke-width="2.5"/><polygon points="150,56 166,64 150,72" fill="#3a2f18"/>'+crHex(214,64,36,'#dfe8d0')+fcPriestSvg(214,86,0.7,'#8E1B1B')+crTxt(214,112,BURY_IRON+' iron each',11)); },
+   html:'<p>With a priest standing on a square, tap <b>Bury the fallen</b>. Every cross on it is cleared for <b>'+BURY_IRON+' iron</b> each.</p>'},
+  {title:'The tithe', pic:function(){
+     return crSvg(crHex(70,66,40,'#e9dcb6')+fcChurchSvg(70,98,0.8,'#8E1B1B')+'<path d="M126 64 H160" stroke="#3a2f18" stroke-width="2.5"/><polygon points="160,56 176,64 160,72" fill="#3a2f18"/><g fill="#d9bb5c" stroke="#6d5a1c"><ellipse cx="206" cy="70" rx="16" ry="12"/><ellipse cx="232" cy="78" rx="14" ry="10"/></g>'+crTxt(220,104,'grain every tick',11)); },
+   html:'<p>Priests who are <b>inside their church</b> give a tithe every tick: all their wisdom added up, divided by <b>'+TITHE_DIV+'</b>, rounded down. Three priests of wisdom '+WISE0+' give '+Math.floor(3*WISE0/TITHE_DIV)+' grain a tick. A priest who is out gives nothing.</p>'},
+  {title:'Keep them safe', pic:function(){
+     return crSvg(crHex(80,64,34,'#dfe8d0')+fcPriestSvg(80,86,0.8,'#2f6fa8')+crHex(160,64,34,'#d9c2c2','#8E1B1B',2.5)+fcSoldier(150,76,'#8E1B1B')+fcSoldier(168,76,'#8E1B1B')+'<path d="M112 60 L126 64" stroke="#8E1B1B" stroke-width="2.5"/>'+crTxt(230,58,'caught',12,'start')+crTxt(230,76,'= dead',12,'start')); },
+   html:'<p>If an <b>enemy band</b> reaches a square where your priest is standing, he dies, unless a band of yours is with him. Keep priests with your soldiers, or at home.</p><p>A priest who dies leaves his church able to teach less (&minus;'+WISE_DROP+' wisdom), so losing all three is costly.</p>'},
+  {title:'The sickness spreads', plague:true, pic:function(){
+     return crSvg(fcSick(140,60,22)+crHex(94,34,20,'#dfe8d0')+crHex(94,86,20,'#dfe8d0')+crHex(186,34,20,'#dfe8d0')+crHex(186,86,20,'#dfe8d0')+crHex(228,60,20,'#dfe8d0')+crHex(52,60,20,'#dfe8d0')
+       +crTxt(94,38,'20%',11)+crTxt(186,38,'20%',11)+crTxt(94,90,'20%',11)+crTxt(186,90,'20%',11)); },
+   html:'<p>A sick square gives <b>half its harvest</b> for <b>3 days</b>, then it <b>recovers</b>, and can&rsquo;t be caught again for <b>2 days</b>; after that it can. Bands standing on a sick square <b>lose a man every 2 ticks</b> (and those who die leave corpses).</p>'
+     +'<p>Each tick it spreads to a neighbour with a <b>20%</b> chance, <b>35%</b> road to road, a little less the farther from where it began. Soldiers don&rsquo;t carry it.</p>'},
+  {title:'Priests tend the sick', plague:true, pic:function(){
+     return crSvg(fcSick(80,60,26)+fcPriestSvg(150,86,0.85,'#8E1B1B')+crHex(222,60,26,'#dfe8d0')+'<path d="M108 60 H128" stroke="#3a2f18" stroke-width="2"/>'+crTxt(222,100,'cured',11)); },
+   html:'<p>A priest cuts the chance of the sickness on his square and the six around him by <b>wisdom &divide; 12.5</b>, <b>cures 8% of his wisdom</b> each tick, and keeps bands beside him from dying.</p><p>But tending the sick can kill him: <b>4% for each sick square beside him</b>, at most 30% a tick.</p>'},
+  {title:'Walls, roads and fire', plague:true, pic:function(){
+     return crSvg(crHex(60,60,26,'#dfe8d0')+'<path d="M82 40 L82 80" stroke="#8a7a5a" stroke-width="8"/>'+fcSick(104,60,22)+crTxt(60,104,'wall: slower',10)+crHex(190,60,26,'#dfe8d0')+'<path d="M170 60 H178 M202 60 H210" stroke="#a39271" stroke-width="5"/><path d="M190 76 C176 62 188 56 188 44 C196 52 206 60 200 72 C198 78 192 80 190 76 Z" fill="#e0701f" stroke="#8a3a0a"/>'+crTxt(190,104,'fire: ends it',10)+crTxt(250,60,'',10)); },
+   html:'<p><b>Walls</b> make the sickness cross onto a square at <b>50%, 35% or 25%</b> of the chance by wall level, but never stop it. <b>Cut a road</b> and its extra chance (35% instead of 20%) is gone.</p>'
+     +'<p><b>Burn</b> your own sick square: it burns for 2 days, the sickness is gone, and it can&rsquo;t be caught while it burns.</p>'},
+  {title:'The Siege of Caffa', plague:true, pic:function(){
+     return crSvg(trebDraw(50,88,1)+'<path d="M84 50 Q150 -10 214 56" stroke="#3a2f18" stroke-width="2" stroke-dasharray="5 4" fill="none"/>'+fcSick(236,76,22)); },
+   html:'<p>A trebuchet can hurl a plague corpse over an enemy&rsquo;s walls. Tap the square and choose <b>The Siege of Caffa</b>: 1 stone and <b>1 corpse</b>, range '+CAFFA_RANGE+'. The square and its neighbours fall sick.</p>'
+     +'<p>You only have corpses when your own soldiers have died of the plague (at most '+CORPSE_CAP+'). Whoever does it is marked a <b>plague-bringer</b> for 3 days.</p>'}
+];
+function faithTutorial(i){
+  var steps=FAITH_STEPS.filter(function(s){ return !s.plague||pestEver(); });
+  i=Math.max(0,Math.min(steps.length-1,i||0)); var st=steps[i], last=i===steps.length-1;
+  var btns=[]; if(i>0) btns.push({label:'Back',value:'back'});
+  if(last) btns.push({label:'Done',value:'close',primary:true}); else { btns.push({label:'Next',value:'next',primary:true}); btns.push({label:'Close',value:'close'}); }
+  scrollDialog({eyebrow:(st.plague?'The plague':'The Church')+' &middot; '+(i+1)+' of '+steps.length, title:st.title, html:st.pic()+st.html, cancel:'close', buttons:btns}).then(function(res){
+    if(res.value==='next') faithTutorial(i+1); else if(res.value==='back') faithTutorial(i-1);
+  });
 }
 
 /* ═══ sync ═════════════════════════════════════════════════════════════ */
@@ -10480,7 +10679,7 @@ function enterGame(isNew){
 var NOTES=[
   {id:'faith-open', eyebrow:'A new building', title:'The Church comes to Marchland',
    when:function(){ return faithPublic(); },
-   html:'<p>You can now raise a <b>church</b> on an empty square of yours ('+costLine(CHURCH_COST)+', 12 hours, up to '+CHURCH_MAX+'). Each holds '+CHURCH_SLOTS+' <b>priests</b>, and the first is free.</p>'
+   html:crSvg(crHex(140,64,46,'#e9dcb6')+fcChurchSvg(120,98,0.85,'#8E1B1B')+fcPriestSvg(214,96,0.8,'#8E1B1B'))+'<p>You can now raise a <b>church</b> on an empty square of yours ('+costLine(CHURCH_COST)+', 12 hours, up to '+CHURCH_MAX+'). Each holds '+CHURCH_SLOTS+' <b>priests</b>, and the first is free.</p>'
      +'<p>Priests walk <b>barefoot and unarmed, a square an hour</b>, over any ground. They can <b>bless</b> a band so it fights as if stronger, <b>bury the fallen</b> and clear their crosses, and give a <b>tithe</b> of grain every tick while they are home. Enemy soldiers kill any priest they catch.</p>'
      +'<p>Priests are wise at first, but each one who dies leaves his church able to teach less. Keep them safe. There are strange sicknesses on the roads, and it is said the priests know what to do about them.</p>'
      +'<p>Every rule is in the guide: tap any square of yours and choose <b>How churches and priests work</b>.</p>', go:'Got it'},
