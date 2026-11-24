@@ -4295,6 +4295,27 @@ function untilMidnight(){
    instead, and come off the claimant's next claim. The claimant's own tab
    books the debt, because only that tab ever writes its record. */
 var CHALLENGE_MS=24*36e5, VOTE_MS=24*36e5, KEEP_MS=30*864e5, ACTIVE_MS=24*36e5, VOTE_MIN=3;   // VOTE_MIN: fewest votes that can void a claim
+/* ── a demigod (fixes/demi1 = {pid}): may judge any other warrior's screenshot claim. She types the steps the picture
+   really shows; within DEMI_SLACK of the claim it stands, otherwise it is void. Everyone else sees "checked by the gods". */
+var DEMI_SLACK=500;
+function demiPid(){ return (G&&G.fixes&&G.fixes.demi1&&G.fixes.demi1.pid)||null; }
+function isDemi(){ return !!ME && ME===demiPid(); }
+function verBy(st,c){ return c&&c.ver&&c.ver.by==='demi'?'the gods':'Bohrer'; }
+function demiJudge(id){
+  var c=G.claims&&G.claims[id]; if(!isDemi()||!c||c.pid===ME||!c.shot||(c.ver&&c.ver.v)) return;
+  scrollDialog({eyebrow:'&#9889; Demigod', title:'Judge '+esc(nameOf(c.pid))+'&rsquo;s picture',
+    html:'<p>They claim <b>'+(c.steps||0).toLocaleString()+' steps</b>. How many steps does the screenshot really show? Within <b>'+DEMI_SLACK+'</b> of the claim, it stands. Otherwise it is void and the <b>'+c.got+' marches</b> come off their next claim. Your judgment is final, and nobody will know it was you.</p>'
+      +'<p><input id="demi-n" type="number" min="0" step="1" inputmode="numeric" style="width:100%;font-size:16px;padding:6px" placeholder="steps in the picture"></p>',
+    cancel:null, buttons:[{label:'Not now',value:null},{label:'Judge',value:'go',primary:true}],
+    check:function(v,box){ if(v!=='go') return ''; var n=parseInt(box.querySelector('#demi-n').value,10); return (n>=0)?'':'Type the steps the picture shows.'; }
+  }).then(function(res){
+    if(res.value!=='go') return;
+    var real=parseInt(res.box.querySelector('#demi-n').value,10), c2=G.claims[id]; if(!c2||(c2.ver&&c2.ver.v)) return;
+    var ok=Math.abs(real-(c2.steps||0))<=DEMI_SLACK, rec={v:ok?'ok':'no',by:'demi',real:real,t:Date.now()};
+    c2.ver=rec; putPath('/claims/'+id+'/ver',rec); renderClaims();
+    say(ok?'Within '+DEMI_SLACK+' steps of the picture: the claim stands.':'<b>Void.</b> The picture shows '+real.toLocaleString()+' steps, not '+(c2.steps||0).toLocaleString()+'. The gods thank you.');
+  });
+}
 function claimState(c,now){
   now=now||Date.now();
   var votes=c.votes||{}, firstNo=Infinity;
@@ -8712,8 +8733,8 @@ function renderClaims(){
   log.innerHTML=shown.map(function(e){
     var c=e.c, st=e.st, p=G.players[c.pid], col=p?pColor(c.pid):'var(--ink-2)';
     var meta=[since(c.t)];
-    if(st.ver==='ok') meta.push('screenshot checked by Bohrer');
-    if(st.ver==='no') meta.push('screenshot checked by Bohrer — did not match');
+    if(st.ver==='ok') meta.push('screenshot checked by '+verBy(st,c));
+    if(st.ver==='no') meta.push('screenshot checked by '+verBy(st,c)+' — did not match');
     if(!st.ver && c.shot && (st.s==='open'||st.s==='disputed')) meta.push('screenshot sent to Bohrer to check');
     if(st.s==='open') meta.push(hoursLeft(st.until)+' left to dispute');
     if(st.s==='disputed') meta.push('by '+namesOf(st.noBy)+' · '+st.no+' void, '+st.ok+' stand · closes in '+hoursLeft(st.until));
@@ -8721,6 +8742,7 @@ function renderClaims(){
     if(st.s==='stands' && st.disputed && !st.ver) meta.push('survived a dispute');
     var acts=[];
     if(c.shot) acts.push('<button data-act="photo" data-id="'+e.id+'" aria-expanded="'+!!openShots[e.id]+'">'+(openShots[e.id]?'Hide':'Screenshot')+'</button><span class="gods">let the pagen gods decide!</span>');
+    if(c.shot && isDemi() && c.pid!==ME && !st.ver && openShots[e.id]) acts.push('<button data-act="demi" data-id="'+e.id+'">&#9889; Judge this picture</button>');
     if(c.pid===ME && !c.shot && (st.s==='open'||st.s==='disputed') && online)
       acts.push('<button data-act="addshot" data-id="'+e.id+'">+ Screenshot</button>');
     var canVote=c.voters&&c.voters[ME];
@@ -8760,7 +8782,7 @@ function renderNotice(list){
         +(c.shot||!online?'':' <button data-act="addshot" data-id="'+e.id+'">Add a Health screenshot to defend it</button>')+'</div>');
     }
     if(c.pid===ME && st.s==='void' && pl.voids && pl.voids[e.id] && Date.now()-pl.voids[e.id]<864e5){
-      bigVoid.push('<div class="da-row"><span class="da-head">Your claim was voided</span></div><div class="da-row"><span>Your claim of <b>'+c.steps.toLocaleString()+' steps</b> was '+(st.ver?'checked by Bohrer against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' &mdash; <b>'+c.got+' marches</b> will come off your next claim.</span></div>');
+      bigVoid.push('<div class="da-row"><span class="da-head">Your claim was voided</span></div><div class="da-row"><span>Your claim of <b>'+c.steps.toLocaleString()+' steps</b> was '+(st.ver?'checked by '+verBy(st,c)+' against your screenshot and did not match':'voided by '+namesOf(st.noBy))+' &mdash; <b>'+c.got+' marches</b> will come off your next claim.</span></div>');
     }
     /* every login: others' claims from the last 24 hours that can still be disputed (folded into one line below) */
     if(c.pid!==ME && st.s==='open' && Date.now()-c.t<CHALLENGE_MS) openOnes.push(e);
@@ -8990,6 +9012,7 @@ function onClaimClick(ev){
   if(act==='details'){ claimDetailOpen=true; renderClaims(); var cd=document.getElementById('claims-detail'); if(cd&&cd.scrollIntoView) cd.scrollIntoView({block:'center'}); return; }
   if(act==='alerts'){ claimAlertsOpen=!claimAlertsOpen; return renderClaims(); }
   if(act==='no'||act==='ok') return vote(id,act);
+  if(act==='demi') return demiJudge(id);
   if(act==='addshot'){ lateFor=id; document.getElementById('shotlate').click(); return; }
   if(act==='photo'){
     openShots[id]=!openShots[id];
@@ -10891,6 +10914,10 @@ function notesNow(){
   var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null, th2=G&&me()?tinvHitNote():null;
   if(Date.now()<TOWER_RULE_T+864e5) out.unshift(towerRuleNote());
   if(wrath()) out.unshift(wrathNote());
+  if(G&&me()&&isDemi()) out.unshift({id:'demi-1', eyebrow:'&#9889; A secret, for you alone', title:'Congrats, you were found to have god blood',
+    html:'<p>As a <b>Demi god</b> you have this power: you can <b>void any warrior&rsquo;s step claim, even one with a screenshot</b>. Do not abuse it.</p>'
+      +'<p>Open <b>Claim details</b>, tap <b>Screenshot</b> on someone&rsquo;s claim, then <b>&#9889; Judge this picture</b>, and type the steps the picture really shows. If it is within <b>'+DEMI_SLACK+' steps</b> of their claim, it stands. If not, it is void and the marches come off their next claim.</p>'
+      +'<p>No one else can see this power, and they will only read that the gods checked the picture. Tell no one.</p>', go:'I will use it wisely'});
   if(qn) out.unshift(qn);
   if(an) out.unshift(an);
   if(th2) out.unshift(th2);
