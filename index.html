@@ -3847,6 +3847,7 @@ function absorbMine(v){                                // → true when v was an
     }
     if((v.lastCollect||0)>(pl.lastCollect||0)) pl.lastCollect=v.lastCollect;
     ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
+    if(v.cw){ var cwU={}; arr(pl.cw).concat(arr(v.cw)).forEach(function(x){ if(x>=Date.now()-CHAT_WIN) cwU[x]=1; }); pl.cw=Object.keys(cwU).map(Number).sort(); }   // chat send times: both screens' lists joined
     if(v.cq && (!pl.cq || v.cq.k>pl.cq.k || (v.cq.k===pl.cq.k && (v.cq.n||0)>(pl.cq.n||0)))) pl.cq=v.cq;   // chat messages this tick: the higher count wins
     ['notes','cvGot','hxIn','hxOut'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
     if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
@@ -11656,24 +11657,25 @@ var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
    from the epoch so everyone shares the same window). Every message after that costs CHAT_FEE of each of the four
    resources. The count is kept on the player's own record (pl.cq = {k: tick number, n: messages sent in it}) so a second
    device or a cleared browser cannot reset it; the messages in the feed count too, whichever is higher wins. */
-var CHAT_FREE=4, CHAT_FEE=10;
+var CHAT_FREE=3, CHAT_FEE=10, CHAT_WIN=36e5;      // 3 free messages in any hour in the War room, then 10 of each resource a message (the Tavern is free)
 function chatTickNo(){ return Math.floor(Date.now()/TICK_MS); }
 function chatUsed(){
-  var k=chatTickNo(), pl=G&&me(), n=(pl&&pl.cq&&pl.cq.k===k)?(pl.cq.n||0):0, from=k*TICK_MS, f=0;
-  Object.keys(chat.msgs).forEach(function(id){ var m=chat.msgs[id]; if(m&&m.pid===ME&&m.t>=from&&!m.failed) f++; });
-  return Math.max(n,f);
+  var pl=G&&me(), from=Date.now()-CHAT_WIN, seen={};      // my War-room messages in the last hour: from my record (pl.cw, the send times) and from the feed
+  arr(pl&&pl.cw).forEach(function(t){ if(t>=from) seen[t]=1; });
+  Object.keys(chat.msgs).forEach(function(id){ var m=chat.msgs[id]; if(m&&m.pid===ME&&m.t>=from&&!m.failed&&m.rm!=='tav') seen[m.t]=1; });
+  return Object.keys(seen).length;
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
   if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
+  var left=CHAT_FREE-chatUsed();
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
     inp.disabled=!!hl; btn.disabled=!!hl;
-    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… (\uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
-    btn.textContent='Send'; return;
+    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… ('+(left>0?left+' free this hour':CHAT_FEE+' of each')+' \u00b7 \uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
+    btn.textContent=left>0?'Send':'Send · '+CHAT_FEE+' each'; return;
   }
-  var left=CHAT_FREE-chatUsed();
-  inp.placeholder=left>0?'Message everyone… ('+left+' free this tick)':'Message everyone… (costs '+CHAT_FEE+' of each resource)';
+  inp.placeholder=left>0?'Message everyone… ('+left+' free this hour)':'Message everyone… (costs '+CHAT_FEE+' of each resource)';
   btn.textContent=left>0?'Send':'Send · '+CHAT_FEE+' each';
 }
 var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, toEnd:true};
@@ -11799,14 +11801,14 @@ function chatSend(){
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   var room=chat.room==='tav'?'tav':'war';
   if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
-  var pl=me(), pay=!hushOn() && chatUsed()>=CHAT_FREE;     // (the old chat fee: replaced by hush votes once they begin)
+  var pl=me(), pay=room==='war' && chatUsed()>=CHAT_FREE;     // past 3 in an hour: the offering (the Tavern is free)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
     var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
-    if(lack.length){ chatNote('The gods are weary of chatter. Another message costs '+CHAT_FEE+' of every resource, and you are short of '+lack.join(', ')+'. Your free messages return next tick.'); return; }
+    if(lack.length){ chatNote('The gods are weary of chatter. Another message costs '+CHAT_FEE+' of every resource, and you are short of '+lack.join(', ')+'. Your free messages return within the hour.'); return; }
   }
   chat.lastSend=Date.now();
   var t=Date.now(), id=q36(t)+'-'+ME+'-'+Math.floor(Math.random()*1296).toString(36), kNo=chatTickNo();
-  pl.cq=(pl.cq&&pl.cq.k===kNo)?pl.cq:{k:kNo,n:0}; pl.cq.n=(pl.cq.n||0)+1;
+  if(room==='war'){ pl.cw=arr(pl.cw).filter(function(x){ return x>=t-CHAT_WIN; }); pl.cw.push(t); }
   if(pay){ GOODS.forEach(function(g){ pl.res[g]-=CHAT_FEE; }); render(); }
   pushMe();
   var m={pid:ME, n:full(me()), t:t, m:txt};
@@ -11820,7 +11822,7 @@ function chatSend(){
     if(chat.msgs[id]){ chat.msgs[id].failed=true; }
     var pl2=me();                                    // it never went out: give the offering and the free message back
     if(pl2){
-      if(pl2.cq&&pl2.cq.k===kNo&&pl2.cq.n>0) pl2.cq.n--;
+      pl2.cw=arr(pl2.cw).filter(function(x){ return x!==t; });
       if(pay){ GOODS.forEach(function(g){ pl2.res[g]=(pl2.res[g]||0)+CHAT_FEE; }); render(); }
       pushMe();
     }
