@@ -3653,7 +3653,7 @@ function faithActions(q,r,c,A,wet){
   A('How churches and priests work','a short guide',function(){ faithTutorial(); });
   if(own&&!wet){
     if(isChurch(c)){
-      if(c.ch.f>now) A('Church being raised','ready in '+hoursLeft(c.ch.f),function(){},'Wait for it to finish');
+      if(c.ch.f>now) A('Church being raised','ready in '+hoursLeft(c.ch.f),function(){ nope('The church is finished in <b>'+hoursLeft(c.ch.f)+'</b>. Then you can train priests and study here.'); },'Wait for it to finish');
       else A('The church','priests, study, tithes',function(){ churchMenu(q,r); });
     } else if(!c.k&&!c.cb&&!c.ch&&!building(c)){
       A('Build a church',costLine(CHURCH_COST)+' &middot; eats '+CHURCH_GRAIN+' grain a tick &middot; 12 h',function(){ buildChurch(q,r); },
@@ -5287,8 +5287,8 @@ function castleCost(pid){
 function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
-  if(c.k) return nope('Something already stands here.');
-  if(c.cb) return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
+  if(c.k||isChurch(c)) return nope('Something already stands here.');
+  if(c.cb return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
@@ -5740,6 +5740,7 @@ function cellTitle(c){
   else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l)+(towerRaising(c)?' &middot; being raised, ready in '+hoursLeft(c.tu):'');
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
   else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
+  else if(isChurch(c)) what='church'+(c.ch.f>Date.now()?' (being raised, ready in '+hoursLeft(c.ch.f)+')':'')+' &middot; on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
   if((c.k===CASTLE||c.k===TOWER)&&!wet&&c.t!=null) sub.push('built on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]));
@@ -5801,7 +5802,7 @@ function cellActions(q,r){
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
       if(!c.k && c.cb){
         A('Castle going up','ready in '+hoursLeft(c.cb)+' &middot; '+castlePct(c)+'%',function(){ castleStatus(q,r); });
-      } else if(!c.k){
+      } else if(!c.k && !isChurch(c)){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick'+(Date.now()>=TOWER_RULE_T?' &middot; 12 h to raise':''),function(){ build(q,r,TOWER); },lackText(tc));
         var cc=castleCost(ME), tooClose=myCastleCells(ME).concat(pendingCastles(ME)).some(function(pt){ return hexDist(q,r,pt[0],pt[1])<CASTLE_SPACING; });
@@ -5815,7 +5816,8 @@ function cellActions(q,r){
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
     }
   }
-  faithActions(q,r,c,A,wet);
+  var nf=out.length; faithActions(q,r,c,A,wet);
+  if(own&&isChurch(c)){ var ci=-1; for(var fi=nf;fi<out.length;fi++) if(/^(The church|Church being raised)/.test(out[fi].label)) ci=fi; if(ci>0) out.unshift(out.splice(ci,1)[0]); }   // on a church square, the church comes first
   if(wet) A('Name this river','1 march',function(){ renameRiver(q,r); },riverWhy(q,r));
   Object.keys(G.players).forEach(function(pid){
     var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
