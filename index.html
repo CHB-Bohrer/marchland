@@ -3226,7 +3226,7 @@ function blessed(pid){ return blessOn() && !!blessedSet()[pid==null?ME:pid]; }
 function blessMul(pid,at){ at=at||Date.now(); return (blessOn() && at>=G.fixes.bless1.t && blessed(pid))?2:1; }
 function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made attacks cost 1 march; Chris found that too much, so attacks cost the same for everyone)
 /* ═══ the gods' wrath (fixes/wrath1 = {pid, t, got, claim}) ═══════════════════════════════
-   For a faked screenshot: from t, one hush vote silences that warrior (in the Tavern too), and for one day
+   For a faked screenshot: from t, one hush vote silences that warrior in the War room (the Tavern stays open), and for one day
    their land lies under snow and yields nothing while a thunderstorm rages over the realm.            */
 var WRATH_MS=864e5, wrathSnowQ=[];
 function wrath(){ return (G&&G.fixes&&G.fixes.wrath1)||null; }
@@ -10902,9 +10902,9 @@ var NOTES=[
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return crusadeOn(); },
    html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
-function wrathNote(){ return {id:'wrath-anna', eyebrow:'The gods are furious', title:'&#9928; A sacred act defiled',
+function wrathNote(){ return {id:'wrath-anna2', eyebrow:'The gods are furious', title:'&#9928; A sacred act defiled',
    html:(function(){ var w=wrath(), nm=w&&G.players[w.pid]?esc(G.players[w.pid].name):'A warrior'; return '<p><b>'+nm+'</b> has sent the gods a <b>false picture of her steps</b>. The count of steps is one of the last sacred acts of this realm, and it has been defiled. The gods showed mercy once. Not again.</p>'
-     +'<ul><li><b>Her voice is taken.</b> From now on a <b>single hush vote</b> silences '+nm+', in the War room and in the Tavern alike.</li>'
+     +'<ul><li><b>Her voice is taken.</b> From now on a <b>single hush vote</b> silences '+nm+' in the War room. The Tavern stays open to her, and talking there is free.</li>'
      +'<li><b>Her marches are taken back:</b> the '+(w&&w.got||0)+' that the false picture won her.</li>'
      +'<li><b>Her land is frozen.</b> Snow lies on every square of hers for <b>one day</b>, and it gives her <b>nothing</b>.</li>'
      +'<li>And for that day the gods&rsquo; <b>storm</b> rages over the whole realm, so that all may see how angry they are.</li></ul>'
@@ -11974,7 +11974,7 @@ function chatUsed(){
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
-  if(chat.room==='tav'){ var th=ME===wrathPid()&&hushOn()?hushLeft(ME):0; inp.disabled=!!th; btn.disabled=!!th; inp.placeholder=th?'The gods have hushed you everywhere for '+hushIn(th)+'.':'Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
+  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
   var left=CHAT_FEE_ON?CHAT_FREE-chatUsed():Infinity;
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
@@ -12107,7 +12107,6 @@ function chatSend(){
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   var room=chat.room==='tav'?'tav':'war';
-  if(room==='tav' && ME===wrathPid() && hushOn() && hushLeft(ME)){ chatNote('The gods have hushed you everywhere for '+hushIn(hushLeft(ME))+' more. Even the Tavern is closed to you.'); return; }
   if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
   var pl=me(), pay=CHAT_FEE_ON && room==='war' && chatUsed()>=CHAT_FREE;     // past 3 in an hour: the offering (the Tavern is free)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
@@ -12176,7 +12175,7 @@ function hushXfer(pid){ var p=G.players[pid]||{}, s=function(o){ var n=0; for(va
 function hushVotes(pid){ if(!hushOn()||!G.players[pid]) return 0; return Math.max(0,hushStart(pid)+hushEarned(pid)+hushXfer(pid)-hushSpent(pid)); }
 function cvWhat(c){ var a=[]; if(hasGoods(c.g)) a.push(goodsLine(c.g||{})); if(c.hv) a.push(c.hv+' hush vote'+(c.hv>1?'s':'')); if(c.lt) a.push('a sealed letter'); return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1]; }
 function hushBtn(m){
-  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||(msgRoom(m)==='tav'&&m.pid!==wrathPid())) return '';
+  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||msgRoom(m)==='tav') return '';
   var nm=esc(G.players[m.pid].name), locked=hushLeft(m.pid);
   if(locked) return '<span class="hushed">hushed</span>';
   var mine=!!hushRecent(m.pid)[ME], st=isSteward()?'<span class="hush-n">'+Object.keys(hushRecent(m.pid)).length+'/'+hushNeed(m.pid)+'</span>':'';
