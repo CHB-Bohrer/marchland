@@ -3225,6 +3225,46 @@ function blessedSet(){
 function blessed(pid){ return blessOn() && !!blessedSet()[pid==null?ME:pid]; }
 function blessMul(pid,at){ at=at||Date.now(); return (blessOn() && at>=G.fixes.bless1.t && blessed(pid))?2:1; }
 function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made attacks cost 1 march; Chris found that too much, so attacks cost the same for everyone)
+/* ═══ the gods' wrath (fixes/wrath1 = {pid, t, got, claim}) ═══════════════════════════════
+   For a faked screenshot: from t, one hush vote silences that warrior (in the Tavern too), and for one day
+   their land lies under snow and yields nothing while a thunderstorm rages over the realm.            */
+var WRATH_MS=864e5, wrathSnowQ=[];
+function wrath(){ return (G&&G.fixes&&G.fixes.wrath1)||null; }
+function wrathPid(){ var w=wrath(); return w?w.pid:null; }
+function snowed(pid,at){ var w=wrath(); at=at||Date.now(); return !!(w&&w.pid===pid&&at>=w.t&&at<w.t+WRATH_MS); }
+function stormOn(at){ var w=wrath(); at=at||Date.now(); return !!(w&&at>=w.t&&at<w.t+WRATH_MS); }
+function hushNeed(pid){ return pid&&pid===wrathPid()?1:HUSH_NEED; }
+function drawWrath(now){
+  var Q=wrathSnowQ; wrathSnowQ=[];
+  if(!stormOn()) return;
+  var t=REDUCE?0:now, i;
+  ctx.save();
+  Q.forEach(function(e){                               // her land under snow: a white crust, drifts and falling flakes
+    var x=e[0], y=e[1];
+    hexPath(x,y,S*0.94); ctx.fillStyle='#f4f7fb'; ctx.globalAlpha=0.62; ctx.fill();
+    ctx.globalAlpha=0.9; ctx.fillStyle='#ffffff';
+    for(i=0;i<3;i++){ var h=artHash(e[2],e[3],90+i); ctx.beginPath(); ctx.ellipse(x+(h-0.5)*S*1.1,y+S*(0.1+0.25*i)-S*0.3,S*(0.22+0.1*h),S*0.08,0,0,6.284); ctx.fill(); }
+    if(S>=12) for(i=0;i<5;i++){ var hx=artHash(e[2],e[3],120+i), fy=((hx*7+t*0.25+i*0.21)%1); ctx.globalAlpha=0.85*Math.sin(fy*Math.PI);
+      ctx.beginPath(); ctx.arc(x+(hx-0.5)*S*1.4+Math.sin(t*1.3+i)*S*0.06,y-S*0.8+fy*S*1.5,Math.max(1,S*0.045),0,6.284); ctx.fill(); }
+  });
+  ctx.globalAlpha=1;
+  // the storm over everything: a dark sky, slanting rain, and now and then the gods' lightning
+  ctx.fillStyle='rgba(18,20,38,0.26)'; ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='rgba(190,205,230,0.45)'; ctx.lineWidth=1; ctx.beginPath();
+  for(i=0;i<140;i++){ var rx=((i*97.3+t*60)%(W+80))-40, ry=((i*53.7%1)*H+(i*131)%H+t*520)%(H+40)-20; ctx.moveTo(rx,ry); ctx.lineTo(rx-5,ry+15); }
+  ctx.stroke();
+  if(!REDUCE){
+    var per=7, ph=t%per, n=Math.floor(t/per), fl=ph<0.12?1:(ph>0.22&&ph<0.3?0.6:0);
+    if(fl){
+      ctx.fillStyle='rgba(235,240,255,'+(0.35*fl)+')'; ctx.fillRect(0,0,W,H);
+      var tgt=Q.length?Q[Math.floor(artHash(n,7,3)*Q.length)]:null, bx=tgt?tgt[0]:artHash(n,1,1)*W, by=tgt?tgt[1]:H*(0.3+0.5*artHash(n,2,2)), x0=bx+(artHash(n,3,3)-0.5)*W*0.3;
+      ctx.strokeStyle='rgba(255,252,220,'+fl+')'; ctx.lineWidth=2.6; ctx.shadowColor='#fff8c0'; ctx.shadowBlur=14; ctx.beginPath(); ctx.moveTo(x0,-10);
+      for(i=1;i<=9;i++){ var f=i/9; ctx.lineTo(x0+(bx-x0)*f+(i<9?(artHash(n,i,9)-0.5)*40:0),-10+(by+10)*f); }
+      ctx.stroke(); ctx.shadowBlur=0;
+    }
+  }
+  ctx.restore();
+}
 function ratesFor(pid,at){
   var sup=supplied(pid), out={stone:0,timber:0,iron:0,grain:0}, s=0, own=0, td=(at||Date.now(), tinvOn(at)?tinvD(at):0);
   for(var k in G.cells){
@@ -3242,6 +3282,7 @@ function ratesFor(pid,at){
     if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm*tm*bm;
   }
   out.grain+=titheOf(pid);                            // priests at home give their tithe
+  if(snowed(pid,at)) out={stone:0,timber:0,iron:0,grain:0};   // under the gods' snow the land gives nothing at all
   var g=garrisonNeed(pid), pl=G.players[pid];
   var strd=strandedMen(pid,sup);                      // cut-off bands are fed by nobody (see strandedCells)
   var f=fieldOf(pid)-strd+transitOf(pid);            // men on the road still eat
@@ -7491,6 +7532,7 @@ function draw(){
     if(tdn && c.o){ var tcl=G.cells[key(q,r)]; if(tcl){ if(turkeyHere(q,r,tcl,tnow,tdn)) tinvQ.push([p[0],p[1],q,r,isFarmCell(tcl,q,r),Math.max(tinvArrive(q,r),tcl.tk||0)]); if(tcl.tk>tnow && tnow-(tcl.tk-TCLEAR_MS)<3600) tburstQ.push([p[0],p[1],q,r,tcl.tk-TCLEAR_MS]); } }
     if(c.o && tswarmOn() && c.o===G.tswarm.pid) turkeyQ.push([p[0],p[1],q,r,isFarmCell(G.cells[key(q,r)],q,r)]);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
+    if(c.o && c.o===wrathPid() && snowed(c.o)) wrathSnowQ.push([p[0],p[1],q,r]);
     if(HV && !vl && !c.k && !wet){ if(c.t===FARM) hvFarms.push([p,q,r]); else if(!c.o && c.t===PLAIN) hvOpen.push([p,q,r]); }   // HARVEST LAYER
     if(c.w>0) walls.push([c,p]);
     if(c.k){ builds.push([c,p,col]); if(c.k===TOWER||(c.g>0&&!isRuin(c))) guns.push([c,p,col]); }
@@ -7573,6 +7615,7 @@ function draw(){
   drawRiverNames();                                 // the rivers' names, lying along the water
   drawBandBadges();                                 // every standing band's number, laid out so none hides another
   if(amb) ambClouds(ctx,now);
+  drawWrath(now);                                   // the gods' storm, and the snow on the land of whoever angered them
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
   if(detail){                                         // the light falls off toward the edges of the map, like a lamp over a table
@@ -10836,10 +10879,18 @@ var NOTES=[
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return crusadeOn(); },
    html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
+function wrathNote(){ return {id:'wrath-anna', eyebrow:'The gods are furious', title:'&#9928; A sacred act defiled',
+   html:(function(){ var w=wrath(), nm=w&&G.players[w.pid]?esc(G.players[w.pid].name):'A warrior'; return '<p><b>'+nm+'</b> has sent the gods a <b>false picture of her steps</b>. The count of steps is one of the last sacred acts of this realm, and it has been defiled. The gods showed mercy once. Not again.</p>'
+     +'<ul><li><b>Her voice is taken.</b> From now on a <b>single hush vote</b> silences '+nm+', in the War room and in the Tavern alike.</li>'
+     +'<li><b>Her marches are taken back:</b> the '+(w&&w.got||0)+' that the false picture won her.</li>'
+     +'<li><b>Her land is frozen.</b> Snow lies on every square of hers for <b>one day</b>, and it gives her <b>nothing</b>.</li>'
+     +'<li>And for that day the gods&rsquo; <b>storm</b> rages over the whole realm, so that all may see how angry they are.</li></ul>'
+     +'<p>One mercy for everyone else: <b>talking is free again</b>. No one pays to speak in the War room any more.</p>'; })(), go:'The gods have spoken'}; }
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
   var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null, th2=G&&me()?tinvHitNote():null;
   if(Date.now()<TOWER_RULE_T+864e5) out.unshift(towerRuleNote());
+  if(wrath()) out.unshift(wrathNote());
   if(qn) out.unshift(qn);
   if(an) out.unshift(an);
   if(th2) out.unshift(th2);
@@ -11886,7 +11937,7 @@ var CHAT_KEEP_MS=30*864e5, CHAT_SHOW=60, CHAT_MAX=280;
    from the epoch so everyone shares the same window). Every message after that costs CHAT_FEE of each of the four
    resources. The count is kept on the player's own record (pl.cq = {k: tick number, n: messages sent in it}) so a second
    device or a cleared browser cannot reset it; the messages in the feed count too, whichever is higher wins. */
-var CHAT_FREE=3, CHAT_FEE=10, CHAT_WIN=36e5;      // 3 free messages in any hour in the War room, then 10 of each resource a message (the Tavern is free)
+var CHAT_FEE_ON=false, CHAT_FREE=3, CHAT_FEE=10, CHAT_WIN=36e5;   // the fee was lifted by the gods on 24 Nov (CHAT_FEE_ON)      // 3 free messages in any hour in the War room, then 10 of each resource a message (the Tavern is free)
 function chatTickNo(){ return Math.floor(Date.now()/TICK_MS); }
 function chatUsed(){
   var pl=G&&me(), from=Date.now()-CHAT_WIN, seen={};      // my War-room messages in the last hour: from my record (pl.cw, the send times) and from the feed
@@ -11896,15 +11947,15 @@ function chatUsed(){
 }
 function chatFeeHint(){
   var inp=document.getElementById('chat-in'), btn=document.getElementById('chat-send'); if(!inp||!btn||!G||!me()) return;
-  if(chat.room==='tav'){ inp.disabled=false; btn.disabled=false; inp.placeholder='Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
-  var left=CHAT_FREE-chatUsed();
+  if(chat.room==='tav'){ var th=ME===wrathPid()&&hushOn()?hushLeft(ME):0; inp.disabled=!!th; btn.disabled=!!th; inp.placeholder=th?'The gods have hushed you everywhere for '+hushIn(th)+'.':'Chat about anything in the Tavern…'; btn.textContent='Send'; return; }
+  var left=CHAT_FEE_ON?CHAT_FREE-chatUsed():Infinity;
   if(hushOn()){
     var hl=isSteward()?0:hushLeft(ME), hv=hushVotes(ME);
     inp.disabled=!!hl; btn.disabled=!!hl;
-    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… ('+(left>0?left+' free this hour':CHAT_FEE+' of each')+' \u00b7 \uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
+    inp.placeholder=hl?'Hushed in the War room for '+hushIn(hl)+'. The Tavern is open.':'Message everyone… ('+(!CHAT_FEE_ON?'free':left>0?left+' free this hour':CHAT_FEE+' of each')+' \u00b7 \uD83E\uDD2B '+hv+' hush vote'+(hv===1?'':'s')+')';
     btn.textContent=left>0?'Send':'Send · '+CHAT_FEE+' each'; return;
   }
-  inp.placeholder=left>0?'Message everyone… ('+left+' free this hour)':'Message everyone… (costs '+CHAT_FEE+' of each resource)';
+  inp.placeholder=!CHAT_FEE_ON?'Message everyone…':left>0?'Message everyone… ('+left+' free this hour)':'Message everyone… (costs '+CHAT_FEE+' of each resource)';
   btn.textContent=left>0?'Send':'Send · '+CHAT_FEE+' each';
 }
 var chat={on:false, open:false, msgs:{}, rev:null, seen:0, busy:false, tick:0, lastSend:0, toEnd:true};
@@ -12029,8 +12080,9 @@ function chatSend(){
   if(!txt||!me()) return;
   if(Date.now()-chat.lastSend<1200) return;          // one message at a time
   var room=chat.room==='tav'?'tav':'war';
+  if(room==='tav' && ME===wrathPid() && hushOn() && hushLeft(ME)){ chatNote('The gods have hushed you everywhere for '+hushIn(hushLeft(ME))+' more. Even the Tavern is closed to you.'); return; }
   if(room==='war' && hushOn() && hushLeft(ME) && !isSteward()){ chatNote('The council has hushed you in the War room for '+hushIn(hushLeft(ME))+' more. You may still talk in the Tavern.'); return; }
-  var pl=me(), pay=room==='war' && chatUsed()>=CHAT_FREE;     // past 3 in an hour: the offering (the Tavern is free)
+  var pl=me(), pay=CHAT_FEE_ON && room==='war' && chatUsed()>=CHAT_FREE;     // past 3 in an hour: the offering (the Tavern is free)
   if(pay){                                           // past the free messages: 10 of each resource, or the gods stay deaf
     var lack=GOODS.filter(function(g){ return Math.floor(pl.res[g]||0)<CHAT_FEE; });
     if(lack.length){ chatNote('The gods are weary of chatter. Another message costs '+CHAT_FEE+' of every resource, and you are short of '+lack.join(', ')+'. Your free messages return within the hour.'); return; }
@@ -12097,10 +12149,10 @@ function hushXfer(pid){ var p=G.players[pid]||{}, s=function(o){ var n=0; for(va
 function hushVotes(pid){ if(!hushOn()||!G.players[pid]) return 0; return Math.max(0,hushStart(pid)+hushEarned(pid)+hushXfer(pid)-hushSpent(pid)); }
 function cvWhat(c){ var a=[]; if(hasGoods(c.g)) a.push(goodsLine(c.g||{})); if(c.hv) a.push(c.hv+' hush vote'+(c.hv>1?'s':'')); if(c.lt) a.push('a sealed letter'); return a.length<3?a.join(' and '):a.slice(0,-1).join(', ')+' and '+a[a.length-1]; }
 function hushBtn(m){
-  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||msgRoom(m)==='tav') return '';
+  if(!hushOn()||!m||m.pending||m.pid===ME||m.pid==='sys'||!G.players[m.pid]||(msgRoom(m)==='tav'&&m.pid!==wrathPid())) return '';
   var nm=esc(G.players[m.pid].name), locked=hushLeft(m.pid);
   if(locked) return '<span class="hushed">hushed</span>';
-  var mine=!!hushRecent(m.pid)[ME], st=isSteward()?'<span class="hush-n">'+Object.keys(hushRecent(m.pid)).length+'/'+HUSH_NEED+'</span>':'';
+  var mine=!!hushRecent(m.pid)[ME], st=isSteward()?'<span class="hush-n">'+Object.keys(hushRecent(m.pid)).length+'/'+hushNeed(m.pid)+'</span>':'';
   return '<button type="button" class="hush-btn'+(mine?' done':'')+'" data-hush="'+m.pid+'" aria-label="'+(mine?'You voted to hush ':'Vote to hush ')+nm+'" title="'+(mine?'You voted to hush ':'Vote to hush ')+nm+'">&#129323;</button>'+st;
 }
 function hushFetch(){
@@ -12118,9 +12170,9 @@ function hushAfter(){
   } else {
     var V=hush.votes[ME]||{}, rec=hushRecent(ME,now), n=Object.keys(rec).length, newest='';
     Object.keys(V).forEach(function(id){ var v=V[id]; if(v && rec[v.v]===v.t && id>newest) newest=id; });
-    if(n && newest>ks('vote')){ kset('vote',newest); chatNote('A warrior has voted to hush you ('+n+' of '+HUSH_NEED+'). Mind your words.'); }
+    if(n && newest>ks('vote')){ kset('vote',newest); chatNote('A warrior has voted to hush you ('+n+' of '+hushNeed(ME)+'). Mind your words.'); }
   }
-  Object.keys(hush.votes).forEach(function(pid){ if(G.players[pid] && !hushLeft(pid) && Object.keys(hushRecent(pid,now)).length>=HUSH_NEED) hushApply(pid,false); });
+  Object.keys(hush.votes).forEach(function(pid){ if(G.players[pid] && !hushLeft(pid) && Object.keys(hushRecent(pid,now)).length>=hushNeed(pid)) hushApply(pid,false); });
 }
 /* lock pid out of the chat (three votes, or the steward's word). Claimed with a conditional write, so it happens once */
 function hushApply(pid,byStew){
@@ -12130,7 +12182,7 @@ function hushApply(pid,byStew){
     var now=Date.now();
     hush.locks[pid]=x[0].v||{n:0,until:0,last:0}; hush.votes[pid]=x[1]||{};
     if(hushLeft(pid)) return;                           // already hushed
-    if(!byStew && Object.keys(hushRecent(pid,now)).length<HUSH_NEED) return;
+    if(!byStew && Object.keys(hushRecent(pid,now)).length<hushNeed(pid)) return;
     var n=hushStrikes(pid,now)+1, dur=HUSH_LADDER[Math.min(n,HUSH_LADDER.length)-1], NL={n:n,until:now+dur,last:now,by:byStew?'steward':'votes'};
     return dbPutIf(path,NL,x[0].tag).then(function(w){
       if(!w.ok){ if(w.v) hush.locks[pid]=w.v; return; }
@@ -12172,7 +12224,7 @@ function openHush(){
       list:ids.map(function(pid){
         var V=hush.votes[pid]||{}, d=0; Object.keys(V).forEach(function(id){ if(V[id]&&V[id].t>day) d++; });
         var bits=[]; if(hushLeft(pid)) bits.push('hushed '+hushIn(hushLeft(pid)));
-        var r=Object.keys(hushRecent(pid)).length; if(r) bits.push(r+'/'+HUSH_NEED+' now');
+        var r=Object.keys(hushRecent(pid)).length; if(r) bits.push(r+'/'+hushNeed(pid)+' now');
         if(hushStrikes(pid)) bits.push(hushStrikes(pid)+' strike'+(hushStrikes(pid)>1?'s':''));
         if(d) bits.push(d+' vote'+(d>1?'s':'')+' today');
         bits.push(hushVotes(pid)+' to cast');
@@ -12183,7 +12235,7 @@ function openHush(){
 }
 function hushDetail(pid){
   var now=Date.now(), V=hush.votes[pid]||{}, rows=Object.keys(V).sort().reverse().slice(0,20).map(function(id){ var v=V[id]; return '<li>'+esc(nameOf(v.v))+' &mdash; '+since(v.t)+'</li>'; });
-  var html='<p>'+(hushLeft(pid)?'<b>Hushed</b> for another '+hushIn(hushLeft(pid))+'. ':'Free to speak. ')+'Strikes: '+hushStrikes(pid)+'. Votes against them that count right now: '+Object.keys(hushRecent(pid)).length+' of '+HUSH_NEED+'.</p>'
+  var html='<p>'+(hushLeft(pid)?'<b>Hushed</b> for another '+hushIn(hushLeft(pid))+'. ':'Free to speak. ')+'Strikes: '+hushStrikes(pid)+'. Votes against them that count right now: '+Object.keys(hushRecent(pid)).length+' of '+hushNeed(pid)+'.</p>'
     +'<p>Votes cast against them (newest first):</p>'+(rows.length?'<ul>'+rows.join('')+'</ul>':'<p class="muted">None.</p>');
   var btns=[{label:'Back',value:'back'}];
   if(hushLeft(pid)||hushStrikes(pid)||Object.keys(hushRecent(pid)).length) btns.push({label:'Lift hush &amp; clear strikes',value:'lift'});
