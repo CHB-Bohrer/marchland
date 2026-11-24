@@ -7657,7 +7657,7 @@ function draw(){
    map showing each cell as it was until its little army arrives. */
 var EVENT_KEEP_MS=7*864e5, MAX_REPLAY=15;
 var REDUCE=false; try{ REDUCE=localStorage.getItem('marchland.calm')==='1'; }catch(e){}   // animations are on unless the player switches them off here
-var BUILD = 'nov16-art';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
+var BUILD = 'nov24-saga3';   // shown at the foot of the attack scroll, so a stale saved copy of the page is easy to spot
 var CASTLE_NAMES=true;   // each castle carries its owner's name directly above it
 var SHOW_NAMES=false;   // player names are no longer written on the map (the player list beside it finds anyone); the arrows to far-off keeps stay
 var anims=[], animRaf=0, seenEv={}, replaying=false, replayQ=[], replayVeil={}, replayTimer=0, replayN=0, replayI=0, replayS=0, replaySummary='';
@@ -9043,7 +9043,7 @@ document.getElementById('claims-more').addEventListener('click',function(){ show
    older code than the board refuses to play and asks for a reload. */
 var STEWARDS={p16vnclj:1};                            // Bohrer
 function isSteward(pid){ return !!STEWARDS[pid==null?ME:pid]; }
-var DATA_V=5;                                         // the newest board layout this code understands (5: the world can grow, meta/world)
+var DATA_V=6;                                         // the newest board layout this code understands (5: the world can grow, meta/world; 6: no data change, raised so every open tab of an older page is told to reload)
 function migMeta(b){ return (b&&b.meta&&b.meta.migration)||{}; }
 function boardVersion(b){ return migMeta(b).v||0; }
 function migrationPending(b){ var st=migMeta(b).steps||{}; return MIGRATIONS.filter(function(s){ return s.stage<=DATA_V && !st[s.id]; }); }
@@ -11333,6 +11333,10 @@ function join(){
     if(boardVersion(G)>DATA_V){ G=null; showWait('stale'); return; }
     if(online && migrationPending(G).length && !isSteward(tryPid)){ G=null; showWait('update',join); return; }
     hideWait();
+    if(online && boardVersion(G)<DATA_V && !migrationPending(G).length){      // a page newer than the board: raise its version, so every tab still on an older page is asked to reload
+      G.meta=G.meta||{}; G.meta.migration=G.meta.migration||{}; G.meta.migration.v=DATA_V;
+      qRaw('PATCH','/marchland/'+gameCode+'/meta/migration',{v:DATA_V}).catch(function(){});
+    }
     var spRec=(G.sponsorships||{})[tryPid], pend=(G.pending||{})[tryPid], approved=null, hintEl=document.getElementById('join-hint');
     if(spRec && spRec.gone) spRec=null;              // an account that was deleted for want of a sponsor comes back only through a sponsor
     if(G.players[tryPid] && online && !isSteward(tryPid) && onProbation(tryPid,G)){      // already playing, but with no sponsor yet: locked out until one approves
