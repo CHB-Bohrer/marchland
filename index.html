@@ -5724,6 +5724,7 @@ function cellTitle(c){
   else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
+  if((c.k===CASTLE||c.k===TOWER)&&!wet&&c.t!=null) sub.push('built on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]));
   if(c.o&&c.b>0){ sub.push('band of '+c.b); if(c.o===ME && !building(c) && !fedGround(ME)[key(c.q,c.r)]){ var sv0=c.sv||0; sub.push(sv0>STRAND_GRACE_TICKS?'<span class="bad">cut off &mdash; starving, losing a man every tick</span>':'<span class="bad">cut off from every castle and farm &mdash; starves in '+fmtDur((STRAND_GRACE_TICKS-sv0+1)*TICK_MS)+'</span>'); } }
   if((c.w||0)>0) sub.push('wall '+ROMAN[c.w]+(c.wd?' (cracked)':''));
   if(c.o&&c.tb>0) sub.push(c.tb+' trebuchet'+(c.tb>1?'s':''));
@@ -7524,6 +7525,14 @@ function draw(){
     ctx.fillStyle=e[2]; ctx.fillRect(bx,by,bw*f,bh); ctx.strokeStyle=e[2]; ctx.lineWidth=1; ctx.strokeRect(bx-.5,by-.5,bw+1,bh+1);
     if(S>=15){ ctx.font='600 '+Math.round(S*0.3)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=e[2]; ctx.fillText(hoursLeft(sc.cb),e[1][0],by+bh+2); }
     ctx.restore();
+  });
+  builds.forEach(function(e){                        // what the ground under a castle or tower is: a small badge, so a farm is never hidden
+    var bc=e[0]; if(bc.site||!(bc.t>=FOREST&&bc.t<=FARM)||S<12) return;
+    var bx=e[1][0]-S*0.58, by=e[1][1]-S*0.5, br=S*0.27;
+    ctx.save(); ctx.globalAlpha=.92; ctx.fillStyle=T['--surface']; ctx.strokeStyle=e[2]; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.arc(bx,by,br,0,6.284); ctx.fill(); ctx.stroke(); ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(bx,by,br-1,0,6.284); ctx.clip();
+    stampTerrain(ctx,bc.t,bx,by+br*0.12,S*0.34,0); ctx.restore();
   });
   if(amb) ambKeeps(ctx,builds,now);                 // under the bands, so a band's badge stays clean
   if(HV){ harvestKeeps(ctx,builds,now); harvestGeese(ctx,now); }   // (the wandering and trotting Thanksgiving turkeys are gone: the only turkeys now are the invasion's)   // HARVEST LAYER
