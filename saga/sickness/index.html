@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marchland Saga: The Sickness Arrives</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Cormorant+Garamond:ital,wght@0,600;1,600&display=swap" rel="stylesheet">
+<style>
+html,body{margin:0;height:100%;background:#040506;overflow:hidden}
+#wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{width:min(100vw,177.78vh);height:min(56.25vw,100vh);position:relative;background:#000;overflow:hidden;container-type:inline-size}
+svg{width:100%;height:100%;display:block}
+#start{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(20,30,18,.75),rgba(3,4,5,.96));color:#e2d6b0;cursor:pointer;text-align:center;z-index:5;font-family:'Cinzel',serif}
+#start h1{font-size:6cqw;letter-spacing:.14em;margin:0 0 .2em;font-weight:800;text-shadow:0 0 30px rgba(140,200,90,.35)}
+#start h2{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:2.6cqw;color:#a9d27e;margin:0 0 1.4em;font-weight:600}
+#start p{font-size:1.5cqw;opacity:.75;margin:0;letter-spacing:.2em}
+#sub{position:absolute;left:0;right:0;bottom:7%;text-align:center;z-index:3;pointer-events:none;font-family:'Cormorant Garamond',serif;font-size:2.6cqw;color:#f1e8cf;text-shadow:0 2px 6px #000,0 0 14px #000;transition:opacity .25s;opacity:0;padding:0 10%}
+#sub b{font-family:'Cinzel',serif;font-size:.72em;letter-spacing:.12em;color:#d6b36a;margin-right:.5em;font-weight:600}
+#sub i{color:#b9d79a}
+.tag{position:absolute;z-index:3;pointer-events:none;font-family:'Cinzel',serif;color:#f3e6bf;opacity:0;transition:opacity .5s,transform .5s;transform:translateY(8px)}
+.tag .n{font-size:2.4cqw;font-weight:800;letter-spacing:.18em;text-shadow:0 2px 8px #000}
+.tag .r{font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.4cqw;color:#cdb98a;text-shadow:0 2px 6px #000}
+.tag .bar{height:2px;width:100%;background:linear-gradient(90deg,#c9a14e,transparent);margin:.2em 0}
+.tag.on{opacity:1;transform:none}
+#ctl{position:absolute;right:1%;top:1.5%;z-index:6;display:flex;gap:8px}
+#ctl button{background:rgba(0,0,0,.5);color:#cdbf99;border:1px solid #5a5238;border-radius:6px;padding:4px 10px;font:600 13px 'Cinzel',serif;cursor:pointer}
+</style></head><body>
+<div id="wrap"><div id="stage">
+<svg id="svg" viewBox="0 0 1280 720" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<filter id="paint" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="4"/></filter>
+<filter id="b4"><feGaussianBlur stdDeviation="4"/></filter>
+<filter id="b10"><feGaussianBlur stdDeviation="10"/></filter>
+<filter id="b24" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="24"/></filter>
+<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".85" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .7  0 0 0 0 .66  0 0 0 0 .55  0 0 0 .12 0"/></filter>
+<radialGradient id="warm" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#ffb24a" stop-opacity=".9"/><stop offset=".45" stop-color="#ff8a2a" stop-opacity=".35"/><stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>
+<radialGradient id="sick" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#b6ff7a" stop-opacity=".7"/><stop offset=".5" stop-color="#6ccf4a" stop-opacity=".25"/><stop offset="1" stop-color="#3a8a2a" stop-opacity="0"/></radialGradient>
+<radialGradient id="cold" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#bcd6ff" stop-opacity=".55"/><stop offset="1" stop-color="#7090c0" stop-opacity="0"/></radialGradient>
+<radialGradient id="vig" cx=".5" cy=".48" r=".72"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".85"/></radialGradient>
+<linearGradient id="ray" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9c4ff" stop-opacity=".22"/><stop offset="1" stop-color="#a9c4ff" stop-opacity="0"/></linearGradient>
+<linearGradient id="grayRay" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8ff8a" stop-opacity=".35"/><stop offset="1" stop-color="#b8ff8a" stop-opacity="0"/></linearGradient>
+</defs>
+<g id="cam">
+  <g id="ext"></g>
+  <g id="int" style="display:none"></g>
+</g>
+<rect id="tint" width="1280" height="720" fill="#2f5a22" opacity="0" style="mix-blend-mode:multiply"/>
+<rect width="1280" height="720" fill="url(#vig)"/>
+<rect width="1280" height="720" filter="url(#grain)"/>
+<g id="bars"><rect width="1280" height="56" fill="#000"/><rect y="664" width="1280" height="56" fill="#000"/></g>
+<g id="title" opacity="0" text-anchor="middle">
+  <rect x="0" y="250" width="1280" height="200" fill="#000" opacity=".55" filter="url(#b10)"/>
+  <text x="640" y="345" font-size="92" letter-spacing="16" fill="#e8dcb4" font-family="Cinzel,serif" font-weight="800">MARCHLAND</text>
+  <text x="640" y="402" font-size="34" letter-spacing="4" fill="#a9d27e" font-family="Cormorant Garamond,serif" font-style="italic" font-weight="600">The Sickness Arrives</text>
+</g>
+<rect id="fade" width="1280" height="720" fill="#000" opacity="1"/>
+</svg>
+<div class="tag" id="tagL" style="left:6%;bottom:16%"><div class="n">PIETRO <span style="opacity:.5">&amp;</span> ELISA</div><div class="bar"></div><div class="r">regulars of the Tavern</div></div>
+<div class="tag" id="tagR" style="right:6%;bottom:16%;text-align:right"><div class="n">ANNA <span style="opacity:.5">&amp;</span> LINA</div><div class="bar" style="background:linear-gradient(270deg,#c9a14e,transparent)"></div><div class="r">newly come to the realm</div></div>
+<div class="tag" id="tagT" style="left:50%;bottom:16%;transform:translateX(-50%)"><div class="n" style="color:#bfe39a">THE TRAVELERS</div><div class="bar"></div><div class="r">from the east</div></div>
+<div id="sub"></div>
+<div id="start"><h1>MARCHLAND SAGA</h1><h2>The Sickness Arrives</h2><p>TAP TO BEGIN &middot; SOUND ON</p></div>
+<div id="ctl"><button id="mute">Sound: on</button><button id="rep">Replay</button></div>
+</div></div>
+<script src="art.js"></script>
+<script src="char.js"></script>
+<script src="bg.js"></script>
+<script src="int.js"></script>
+<script src="audio.js"></script>
+<script src="main.js"></script>
+</body></html>

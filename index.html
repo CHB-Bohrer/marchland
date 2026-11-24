@@ -801,10 +801,10 @@ body.qafter #game{animation:qshake .2s linear 8}
 <!-- ── one-time announcement: the Marchland Saga cartoon (shown once per player, see showSaga) ── -->
 <div id="sagenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="sagenote-h">
   <div class="rulesnote-card">
-    <p class="rulesnote-eyebrow">New &middot; sound on</p>
-    <h2 id="sagenote-h">Hear ye, players of Marchland!</h2>
-    <p>The chronicles have been written: <b>Marchland Saga</b>, a short animated cartoon with a full soundtrack.</p>
-    <p><i>Any resemblance to actual standings is purely coincidental.</i></p>
+    <p class="rulesnote-eyebrow">New chapter &middot; sound on</p>
+    <h2 id="sagenote-h">Strangers at the Tavern&hellip;</h2>
+    <p>A new chapter of the <b>Marchland Saga</b>: <i>The Sickness Arrives</i>. A caravan has come in from the east, and something rides with it.</p>
+    <p><i>Any resemblance to actual players is purely coincidental.</i></p>
     <button type="button" class="rulesnote-go" id="sagenote-watch">Watch the cartoon</button>
     <button type="button" class="rulesnote-go rulesnote-alt" id="sagenote-go">Not now</button>
   </div>
@@ -10963,7 +10963,7 @@ function showNotice(){
   return true;
 }
 /* The Marchland Saga cartoon: announced once per player, after the rules notice (if they still owe one). */
-var SAGA_ID='saga2';
+var SAGA_ID='saga3';
 function sagaSeen(){
   var pl=me();
   if(pl && pl.notes && pl.notes[SAGA_ID]) return true;
@@ -10990,7 +10990,7 @@ function showSaga(){
   document.addEventListener('keydown',sagaKey,true);
   document.getElementById('sagenote-go').onclick=closeSaga;
   var w=document.getElementById('sagenote-watch');
-  w.onclick=function(){ try{ window.open('saga/','_blank','noopener'); }catch(e){} closeSaga(); };
+  w.onclick=function(){ try{ window.open('saga/sickness/','_blank','noopener'); }catch(e){} closeSaga(); };
   try{ w.focus(); }catch(e){}
   return true;
 }
