@@ -5288,7 +5288,7 @@ function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k||isChurch(c)) return nope('Something already stands here.');
-  if(c.cb return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
+  if(c.cb) return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
