@@ -732,7 +732,7 @@ body.qafter #game{animation:qshake .2s linear 8}
       <div class="pad">
         <h2>Steward</h2>
         <p class="muted" id="steward-status"></p>
-        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button><button type="button" id="st-turkey">Turkey photos</button><button type="button" id="st-hush">Hush votes</button><button type="button" id="st-quake">&#127755; Earthquake&hellip;</button></div>
+        <div class="row" style="margin-top:10px"><button type="button" id="mig-run" class="go">Update the board&hellip;</button><button type="button" id="st-sp">Sponsorships</button><button type="button" id="st-strikes">Strikes</button><button type="button" id="st-fake">Mark as fake</button><button type="button" id="st-give">Give marches</button><button type="button" id="st-turkey">Turkey photos</button><button type="button" id="st-hush">Hush votes</button><button type="button" id="st-quake">&#127755; Earthquake&hellip;</button><button type="button" id="st-faith">&#9962; Churches&hellip;</button></div>
       </div>
     </div>
 
@@ -1271,6 +1271,9 @@ function writeCell(q,r,c){
   if(c.o && c.th>Date.now()) G.cells[k].th=c.th;       // a band here that hunted: it may hunt again then
   if(c.tb>0 && c.o){ G.cells[k].tb=c.tb; if(c.tr) G.cells[k].tr=c.tr; }   // trebuchets, and when each can next fire
   if(c.rd && c.o){ G.cells[k].rd=1; if(c.rf) G.cells[k].rf=c.rf; }        // a road, and when it is finished
+  if(c.ch && c.o && c.ch.o===c.o) G.cells[k].ch=c.ch;                      // a church (see CHURCHES, PRIESTS AND THE PLAGUE)
+  if(c.o && c.pr>Date.now()){ G.cells[k].pr=c.pr; if(c.pz>Date.now()) G.cells[k].pz=c.pz; }   // the plague: sick until pz, then recovering until pr
+  if(c.o && c.b>0 && c.bt>Date.now()-864e5){ G.cells[k].bt=c.bt; if(c.bs>Date.now()){ G.cells[k].bs=c.bs; G.cells[k].bw=c.bw||0; } }   // a band's blessing
   if(c.cb && c.o && c.cbo===c.o && !c.k){ G.cells[k].cb=c.cb; G.cells[k].cbo=c.cbo; }   // a castle going up, and whose (it used to be dropped here, so a begun castle vanished at once)
   cellsGen++;
 }
@@ -3221,17 +3224,18 @@ function ratesFor(pid,at){
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
     if(td && turkeyHere(q0,r0,c,at,td)) continue;     // turkeys on the square: it yields nothing
-    var pm=plagueMul(pid,at)*plague2Mul(k,at);          // a plague on the land halves every harvest (and one on a single square halves that square's)
+    var pm=plagueMul(pid,at)*plague2Mul(k,at)*(infected(c,at)?0.5:1);          // a plague on the land halves every harvest (and one on a single square halves that square's)
     var tm=turkeyMul(pid,at);                          // a turkey swarm eats every grain the land brings in
     var bm=blessMul(pid,at);                           // the gods' blessing doubles the land's yield
     if(y) out[y.r]+=y.n*pm*bm*(y.r==='grain'?tm:1);
     if(c.k===CASTLE && !isRuin(c)) out.grain+=2*pm*tm*bm;
   }
+  out.grain+=titheOf(pid);                            // priests at home give their tithe
   var g=garrisonNeed(pid), pl=G.players[pid];
   var strd=strandedMen(pid,sup);                      // cut-off bands are fed by nobody (see strandedCells)
   var f=fieldOf(pid)-strd+transitOf(pid);            // men on the road still eat
   var wg=wagonsAt(pid,Date.now());                   // and so do the wagons: 1 grain a tick for each caravan on the road
-  var tg=trebsOf(pid)*TREB_GRAIN+towerGrain(pid);     // and the trebuchets, 2 a tick each, and the towers' upkeep
+  var tg=trebsOf(pid)*TREB_GRAIN+towerGrain(pid)+churchGrain(pid);     // and the trebuchets, 2 a tick each, and the towers' upkeep
   return {out:out,sup:s,own:own,mouths:f+g[0]+wg+tg,net:out.grain-(f+g[0]+wg+tg),supset:sup,gar:g,field:fieldOf(pid)+transitOf(pid),stranded:strd,wagons:wg,trebs:tg};
 }
 /* Caravan upkeep: every caravan a player has sent costs them 1 grain at each tick while it is still
@@ -3405,6 +3409,383 @@ function catchUp(pid){
   return ticks;
 }
 
+/* ═══ CHURCHES, PRIESTS AND THE PLAGUE ═════════════════════════════════
+   Phase 1 (churches and priests) and Phase 2 (the plague). Everything here stays hidden until the steward opens it
+   (G.faith.open); the plague stays out of the game until the steward begins it (G.pest.start) and ends when he says so (G.pest.end).
+   Data:
+     cell.ch  = {o:owner, f:finished-at, tr:priest-training-done-at, s:study-done-at, u:studies done, x:{deadPriestId:1}}   (a church; its owner is cell.o)
+     cell.bs/bw/bt = a band's blessing: until, the priest's wisdom, when it was last given
+     cell.pz/pr = plague: sick until, and (after the sickness) recovering, not catchable, until
+     G.priests[id] = {o:owner, w:wisdom, h:home church key, st:'h' (inside the church) | 'w' (walking or standing), path:[[q,r]..], t:set-off time}
+     G.faith = {open:time, tease:time}     G.pest = {start, end, tick, o:[q,r], cp:{pid:corpses}, br:{pid:time}}
+   All the numbers are here, in one place, so they are easy to tune. */
+var CHURCH_COST={stone:60,timber:40}, CHURCH_MAX=3, CHURCH_SLOTS=3, CHURCH_BUILD_MS=12*36e5, CHURCH_GRAIN=1;
+var PRIEST_STEP_MS=36e5, TRAIN_COST={grain:30}, TRAIN_MARCH=5, TRAIN_MS=864e5, WISE0=10, WISE_FLOOR=2, WISE_DROP=2;
+var STUDY_COST={grain:40}, STUDY_MARCH=5, STUDY_MS=2*864e5;
+var BLESS_GRAIN=1, BLESS_MS=24*36e5, BLESS_DIV=5, BLESS_DEATH=0.25, BURY_IRON=1, TITHE_DIV=4;
+var PEST_MS=3*864e5, PEST_REST_MS=2*864e5, PEST_SPREAD=0.20, PEST_ROAD=0.35, PEST_DECAY=0.97, PEST_FLOOR=0.4, PEST_WALL=[1,0.5,0.35,0.25];
+var PEST_CURE=0.08, PEST_WISE=12.5, PEST_TEND=0.04, PEST_TEND_CAP=0.30, CORPSE_CAP=10, PEST_BURN_MS=2*864e5, CAFFA_RANGE=3, BRINGER_MS=3*864e5;
+function faithPublic(){ return !!(G&&G.faith&&G.faith.open&&Date.now()>=G.faith.open); }
+function faithOn(){ return faithPublic()||!!(G&&me()&&isSteward()); }
+function pestOn(){ return !!(G&&G.pest&&G.pest.start&&!G.pest.end); }
+function pestEver(){ return !!(G&&G.pest&&G.pest.start); }
+function pkey(k){ var p=k.split('_'); return [parseInt(p[0],10),parseInt(p[1],10)]; }
+function infected(c,at){ return !!(c&&c.pz&&c.pz>(at||Date.now())); }
+function recovering(c,at){ at=at||Date.now(); return !!(c&&c.pr&&c.pr>at&&!(c.pz&&c.pz>at)); }
+function infectCell(c,at){ at=at||Date.now(); c.pz=at+PEST_MS; c.pr=at+PEST_MS+PEST_REST_MS; }
+function isChurch(c){ return !!(c&&c.ch&&c.o&&c.ch.o===c.o); }
+function churchReady(c){ return isChurch(c)&&!(c.ch.f>Date.now()); }
+function myChurchKeys(pid){ var o=[]; for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&isChurch(c)) o.push(k); } return o; }
+function churchCeil(c){ var d=Object.keys((c.ch&&c.ch.x)||{}).length; return Math.max(WISE_FLOOR,Math.min(WISE0,WISE0+((c.ch&&c.ch.u)||0)-WISE_DROP*d)); }
+function priestsOf(pid){ var o=[]; for(var id in (G.priests||{})){ var p=G.priests[id]; if(p&&p.o===pid) o.push(id); } return o.sort(); }
+function priestPath(p){ return arr(p.path); }
+function priestPos(p,now){
+  now=now||Date.now();
+  if(p.st==='h') return pkey(p.h);
+  var path=priestPath(p); if(!path.length) return pkey(p.h);
+  var i=Math.min(path.length-1,Math.floor(Math.max(0,now-(p.t||0))/PRIEST_STEP_MS));
+  return [path[i][0],path[i][1]];
+}
+function priestArrived(p,now){ if(p.st==='h') return true; var path=priestPath(p); return !path.length||(now||Date.now())>=(p.t||0)+(path.length-1)*PRIEST_STEP_MS; }
+function priestsHere(q,r,pid){ var out=[], now=Date.now(), k=key(q,r); for(var id in (G.priests||{})){ var p=G.priests[id]; if(!p||p.st==='h'||(pid&&p.o!==pid)) continue; var P=priestPos(p,now); if(key(P[0],P[1])===k&&priestArrived(p,now)) out.push(id); } return out.sort(); }
+function priestRoute(a,b){
+  var path=[[a[0],a[1]]], q=a[0], r=a[1], guard=0;
+  while((q!==b[0]||r!==b[1])&&guard++<400){
+    var best=null, bd=1e9;
+    for(var i=0;i<6;i++){ var nq=wrapQ(q+AX[i][0]), nr=wrapR(r+AX[i][1]), d=hexDist(nq,nr,b[0],b[1]); if(d<bd){ bd=d; best=[nq,nr]; } }
+    q=best[0]; r=best[1]; path.push(best);
+  }
+  return path;
+}
+function churchSlots(k){ var n=0, c=G.cells[k]; for(var id in (G.priests||{})){ var p=G.priests[id]; if(p&&p.h===k) n++; } if(c&&c.ch&&c.ch.tr>Date.now()) n++; return n; }
+function newPriestId(){ return 'pr'+Math.random().toString(36).slice(2,9); }
+function putPriest(id){ if(G.priests[id]) putPath('/priests/'+id,G.priests[id]); }
+/* what the church feeds and what it gives: 1 grain a tick for each church; each priest at home gives wisdom/4 grain a tick, rounded down in all */
+function churchGrain(pid){ return myChurchKeys(pid).length*CHURCH_GRAIN; }
+function titheOf(pid){
+  var s=0; for(var id in (G.priests||{})){ var p=G.priests[id]; if(!p||p.o!==pid||p.st!=='h') continue; var hc=G.cells[p.h]; if(hc&&churchReady(hc)&&hc.o===pid) s+=(p.w||0); }
+  return Math.floor(s/TITHE_DIV);
+}
+function blessBonus(c){ return c&&c.bs>Date.now()?Math.floor((c.bw||0)/BLESS_DIV):0; }
+function killPriest(id,why){
+  var p=G.priests&&G.priests[id]; if(!p) return;
+  delete G.priests[id]; putPath('/priests/'+id,null);
+  var hc=G.cells[p.h];
+  if(hc&&isChurch(hc)&&hc.o===p.o){ hc.ch.x=hc.ch.x||{}; hc.ch.x[id]=1; putPath('/cells/'+p.h+'/ch/x/'+id,1); cellsGen++; }
+  if(p.o===ME) setTimeout(function(){ say('<span class="bad">A priest of yours has died'+(why?' ('+why+')':'')+'.</span> The wisdom his church can teach is lower now.'); },30);
+}
+
+/* ── the steward opens it, and the plague ── */
+function faithGodsLine(m,tag){ plagueChat(m,Date.now(),tag); }
+function stewardFaith(){
+  if(!G||!isSteward()) return;
+  var f=G.faith||{}, P=G.pest||{}, open=!!f.open, begun=!!P.start, ended=!!P.end;
+  scrollDialog({eyebrow:'Steward', title:'Churches and the plague',
+    html:'<p>Churches: <b>'+(open?'open':'not open yet (only you can use them)')+'</b>. Pilgrim teaser: <b>'+(f.tease?'sent':'not sent')+'</b>. Plague: <b>'+(!begun?'not begun':ended?'ended':'raging')+'</b>.</p>',
+    list:[
+      {label:'Open the churches',cost:'announces them to everyone',why:open?'Already open':'',value:'open'},
+      {label:'Send the pilgrim teaser',cost:'sick pilgrims at the border',why:!open?'Open the churches first':(f.tease?'Already sent':''),value:'tease'},
+      {label:'Begin the plague',cost:'starts it at one square of someone’s land',why:!open?'Open the churches first':(begun&&!ended?'Already raging':''),value:'begin'},
+      {label:'End the plague',cost:'every square is well again at once',why:!(begun&&!ended)?'It is not raging':'',value:'end'}
+    ], cancel:null, buttons:[{label:'Close',value:null}]}).then(function(res){
+    if(!res.value) return;
+    var now=Date.now(), patch={};
+    if(res.value==='open'){ G.faith=G.faith||{}; G.faith.open=now; patch['faith']=G.faith; faithGodsLine('The Church has come to Marchland. Raise a church, train priests, and keep your soldiers blessed. Read the guide on any square of yours.','fopen'); }
+    else if(res.value==='tease'){ G.faith=G.faith||{}; G.faith.tease=now; patch['faith']=G.faith; faithGodsLine('Sick pilgrims have been seen at the border. The gods must be punishing the world for Sir Charlton’s evil ways. Keep your priests close.','ftease'); }
+    else if(res.value==='begin'){
+      var org=pestOrigin(); if(!org) return nope('There is no ground to start it on.');
+      var c0=cellOf(org[0],org[1]); infectCell(c0,now); writeCell(org[0],org[1],c0); patch['cells/'+key(org[0],org[1])]=G.cells[key(org[0],org[1])];
+      G.pest={start:now,end:null,tick:Math.floor(now/TICK_MS),o:org,cp:{},br:{}}; patch['pest']=G.pest;
+      faithGodsLine('The plague has come to Marchland, and it began on the land of '+esc(nameOf(c0.o))+'. Sir Charlton’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
+    }
+    else if(res.value==='end'){
+      G.pest.end=now; patch['pest']=G.pest;
+      for(var k in G.cells){ var cc=G.cells[k]; if(cc.pz||cc.pr){ delete cc.pz; delete cc.pr; patch['cells/'+k]=cc; } }
+      faithGodsLine('The plague has passed from Marchland. Every square is well again.','pend');
+    }
+    patch['rev']=now; myRev=now;
+    if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+    render(); say('Done.');
+  });
+}
+function pestOrigin(){
+  var ks=Object.keys(G.cells).filter(function(k){ var c=G.cells[k]; return c.o&&!c.k&&!building(c)&&!c.ch; }).sort();
+  if(!ks.length) return null;
+  var rng=mulberry32(newSeed()), edge=ks.filter(function(k){ var a=pkey(k); for(var i=0;i<6;i++){ var n=G.cells[key(a[0]+AX[i][0],a[1]+AX[i][1])]; if(!n||!n.o) return true; } return false; });
+  var pool=edge.length?edge:ks; return pkey(pool[Math.floor(rng()*pool.length)]);
+}
+
+/* ── churches ── */
+function buildChurch(q,r){
+  var pl=me(), c=cellOf(q,r), now=Date.now();
+  if(!faithOn()) return;
+  if(c.o!==ME||c.k||c.cb||c.ch||c.t===RIVER||building(c)) return nope('A church stands on an empty square of yours (not a river, castle or tower).');
+  if(myChurchKeys(ME).length>=CHURCH_MAX) return nope('You can have at most '+CHURCH_MAX+' churches.');
+  var lk=lackText(CHURCH_COST); if(lk) return nope(lk+'.');
+  for(var g in CHURCH_COST) pl.res[g]-=CHURCH_COST[g];
+  c.ch={o:ME,f:now+CHURCH_BUILD_MS}; writeCell(q,r,c);
+  var id=newPriestId(); G.priests=G.priests||{}; G.priests[id]={o:ME,w:WISE0,h:key(q,r),st:'h',t:now};
+  render(); pushCell(q,r); putPriest(id); pushMe();
+  say('A church is going up &mdash; ready in 12 hours. Its first priest, wisdom '+WISE0+', waits inside.');
+}
+function churchMenu(q,r){
+  var pl=me(), c=cellOf(q,r), k=key(q,r), now=Date.now();
+  if(!(c.o===ME&&churchReady(c))) return nope('That church is not ready yet.');
+  var slots=churchSlots(k), ceil=churchCeil(c), tr=c.ch.tr>now, st=c.ch.s>now;
+  var mine=[]; for(var id in G.priests){ var p=G.priests[id]; if(p&&p.h===k) mine.push(p); }
+  var home=mine.filter(function(p){ return p.st==='h'; });
+  var why1=slots>=CHURCH_SLOTS?'The church holds '+CHURCH_SLOTS+' priests':(tr?'A priest is in training: '+hoursLeft(c.ch.tr):(lackText(TRAIN_COST)||(pl.squares<TRAIN_MARCH?'Needs '+TRAIN_MARCH+' marches':'')));
+  var why2=ceil>=WISE0?'Its wisdom is already at the top ('+WISE0+')':(st?'A study is under way: '+hoursLeft(c.ch.s):(lackText(STUDY_COST)||(pl.squares<STUDY_MARCH?'Needs '+STUDY_MARCH+' marches':'')));
+  scrollDialog({eyebrow:'Church', title:'Your church',
+    html:'<p>Priests here: <b>'+mine.length+'</b> of '+CHURCH_SLOTS+' ('+home.length+' at home). New priests are trained to wisdom <b>'+ceil+'</b>.</p>'
+      +'<p>Priests at home give the tithe: wisdom &divide; '+TITHE_DIV+' grain a tick, for all your priests together, rounded down. The church eats '+CHURCH_GRAIN+' grain a tick.</p>',
+    list:[
+      {label:'Train a priest',cost:TRAIN_COST.grain+' grain &middot; '+TRAIN_MARCH+' marches &middot; 1 day',why:why1,value:'train'},
+      {label:'Study',cost:STUDY_COST.grain+' grain &middot; '+STUDY_MARCH+' marches &middot; 2 days &middot; +1 wisdom the church can teach',why:why2,value:'study'}
+    ], cancel:null, buttons:[{label:'Close',value:null}]}).then(function(res){
+    if(!res.value) return;
+    var c2=cellOf(q,r); if(!(c2.o===ME&&churchReady(c2))) return;
+    var now2=Date.now();
+    if(res.value==='train'){
+      if(churchSlots(k)>=CHURCH_SLOTS||c2.ch.tr>now2||lackText(TRAIN_COST)||pl.squares<TRAIN_MARCH) return nope('You can&rsquo;t train one now.');
+      pl.res.grain-=TRAIN_COST.grain; pl.squares-=TRAIN_MARCH; c2.ch.tr=now2+TRAIN_MS; say('A priest begins his schooling &mdash; ready in a day.');
+    } else {
+      if(churchCeil(c2)>=WISE0||c2.ch.s>now2||lackText(STUDY_COST)||pl.squares<STUDY_MARCH) return nope('You can&rsquo;t study now.');
+      pl.res.grain-=STUDY_COST.grain; pl.squares-=STUDY_MARCH; c2.ch.s=now2+STUDY_MS; say('The priests turn to their books &mdash; done in 2 days.');
+    }
+    writeCell(q,r,c2); render(); pushCell(q,r); pushMe();
+  });
+}
+function sendPriestPick(q,r){
+  var now=Date.now(), ids=priestsOf(ME).filter(function(id){ var p=G.priests[id]; return p.st!=='h'||churchReady(G.cells[p.h]); });
+  if(!ids.length) return nope('No priest of yours is free to go (a church must be finished first).');
+  var list=ids.map(function(id){
+    var p=G.priests[id], P=priestPos(p,now), d=hexDist(P[0],P[1],q,r), here=(P[0]===wrapQ(q)&&P[1]===wrapR(r));
+    return {label:'Priest, wisdom '+p.w, cost:(p.st==='h'?'in his church':priestArrived(p,now)?'standing at '+P[0]+','+P[1]:'on the road')+' &middot; '+(d?d+' hours away':'already here'), why:here&&p.st!=='h'?'He is already here':'', value:id};
+  });
+  scrollDialog({eyebrow:'Priests', title:'Send which priest?', html:'<p>A priest goes barefoot and unarmed, one square an hour over any ground, rivers too. An enemy band on his square kills him.</p>', list:list, cancel:null, buttons:[{label:'Not now',value:null}]}).then(function(res){
+    if(!res.value) return; var p=G.priests[res.value]; if(!p||p.o!==ME) return;
+    var P=priestPos(p,Date.now()), route=priestRoute(P,[wrapQ(q),wrapR(r)]);
+    p.st='w'; p.path=route; p.t=Date.now();
+    render(); putPriest(res.value); say('The priest sets out &mdash; '+(route.length-1)+' hour'+(route.length>2?'s':'')+' to walk.');
+  });
+}
+function blessBand(q,r){
+  var pl=me(), c=cellOf(q,r), now=Date.now(), ids=priestsHere(q,r,ME);
+  if(!(c.o===ME&&c.b>0)) return nope('Bless a band of yours.');
+  if(!ids.length) return nope('A priest must stand with the band.');
+  if(c.bt&&now-c.bt<BLESS_MS) return nope('This band was blessed in the last day.');
+  if((pl.res.grain||0)<BLESS_GRAIN) return nope('A blessing costs '+BLESS_GRAIN+' grain.');
+  var p=G.priests[ids[0]]; pl.res.grain-=BLESS_GRAIN;
+  c.bs=now+BLESS_MS; c.bw=p.w; c.bt=now; writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  say('The band is blessed &mdash; it fights as if <b>'+Math.floor(p.w/BLESS_DIV)+'</b> soldiers stronger, until its next battle or for a day.');
+}
+function burySquare(q,r){
+  var pl=me(), c=cellOf(q,r), ids=priestsHere(q,r,ME), n=arr(c.gv).length;
+  if(!ids.length) return nope('A priest must stand on the square.');
+  if(!n) return nope('No fallen are buried here.');
+  if((pl.res.iron||0)<n*BURY_IRON) return nope('Burying '+n+' costs '+n*BURY_IRON+' iron. '+shortBy({iron:n*BURY_IRON}));
+  pl.res.iron-=n*BURY_IRON; delete c.gv; writeCell(q,r,c); render(); pushCell(q,r); pushMe();
+  say('The fallen are laid to rest &mdash; the crosses are gone ('+n*BURY_IRON+' iron).');
+}
+function burnSquare(q,r){
+  var c=cellOf(q,r), now=Date.now();
+  if(!(c.o===ME&&infected(c,now))) return nope('Only an infected square of yours can be burned.');
+  scrollDialog({eyebrow:'Plague', title:'Burn this square?', html:'<p>The land burns for 2 days and gives nothing. The sickness dies with it, and the plague can&rsquo;t take it while it burns. It can be caught again later.</p>',
+    cancel:false, buttons:[{label:'Hold back',value:false},{label:'Burn it',value:true,primary:true}]}).then(function(res){
+    if(!res.value) return;
+    var c2=cellOf(q,r); if(!(c2.o===ME&&infected(c2))) return;
+    delete c2.pz; c2.pr=Date.now()+PEST_BURN_MS; c2.bn=Date.now()+PEST_BURN_MS; writeCell(q,r,c2); render(); pushCell(q,r);
+    say('The square is burning. The sickness is gone from it.');
+  });
+}
+/* the Siege of Caffa: a trebuchet hurls a plague corpse; the target square and its neighbours fall sick */
+function caffaWhy(c){
+  if(!pestOn()) return 'The plague is not raging';
+  var cp=(G.pest.cp||{})[ME]||0, pl=me();
+  if(!trebReady(c)) return 'Next ready in '+hoursLeft(trebNext(c));
+  if(cp<1) return 'Needs a corpse (none of your soldiers have died of plague)';
+  if((pl.res.stone||0)<1) return 'Needs 1 stone';
+  return '';
+}
+function caffaShot(q,r){
+  var c=cellOf(q,r), list=[];
+  for(var dq=-CAFFA_RANGE;dq<=CAFFA_RANGE;dq++) for(var dr=-CAFFA_RANGE;dr<=CAFFA_RANGE;dr++){
+    var tq=wrapQ(q+dq), tr=wrapR(r+dr); if(hexDist(q,r,tq,tr)>CAFFA_RANGE) continue;
+    var tc=G.cells[key(tq,tr)]; if(tc&&tc.o&&tc.o!==ME) list.push({label:'Their square at '+tq+','+tr, cost:esc(nameOf(tc.o)), why:'', value:[tq,tr]});
+  }
+  if(!list.length) return nope('No enemy square lies within '+CAFFA_RANGE+' squares of this trebuchet.');
+  scrollDialog({eyebrow:'The Siege of Caffa', title:'Choose a target', html:'<p>1 stone and 1 corpse. The square and its neighbours fall sick.</p>', list:list.slice(0,24), cancel:null, buttons:[{label:'Not now',value:null}]}).then(function(res){
+    if(!res.value) return;
+    var pl=me(), sc=cellOf(q,r), why=caffaWhy(sc); if(why) return nope(why+'.');
+    var tq=res.value[0], tr=res.value[1], now=Date.now(), patch={}, hit=0;
+    [[0,0]].concat(AX).forEach(function(d){
+      var cc=cellOf(tq+d[0],tr+d[1]); if(!cc.o||building(cc)||burning(cc,now)||infected(cc,now)||recovering(cc,now)) return;
+      infectCell(cc,now); writeCell(tq+d[0],tr+d[1],cc); patch['cells/'+key(tq+d[0],tr+d[1])]=G.cells[key(tq+d[0],tr+d[1])]; hit++;
+    });
+    pl.res.stone-=1; var tarr=arr(sc.tr).slice(0,sc.tb||0); while(tarr.length<(sc.tb||0)) tarr.push(0);
+    for(var i=0;i<tarr.length;i++){ if(!(tarr[i]>now)){ tarr[i]=now+TREB_RELOAD; break; } } sc.tr=tarr; writeCell(q,r,sc);
+    G.pest.cp[ME]=Math.max(0,((G.pest.cp||{})[ME]||0)-1); G.pest.br=G.pest.br||{}; G.pest.br[ME]=now;
+    patch['pest/cp/'+ME]=G.pest.cp[ME]; patch['pest/br/'+ME]=now; patch['cells/'+key(q,r)]=G.cells[key(q,r)]; patch['rev']=now; myRev=now;
+    if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
+    pushMe(); render();
+    faithGodsLine(esc(pl.name)+' has loosed the Siege of Caffa. A plague-bringer walks among you.','caffa'+now);
+    say('The corpse flies. '+hit+' square'+(hit>1?'s':'')+' fall sick.');
+  });
+}
+function plagueBringer(pid){ var b=G&&G.pest&&G.pest.br&&G.pest.br[pid]; return !!(b&&Date.now()-b<BRINGER_MS); }
+
+/* ── the guide: every rule, on scrolls ── */
+function faithTutorial(){
+  var html='<p><b>Churches.</b> A church costs '+costLine(CHURCH_COST)+', takes 12 hours to raise, and eats '+CHURCH_GRAIN+' grain a tick. You can have '+CHURCH_MAX+', each holding '+CHURCH_SLOTS+' priests. The first priest comes free, at wisdom '+WISE0+'.</p>'
+   +'<p><b>Priests.</b> Barefoot and unarmed, they walk one square an hour over any ground, rivers and bridges as soldiers do. Tap any square and choose <b>Send a priest here</b>. A new priest costs '+TRAIN_COST.grain+' grain and '+TRAIN_MARCH+' marches and a day, and has the wisdom the church can teach (it starts at '+WISE0+'). Each priest who dies lowers that church&rsquo;s wisdom by '+WISE_DROP+' (never below '+WISE_FLOOR+'). <b>Study</b> at the church ('+STUDY_COST.grain+' grain, '+STUDY_MARCH+' marches, 2 days) raises it by 1, up to '+WISE0+'.</p>'
+   +'<p><b>Death.</b> A priest dies if an enemy band stands on his square, unless a band of yours is with him. If a blessed band loses its fight, one priest with it may die (1 in 4).</p>'
+   +'<p><b>Blessing.</b> A priest standing with a band can bless it for '+BLESS_GRAIN+' grain: until it next fights, or a day. In the odds it counts wisdom &divide; '+BLESS_DIV+' extra soldiers. A band can be blessed once a day. Moving a band ends the blessing.</p>'
+   +'<p><b>Burying the dead.</b> A priest standing on a square with crosses can bury the fallen for '+BURY_IRON+' iron each, and the crosses are gone.</p>'
+   +'<p><b>Tithes.</b> Priests inside their churches give grain every tick: all their wisdom added up, divided by '+TITHE_DIV+', rounded down.</p>';
+  if(pestEver()) html+='<hr><p><b>The plague.</b> A sick square gives half its harvest for 3 days, then recovers and can&rsquo;t be caught for 2 days; after that it can be caught again. Sick bands lose a man every 2 ticks. It spreads to a neighbour about 20% a tick (35% road to road), a little less the farther from where it began; a wall makes it 50%, 35% or 25% by level but never stops it. Cut a road and the road&rsquo;s extra chance is gone.</p>'
+   +'<p><b>Priests and the plague.</b> A priest cuts the chance of catching it on his square and beside it, cures 8% of his wisdom each tick, and keeps bands near him from dying. But tending the sick can kill him (4% for each sick square near him, at most 30% a tick).</p>'
+   +'<p><b>Burning.</b> Burn your own sick square: it burns 2 days, the sickness is gone, and it can&rsquo;t be caught while it burns.</p>'
+   +'<p><b>The Siege of Caffa.</b> A trebuchet can hurl a plague corpse (1 stone and 1 corpse; soldiers who die of plague leave corpses, at most '+CORPSE_CAP+' for you) at an enemy square within '+CAFFA_RANGE+', and it and its neighbours fall sick. Whoever does it is marked a plague-bringer for 3 days.</p>';
+  scrollDialog({eyebrow:'The Church', title:'Churches, priests'+(pestEver()?' and the plague':''), html:html, cancel:null, buttons:[{label:'Got it',value:null,primary:true}]});
+}
+
+/* ── the menu entries ── */
+function faithActions(q,r,c,A,wet){
+  if(!faithOn()) return;
+  var pl=me(), now=Date.now(), own=c.o===ME;
+  A('How churches and priests work','a short guide',function(){ faithTutorial(); });
+  if(own&&!wet){
+    if(isChurch(c)){
+      if(c.ch.f>now) A('Church being raised','ready in '+hoursLeft(c.ch.f),function(){},'Wait for it to finish');
+      else A('The church','priests, study, tithes',function(){ churchMenu(q,r); });
+    } else if(!c.k&&!c.cb&&!c.ch&&!building(c)){
+      A('Build a church',costLine(CHURCH_COST)+' &middot; eats '+CHURCH_GRAIN+' grain a tick &middot; 12 h',function(){ buildChurch(q,r); },
+        myChurchKeys(ME).length>=CHURCH_MAX?'You already have '+CHURCH_MAX+' churches':lackText(CHURCH_COST));
+    }
+  }
+  if(priestsOf(ME).length) A('Send a priest here','free &middot; a square an hour, over any ground',function(){ sendPriestPick(q,r); });
+  var here=priestsHere(q,r,ME);
+  if(here.length){
+    if(own&&c.b>0) A('Bless this band',BLESS_GRAIN+' grain &middot; counts '+Math.floor(G.priests[here[0]].w/BLESS_DIV)+' extra soldier'+(Math.floor(G.priests[here[0]].w/BLESS_DIV)===1?'':'s'),function(){ blessBand(q,r); },
+      (c.bt&&now-c.bt<BLESS_MS)?'Blessed in the last day':((pl.res.grain||0)<BLESS_GRAIN?'Needs '+BLESS_GRAIN+' grain':''));
+    var gn=arr(c.gv).length; if(gn) A('Bury the fallen',(gn*BURY_IRON)+' iron &middot; '+gn+' cross'+(gn>1?'es':''),function(){ burySquare(q,r); },(pl.res.iron||0)<gn*BURY_IRON?'Needs '+(gn*BURY_IRON)+' iron':'');
+  }
+  if(infected(c,now)){
+    A('Plague on this square','sick for '+hoursLeft(c.pz),function(){},'It will pass by itself');
+    if(own) A('Burn this square','free &middot; 2 days of fire, ends the sickness',function(){ burnSquare(q,r); });
+  } else if(recovering(c,now)) A('Recovering from plague','safe for '+hoursLeft(c.pr),function(){},'It can&rsquo;t be caught now');
+  if(own&&c.tb>0&&pestEver()){ var cw=caffaWhy(c); A('The Siege of Caffa','1 stone &middot; 1 corpse &middot; range '+CAFFA_RANGE,function(){ caffaShot(q,r); },cw); }
+}
+
+/* ── time: priests arrive, schooling ends, bad things happen to priests ── */
+var faithBusy=false;
+function settleFaith(){
+  if(!G||!me()||!faithOn()||dirty||ELIM) return;
+  G.priests=G.priests||{};
+  var now=Date.now(), pl=me(), k, c, id, p;
+  if(boardFresh()){
+    // priests of players who left; churches whose square changed hands; priests under an enemy band or in a lost church
+    for(k in G.cells){ c=G.cells[k]; if(c.ch&&c.ch.o!==c.o){ delete c.ch; var a0=pkey(k); putPath('/cells/'+k+'/ch',null); cellsGen++; } }
+    Object.keys(G.priests).forEach(function(id2){
+      var p2=G.priests[id2]; if(!p2) return;
+      if(!G.players[p2.o]) return killPriest(id2,'')&&0;
+      if(p2.st==='h'){ var hc=G.cells[p2.h]; if(!(hc&&isChurch(hc)&&hc.o===p2.o)) killPriest(id2,'his church fell'); return; }
+      var P=priestPos(p2,now), cc=G.cells[key(P[0],P[1])];
+      if(cc&&cc.o&&cc.o!==p2.o&&cc.b>0) killPriest(id2,'an enemy band reached him');
+    });
+  }
+  // mine: schooling and studying end, priests walk home
+  for(k in G.cells){ c=G.cells[k]; if(c.o!==ME||!isChurch(c)) continue; var ch=false, a=pkey(k);
+    if(c.ch.tr&&c.ch.tr<=now){ delete c.ch.tr; id=newPriestId(); G.priests[id]={o:ME,w:churchCeil(c),h:k,st:'h',t:now}; putPriest(id); ch=true; say('<span class="good">A new priest, wisdom '+G.priests[id].w+', has finished his schooling.</span>'); }
+    if(c.ch.s&&c.ch.s<=now){ delete c.ch.s; c.ch.u=(c.ch.u||0)+1; ch=true; say('<span class="good">The study is done &mdash; the church now teaches wisdom '+churchCeil(c)+'.</span>'); }
+    if(ch){ writeCell(a[0],a[1],c); pushCell(a[0],a[1]); render(); }
+  }
+  priestsOf(ME).forEach(function(id2){
+    var p2=G.priests[id2]; if(!p2||p2.st==='h'||!priestArrived(p2,now)) return;
+    var P=priestPos(p2,now), cc=G.cells[key(P[0],P[1])]; if(!(cc&&cc.o===ME&&churchReady(cc))) return;
+    var ck=key(P[0],P[1]); if(p2.h!==ck){ if(churchSlots(ck)>=CHURCH_SLOTS) return; p2.h=ck; }
+    p2.st='h'; delete p2.path; putPriest(id2);
+  });
+}
+
+/* ── the plague, one tick at a time (every screen computes the same tick; one of them wins the right to apply it) ── */
+var pestBusy=false;
+function pestTick(n){
+  var T=n*TICK_MS, rng=mulberry32((n*2654435761)>>>0), P=G.pest, keys=Object.keys(G.cells).sort(), wis={}, patch={}, org=P.o||[0,0], i, kill=[];
+  var ids=Object.keys(G.priests||{}).sort();
+  function mark(k,c){ var a=pkey(k); writeCell(a[0],a[1],c); patch['cells/'+k]=G.cells[k]||null; }
+  ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), w=p.w||0, a=pos; [[0,0]].concat(AX).forEach(function(d){ var kk=key(a[0]+d[0],a[1]+d[1]); if(w>(wis[kk]||0)) wis[kk]=w; }); });
+  var sick=keys.filter(function(k){ return infected(G.cells[k],T); }), fresh={};
+  sick.forEach(function(k){
+    var c=G.cells[k], a=pkey(k);
+    for(i=0;i<6;i++){
+      var nk=key(a[0]+AX[i][0],a[1]+AX[i][1]), nc=G.cells[nk]; if(!nc||!nc.o||building(nc)||infected(nc,T)||recovering(nc,T)||burning(nc,T)||fresh[nk]) continue;
+      var pr=((c.rd&&nc.rd)?PEST_ROAD:PEST_SPREAD)*PEST_WALL[Math.min(3,nc.w||0)]*Math.max(PEST_FLOOR,Math.pow(PEST_DECAY,hexDist(org[0],org[1],pkey(nk)[0],pkey(nk)[1])))*(1-(wis[nk]||0)/PEST_WISE);
+      if(rng()<pr) fresh[nk]=1;
+    }
+  });
+  sick.forEach(function(k){
+    var c=G.cells[k], ch=false;
+    if(wis[k]&&rng()<PEST_CURE*wis[k]){ delete c.pz; c.pr=T+PEST_REST_MS; ch=true; }
+    else if(c.b>0&&!wis[k]&&n%2===0){ c.b-=1; addGraves(c,1); if(!(c.b>0)) delete c.b; P.cp=P.cp||{}; P.cp[c.o]=Math.min(CORPSE_CAP,(P.cp[c.o]||0)+1); patch['pest/cp/'+c.o]=P.cp[c.o]; ch=true; }
+    if(ch) mark(k,c);
+  });
+  Object.keys(fresh).forEach(function(k){ var c=G.cells[k]; infectCell(c,T); mark(k,c); });
+  ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), m=0; [[0,0]].concat(AX).forEach(function(d){ if(infected(G.cells[key(pos[0]+d[0],pos[1]+d[1])],T)) m++; }); if(m&&rng()<Math.min(PEST_TEND_CAP,PEST_TEND*m)) kill.push(id); });
+  kill.forEach(function(id){ var hk=G.priests[id].h; killPriest(id,'he died tending the sick'); });
+  patch['pest/tick']=n; P.tick=n;
+  return patch;
+}
+function settlePest(){
+  if(!G||!me()||!pestOn()||dirty||pestBusy||!boardFresh()) return;
+  var n=Math.floor(Date.now()/TICK_MS), cur=G.pest.tick!=null?G.pest.tick:Math.floor(G.pest.start/TICK_MS);
+  if(cur>=n) return;
+  pestBusy=true;
+  var done=function(){ pestBusy=false; };
+  if(!online){ var pt=pestTick(cur+1); pushAll(); return done(); }
+  dbGetTag('/marchland/'+gameCode+'/pest/tick').then(function(x){
+    var have=x.v!=null?x.v:cur; if(have>=n){ G.pest.tick=have; return; }
+    var next=have+1;
+    return dbPutIf('/marchland/'+gameCode+'/pest/tick',next,x.tag||'null_etag').then(function(r){
+      if(!r.ok) return;
+      var patch=pestTick(next); patch['rev']=Date.now(); myRev=patch['rev'];
+      return dbPatch('/marchland/'+gameCode,patch).then(ok,fail);
+    });
+  }).catch(function(){}).then(function(){ done(); render(); });
+}
+
+/* ── drawn on the map: churches, sick squares, priests ── */
+function drawFaith(now){
+  if(!G) return;
+  var show=faithOn(), k, c, a, P, id;
+  for(k in G.cells){
+    c=G.cells[k]; var sk=infected(c), rc=recovering(c), ch=show&&isChurch(c); if(!sk&&!rc&&!ch) continue;
+    a=pkey(k); P=toNear(a[0],a[1]); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
+    ctx.save();
+    if(sk){ ctx.globalAlpha=0.35+0.1*Math.sin(now*3); ctx.fillStyle='#7d9a1e'; hexPath(P[0],P[1],S*0.92); ctx.fill(); ctx.globalAlpha=0.9; if(S>=12){ ctx.fillStyle='#2f3d06'; ctx.font='700 '+Math.round(S*0.5)+'px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('☠',P[0],P[1]-S*0.45); } }
+    else if(rc){ ctx.globalAlpha=0.6; ctx.strokeStyle='#7d9a1e'; ctx.lineWidth=Math.max(1,S*0.06); ctx.setLineDash([3,3]); hexPath(P[0],P[1],S*0.9); ctx.stroke(); ctx.setLineDash([]); }
+    if(ch){
+      var col=pColor(c.o), w=S*0.5, h=S*0.4, x=P[0]-S*0.55, y=P[1]-S*0.55; ctx.globalAlpha=c.ch.f>Date.now()?0.45:1;
+      ctx.fillStyle='#efe6d2'; ctx.strokeStyle=col; ctx.lineWidth=Math.max(1,S*0.06); ctx.fillRect(x,y,w,h); ctx.strokeRect(x,y,w,h);
+      ctx.beginPath(); ctx.moveTo(x-S*0.05,y); ctx.lineTo(x+w/2,y-S*0.3); ctx.lineTo(x+w+S*0.05,y); ctx.closePath(); ctx.fillStyle=col; ctx.fill();
+      ctx.strokeStyle=col; ctx.beginPath(); ctx.moveTo(x+w/2,y-S*0.3); ctx.lineTo(x+w/2,y-S*0.5); ctx.moveTo(x+w/2-S*0.08,y-S*0.42); ctx.lineTo(x+w/2+S*0.08,y-S*0.42); ctx.stroke();
+    }
+    ctx.restore();
+  }
+  if(!show) return;
+  for(id in (G.priests||{})){
+    var p=G.priests[id]; if(!p||p.st==='h') continue;
+    var pos=priestPos(p,now), q=pos[0], r=pos[1]; P=toNear(q,r); if(P[0]<-S*2||P[0]>W+S*2||P[1]<-S*2||P[1]>H+S*2) continue;
+    var col2=pColor(p.o), s=Math.max(6,S*0.5), x2=P[0]+S*0.35, y2=P[1]+S*0.1;
+    ctx.save(); ctx.fillStyle='#efe6d2'; ctx.strokeStyle=col2; ctx.lineWidth=Math.max(1,S*0.07);
+    ctx.beginPath(); ctx.moveTo(x2,y2-s*0.2); ctx.lineTo(x2-s*0.3,y2+s*0.5); ctx.lineTo(x2+s*0.3,y2+s*0.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x2,y2-s*0.35,s*0.16,0,6.284); ctx.fill(); ctx.stroke();
+    if(S>=12){ ctx.beginPath(); ctx.moveTo(x2,y2-s*0.9); ctx.lineTo(x2,y2-s*0.6); ctx.moveTo(x2-s*0.1,y2-s*0.8); ctx.lineTo(x2+s*0.1,y2-s*0.8); ctx.stroke(); }
+    ctx.restore();
+  }
+}
+
 /* ═══ sync ═════════════════════════════════════════════════════════════ */
 /* Writes go to the narrowest path that changed — one cell, or just my own
    player record — so two people acting at once can't overwrite each other.
@@ -3536,7 +3917,7 @@ function applyRemote(remote){
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
   G.treks=remote.treks||{};
-  G.purge=remote.purge||null; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.tinv=remote.tinv||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
+  G.purge=remote.purge||null; G.faith=remote.faith||null; G.pest=remote.pest||null; G.priests=remote.priests||{}; G.plague=remote.plague||null; G.plague2=remote.plague2||null; G.fixes=remote.fixes||null; G.comet2=remote.comet2||null; G.titan=remote.titan||null; G.tswarm=remote.tswarm||null; G.tinv=remote.tinv||null; G.judge=remote.judge||null; G.comet=remote.comet||null; G.turkeys=remote.turkeys||null; G.turkeyhunt=remote.turkeyhunt||null; G.puddinggift=remote.puddinggift||null; G.removed=remote.removed||null; G.meta=remote.meta||null;
   G.pending=remote.pending||{}; G.sponsorships=remote.sponsorships||{}; G.strikes=remote.strikes||{}; G.crusades=remote.crusades||{};
   if(JSON.stringify(remote.rivnames||{})!==JSON.stringify(G.rivnames||{})){ G.rivnames=remote.rivnames||{}; G.newland=remote.newland||null; rnAt=0; }
   if(boardVersion(G)>DATA_V){ halt(); return true; }
@@ -4002,9 +4383,10 @@ function attackPrompt(q,r,note){
   if(!band){ var n70=soldiersFor70(L.p);
     return nope('<span class="bad">No band of yours stands beside it.</span> Taking someone else&rsquo;s ground needs one of your bands on a square that touches it. Use <b>Move soldiers</b> to bring a band up.'
       +(n70==null?' Even 400 soldiers would not give you a 70% chance here.':' To pass a 70% chance of taking it, the band would need <b>'+n70+'</b> soldiers (facing '+lineText(L.units)+').')+roadWhy(q,r)); }
-  var o=battleOdds(band.n,L.p), who=esc(nameOf(c.o)), ruin=isRuin(c), loserN=Math.max(1,cellsOf(c.o));
+  var bl=blessBonus(G.cells[key(band.q,band.r)]), o=battleOdds(band.n+bl,L.p), who=esc(nameOf(c.o)), ruin=isRuin(c), loserN=Math.max(1,cellsOf(c.o));
   var sp=spoilsShare((G.players[c.o]||{}).res,loserN), what=c.k===TOWER?'tower':ruin?'fallen castle':c.t===RIVER?'bridge':'square';
   var html=(note?'<p class="sc-note">'+note+'</p>':'')
+    +(bl?'<p class="sc-note">Your band is blessed: it fights as if <b>'+bl+'</b> soldier'+(bl>1?'s':'')+' stronger.</p>':'')
     +'<p>Your band of <b>'+band.n+'</b> beside it faces, front to back: <b>'+lineText(L.units)+'</b>.</p>'
     +'<p style="font-size:22px;margin:6px 0 2px">Chance to win: <b>'+pct(o.win)+'</b></p>'
     +'<p>Soldiers you can expect to lose: <b>'+(Math.round(o.expLoss*10)/10)+'</b> of '+band.n+'.</p>'
@@ -4032,7 +4414,8 @@ function attackNow(q,r,band0,shown){
     if(band.n!==band0.n || JSON.stringify(L.p)!==JSON.stringify(shown)){ fighting=false; return attackPrompt(q,r,'The defences changed while you were deciding. These are the new odds.'); }
     var cost=attackCost();
     if(pl.squares<cost) throw {msg:'Not enough marches &mdash; an attack costs '+cost+'. Claim today&rsquo;s steps.'};
-    var seed=newSeed(), res=fightOut(band.n,L.p,seed), kn=lineCounts(L.units,0,res.killed);
+    var bl=blessBonus(G.cells[key(band.q,band.r)]), seed=newSeed(), res=fightOut(band.n+bl,L.p,seed), kn=lineCounts(L.units,0,res.killed);
+    if(bl){ res.left=Math.min(band.n,res.left); res.lost=band.n-res.left; }                 // the blessing's extra men are not real: only real men are lost
     var snaps={}, snap=function(kk){ if(!(kk in snaps)) snaps[kk]=G.cells[kk]?JSON.parse(JSON.stringify(G.cells[kk])):null; };   // to put things back if the write is refused
     snap(key(band.q,band.r)); L.guard.cells.forEach(function(g){ snap(key(g[0],g[1])); });
     var loserN=Math.max(1,cellsOf(prev)), ruin=isRuin(c), pw=c.w||0, pk=c.k, plv=c.l, pg=c.g||0, ph=c.k===TOWER?towerH(c):null, collapsed=false;
@@ -4050,16 +4433,17 @@ function attackNow(q,r,band0,shown){
     var from=G.cells[key(band.q,band.r)], bounty=0;
     pl.squares-=cost;
     if(res.won){
-      c.o=ME; c.w=0; delete c.wd; delete c.tb; delete c.tr; c.b=res.left;
+      c.o=ME; c.w=0; delete c.wd; delete c.tb; delete c.tr; delete c.ch; c.b=res.left;
       if(ruin){ c.k=null; c.l=0; c.g=0; c.d=0; delete c.h; delete c.ht; bounty=CASTLE_BOUNTY; pl.squares+=bounty; }   // the ruin is razed, and the captor is paid
       if(c.cs || c.rd || c.t===RIVER) c.cs={n:1};                   // a road or bridge left standing cost the captor nothing
       if(from){ delete from.b; }
     } else if(from){ from.b=res.left; if(!from.b) delete from.b; }
+    if(from&&bl){ delete from.bs; delete from.bw; if(!res.won && Math.random()<BLESS_DEATH){ var pst=priestsHere(band.q,band.r,ME); if(pst.length) killPriest(pst[0],'his band was beaten'); } }   // the blessing is spent
     writeCell(q,r,c);
     return cellPutIf(q,r,G.cells[k]||null,f.tag).then(function(okw){
       if(!okw){ if(before) G.cells[k]=before; else delete G.cells[k]; for(var sk in snaps){ if(sk===k) continue; if(snaps[sk]) G.cells[sk]=snaps[sk]; else delete G.cells[sk]; } pl.squares+=cost-bounty; throw {msg:'That square changed at the last moment. Nothing happened &mdash; look again and try once more.'}; }
       pushCell(band.q,band.r); touched.forEach(function(g){ pushCell(g[0],g[1]); });
-      var ev={v:2, seed:seed, n:band.n, ln:L.p.map(function(x){ return Math.round(x*100); }), lt:L.units.map(function(u){ return UNIT_CODE[u.t]; }).join(''),
+      var ev={v:2, seed:seed, n:band.n+bl, ln:L.p.map(function(x){ return Math.round(x*100); }), lt:L.units.map(function(u){ return UNIT_CODE[u.t]; }).join(''),
         won:res.won?1:0, kl:res.killed, pw:pw||null, pk:pk||null, pl:pk?plv:null, pg:pk?pg:null, cb:bounty||null};
       var after=res.won?takeSpoils(prev,loserN):Promise.resolve({});
       return after.then(function(sp){
@@ -5211,6 +5595,7 @@ function cellActions(q,r){
       if(c.k===TOWER) A('Tear down the tower',refundLine(demolishRefund(c,'tower',q,r)),function(){ tearDown(q,r,'tower'); });
     }
   }
+  faithActions(q,r,c,A,wet);
   if(wet) A('Name this river','1 march',function(){ renameRiver(q,r); },riverWhy(q,r));
   Object.keys(G.players).forEach(function(pid){
     var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
@@ -6954,6 +7339,7 @@ function draw(){
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
   drawTreks(now,amb);
+  drawFaith(now);
   drawRiverNames();                                 // the rivers' names, lying along the water
   drawBandBadges();                                 // every standing band's number, laid out so none hides another
   if(amb) ambClouds(ctx,now);
@@ -7919,6 +8305,8 @@ function render(){
     retireHorses();
     guardTreks();
     settleTreks();
+    settleFaith();
+    settlePest();
     settleCrusades();
     settleCrusadeDues();
     settleCastles();
@@ -9253,6 +9641,7 @@ document.getElementById('st-strikes').addEventListener('click',function(){ if(is
 document.getElementById('st-fake').addEventListener('click',function(){ if(isSteward()) openMarkFake(); });
 document.getElementById('st-give').addEventListener('click',function(){ if(isSteward()) openGive(); });
 document.getElementById('st-quake').addEventListener('click',function(){ if(isSteward()) openQuake(); });
+document.getElementById('st-faith').addEventListener('click',function(){ if(isSteward()) stewardFaith(); });
 document.getElementById('newlandbar').addEventListener('click',function(e){ var b=e.target.closest('[data-nl]'); if(!b) return; var a=b.getAttribute('data-nl'); if(a==='ask'){ nlAsked=false; showNewLandOffer(true); } else nlChoose(a==='yes'); });
 document.getElementById('sp-btn').addEventListener('click',openRequests);
 document.getElementById('undo-pill').addEventListener('click',doUndo);
@@ -10088,6 +10477,19 @@ function enterGame(isNew){
 /* The November announcements, one per new feature, each shown once on a scroll in #rulesnote. A player who joins
    after a change never needs telling about it (forNew marks the ones that are for everyone). */
 var NOTES=[
+  {id:'faith-open', eyebrow:'A new building', title:'The Church comes to Marchland',
+   when:function(){ return faithPublic(); },
+   html:'<p>You can now raise a <b>church</b> on an empty square of yours ('+costLine(CHURCH_COST)+', 12 hours, up to '+CHURCH_MAX+'). Each holds '+CHURCH_SLOTS+' <b>priests</b>, and the first is free.</p>'
+     +'<p>Priests walk <b>barefoot and unarmed, a square an hour</b>, over any ground. They can <b>bless</b> a band so it fights as if stronger, <b>bury the fallen</b> and clear their crosses, and give a <b>tithe</b> of grain every tick while they are home. Enemy soldiers kill any priest they catch.</p>'
+     +'<p>Priests are wise at first, but each one who dies leaves his church able to teach less. Keep them safe. There are strange sicknesses on the roads, and it is said the priests know what to do about them.</p>'
+     +'<p>Every rule is in the guide: tap any square of yours and choose <b>How churches and priests work</b>.</p>', go:'Got it'},
+  {id:'faith-tease', eyebrow:'A rumour', title:'Sick pilgrims at the border',
+   when:function(){ return !!(G&&G.faith&&G.faith.tease); },
+   html:'<p>Pilgrims have been seen at the border, shaking and grey. The gods must be punishing the world for Sir Charlton&rsquo;s evil ways.</p><p>Raise a church and keep your priests near your soldiers.</p>', go:'Got it'},
+  {id:'pest-start', eyebrow:'The plague', title:'The plague has come',
+   when:function(){ return pestEver(); },
+   html:'<p>The plague is here, brought by the gods because of Sir Charlton&rsquo;s evil ways. It is on the land now and spreads from square to square.</p>'
+     +'<p>A sick square gives half its harvest. Sick bands lose men. <b>Priests</b> tend the sick, but may die doing it. <b>Walls</b> slow it, <b>cut roads</b> slow it more, and you can <b>burn</b> your own sick square to stop it there. The guide on any square has every number.</p>', go:'Got it'},
   {id:'nov26-scrolls', eyebrow:'New this November', title:'Menus on scrolls, and tearing down',
    html:'<p>Every menu and picker is now written on a scroll, with the price in the margin and the reason beneath anything you can&rsquo;t do yet.</p>'
      +'<p>You can <b>tear down</b> your own walls, towers and bridges (not castles) from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
