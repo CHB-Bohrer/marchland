@@ -3264,7 +3264,8 @@ function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made att
 var WRATH_MS=864e5, wrathSnowQ=[], STORM_SKY=false;   // STORM_SKY=false: no rain, dark sky or lightning over the map
 function wrath(){ return (G&&G.fixes&&G.fixes.wrath1)||null; }
 function wrathPid(){ var w=wrath(); return w?w.pid:null; }
-function snowed(pid,at){ var w=wrath(); at=at||Date.now(); return !!(w&&w.pid===pid&&at>=w.t&&at<w.t+WRATH_MS); }
+function snowed(pid,at){ return false;   // the snow is lifted (25 Nov): her land is bare again and yields as normal
+  var w=wrath(); at=at||Date.now(); return !!(w&&w.pid===pid&&at>=w.t&&at<w.t+WRATH_MS); }
 function stormOn(at){ var w=wrath(); at=at||Date.now(); return !!(w&&at>=w.t&&at<w.t+WRATH_MS); }
 function hushNeed(pid){ return pid&&pid===wrathPid()?1:HUSH_NEED; }
 function drawWrath(now){
