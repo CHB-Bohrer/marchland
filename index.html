@@ -1408,7 +1408,7 @@ function settleCastles(){
         }).catch(function(){ siteBusy[k2]=0; }); })(sk,sq,sr); }
         continue;
       }
-      var scost=castleCost(ME), spl=me(), can=fieldOf(ME)>=SPEC[CASTLE].gar[1];
+      var scost=siteCost(ME), spl=me(), can=fieldOf(ME)>=SPEC[CASTLE].gar[1];
       for(var sg in scost){ if((spl.res[sg]||0)<scost[sg]) can=false; }
       if(!can) continue;
       for(var sg2 in scost) spl.res[sg2]-=scost[sg2];
@@ -5367,7 +5367,7 @@ function sitesLine(){
 /* What tapping a castle site says: how far along it is, and what it still needs. */
 function castleStatus(q,r){
   var c=cellOf(q,r); if(!c||!c.cb) return;
-  var left=c.cb-Date.now(), cost=castleCost(ME), pl=me(), miss=[];
+  var left=c.cb-Date.now(), cost=siteCost(ME), pl=me(), miss=[];
   var held=castleSurrounded(q,r,ME);
   for(var g in cost){ if((pl.res[g]||0)<cost[g]) miss.push((cost[g]-Math.floor(pl.res[g]||0))+' more '+g); }
   if(fieldOf(ME)<SPEC[CASTLE].gar[1]) miss.push('a soldier (muster one at a castle)');
@@ -5377,6 +5377,13 @@ function castleStatus(q,r){
   h+=miss.length?' <span class="bad">You are still short of '+miss.join(', ')+'</span> &mdash; the keep will wait until you have them.':' You have everything it needs.';
   say(h);
 }
+/* What a site already going up costs to finish: the price quoted when it was begun. castleCost counts keeps still going up,
+   so asked about a site that is itself going up it counted that site too and charged a whole tier more than was quoted
+   (two sites at once: both waited forever for materials, 25 Nov 2026). */
+function siteCost(pid){
+  var n=Math.max(1,myCastleCells(pid).length+pendingCastles(pid).length-1);
+  return {timber:260*n, stone:200*n, iron:60*n};
+}
 function castleCost(pid){
   var n=Math.max(1,myCastleCells(pid).length+pendingCastles(pid).length);       // 2nd keep ×1, 3rd ×2, 4th ×3 … (one still going up counts)
   return {timber:260*n, stone:200*n, iron:60*n};
@@ -5385,7 +5392,7 @@ function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k||isChurch(c)) return nope('Something already stands here.');
-  if(c.cb) return nope('A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.');
+  if(c.cb) return nope(c.cb>Date.now()?'A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.':'A castle is already going up here &mdash; tap it to see what it still needs.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
   if(kind===CASTLE){
@@ -5836,7 +5843,7 @@ function cellTitle(c){
   if(c.k===CASTLE) what=isRuin(c)?'fallen castle':'castle'+(c.l>1?' (level '+ROMAN[c.l]+')':'');
   else if(c.k===TOWER) what='tower'+(c.l>1?' (level '+ROMAN[c.l]+')':'')+' &middot; health '+towerH(c)+' of '+towerMax(c.l)+(towerRaising(c)?' &middot; being raised, ready in '+hoursLeft(c.tu):'');
   else if(wet) what=c.o?(building(c)?'bridge (being built)':'bridge'):'river';
-  else if(c.cb&&c.o) what='ground &middot; castle going up, ready in '+hoursLeft(c.cb);
+  else if(c.cb&&c.o) what='ground &middot; castle going up, '+(c.cb>Date.now()?'ready in '+hoursLeft(c.cb):'waiting on materials or a soldier');
   else if(isChurch(c)) what='church'+(c.ch.f>Date.now()?' (being raised, ready in '+hoursLeft(c.ch.f)+')':'')+' &middot; on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
@@ -5898,7 +5905,7 @@ function cellActions(q,r){
       }
       A('Build a wall'+((c.w||0)&&(c.w||0)<3?' (course '+((c.w||0)+1)+')':''),WALL_COST+' stone',function(){ wall(q,r); },(c.w||0)>=3?'Already walled to level III':lackText({stone:WALL_COST}));
       if(!c.k && c.cb){
-        A('Castle going up','ready in '+hoursLeft(c.cb)+' &middot; '+castlePct(c)+'%',function(){ castleStatus(q,r); });
+        A('Castle going up',(c.cb>Date.now()?'ready in '+hoursLeft(c.cb)+' &middot; '+castlePct(c)+'%':'built &middot; waiting on materials or a soldier'),function(){ castleStatus(q,r); });
       } else if(!c.k && !isChurch(c)){
         var tc=SPEC[TOWER].cost;
         A('Raise a tower',costLine(tc)+' &middot; eats 1 grain a tick'+(Date.now()>=TOWER_RULE_T?' &middot; 12 h to raise':''),function(){ build(q,r,TOWER); },lackText(tc));
@@ -7642,7 +7649,7 @@ function draw(){
     var bw=S*1.3, bh=Math.max(3,S*0.16), bx=e[1][0]-bw/2, by=e[1][1]+S*0.5, f=Math.max(0,Math.min(1,1-(sc.cb-Date.now())/CASTLE_BUILD_MS));
     ctx.save(); ctx.globalAlpha=.9; ctx.fillStyle=T['--surface']; ctx.fillRect(bx-1,by-1,bw+2,bh+2);
     ctx.fillStyle=e[2]; ctx.fillRect(bx,by,bw*f,bh); ctx.strokeStyle=e[2]; ctx.lineWidth=1; ctx.strokeRect(bx-.5,by-.5,bw+1,bh+1);
-    if(S>=15){ ctx.font='600 '+Math.round(S*0.3)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=e[2]; ctx.fillText(hoursLeft(sc.cb),e[1][0],by+bh+2); }
+    if(S>=15){ ctx.font='600 '+Math.round(S*0.3)+'px ui-monospace, monospace'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle=e[2]; ctx.fillText(sc.cb>Date.now()?hoursLeft(sc.cb):'waiting',e[1][0],by+bh+2); }
     ctx.restore();
   });
   builds.forEach(function(e){                        // what the ground under a castle or tower is: a small badge, so a farm is never hidden
