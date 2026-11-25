@@ -3229,7 +3229,7 @@ function attackCost(pid){ return ATTACK_COST; }   // (the blessing once made att
 /* ═══ the gods' wrath (fixes/wrath1 = {pid, t, got, claim}) ═══════════════════════════════
    For a faked screenshot: from t, one hush vote silences that warrior in the War room (the Tavern stays open), and for one day
    their land lies under snow and yields nothing while a thunderstorm rages over the realm.            */
-var WRATH_MS=864e5, wrathSnowQ=[];
+var WRATH_MS=864e5, wrathSnowQ=[], STORM_SKY=false;   // STORM_SKY=false: no rain, dark sky or lightning over the map
 function wrath(){ return (G&&G.fixes&&G.fixes.wrath1)||null; }
 function wrathPid(){ var w=wrath(); return w?w.pid:null; }
 function snowed(pid,at){ var w=wrath(); at=at||Date.now(); return !!(w&&w.pid===pid&&at>=w.t&&at<w.t+WRATH_MS); }
@@ -3249,6 +3249,7 @@ function drawWrath(now){
       ctx.beginPath(); ctx.arc(x+(hx-0.5)*S*1.4+Math.sin(t*1.3+i)*S*0.06,y-S*0.8+fy*S*1.5,Math.max(1,S*0.045),0,6.284); ctx.fill(); }
   });
   ctx.globalAlpha=1;
+  if(!STORM_SKY){ ctx.restore(); return; }          // the rain, dark sky and lightning are switched off (25 Nov); the snow on her land stays
   // the storm over everything: a dark sky, slanting rain, and now and then the gods' lightning
   ctx.fillStyle='rgba(18,20,38,0.26)'; ctx.fillRect(0,0,W,H);
   ctx.strokeStyle='rgba(190,205,230,0.45)'; ctx.lineWidth=1; ctx.beginPath();
