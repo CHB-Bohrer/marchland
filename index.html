@@ -2887,6 +2887,38 @@ function settleMoveRafael(){
   }).catch(function(){}).then(function(){ moving1=false; });
   return true;
 }
+/* ── Anna to the new land ──  once (fixes/move2, claimed with a conditional write). The steward asked for it (25 Nov), though she had said no
+   to the offer: her whole kingdom is lifted and set down on the new land exactly as the offer's move would have done it. If the new land has
+   no room for all of it, nothing is changed and the attempt is recorded as skipped. Lina had already been moved by the offer. */
+var MOVE2_PID='p1jzq6ij', moving2=false;
+function settleMoveAnna(){
+  if(!online||moving2||nlBusy||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||(G.fixes&&G.fixes.move2)) return false;
+  if(!G.players[MOVE2_PID]||!nlOffer()||!nlDone()||!RIFTS.length||Date.now()<nlMoveAt()) return false;
+  var now=Date.now(), base='/marchland/'+gameCode, keepPick=(G.newland&&G.newland.pick)||{}, plan;
+  G.newland.pick={}; G.newland.pick[MOVE2_PID]={yes:true,t:now};
+  try{ plan=nlPlanMoves(now); } finally { G.newland.pick=keepPick; }
+  var rec={pid:MOVE2_PID,t:now,moved:plan.moves,skipped:plan.skipped||null};
+  moving2=true;
+  dbPutIf(base+'/fixes/move2',rec).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.move2=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.move2=rec;
+    if(!plan.moves.length) return;
+    var patch={};
+    Object.keys(plan.cells).forEach(function(k){ var p=k.split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), c=plan.cells[k];
+      if(c) writeCell(q,r,c); else delete G.cells[k]; patch['cells/'+k]=G.cells[k]||null; });
+    plan.treks.forEach(function(id){ if(G.treks) delete G.treks[id]; patch['treks/'+id]=null; });
+    Object.keys(G.caravans||{}).forEach(function(id){ var cv=G.caravans[id], np=cv&&plan.players[cv.to]; if(!np||cv.got) return; cv.tq=np.q; cv.tr=np.r; patch['caravans/'+id+'/tq']=np.q; patch['caravans/'+id+'/tr']=np.r; });
+    Object.keys(plan.players).forEach(function(pid){ var p=plan.players[pid]; G.players[pid].q=p.q; G.players[pid].r=p.r; patch['players/'+pid+'/q']=p.q; patch['players/'+pid+'/r']=p.r; });
+    patch.rev=now; myRev=now; cellsGen++;
+    if(plan.players[ME]) centreOn(plan.players[ME].q,plan.players[ME].r);
+    return dbPatch(base,patch).then(ok,fail).then(function(){
+      render();
+      plagueChat('The gods have lifted '+G.players[MOVE2_PID].name+'’s whole kingdom and set it down on the new land, with every castle, tower and soldier. Her old ground has gone back to the wild.',now,'move2');
+    });
+  }).catch(function(){}).then(function(){ moving2=false; });
+  return true;
+}
 /* ── the Tavern opens ──  once (fixes/tavern1, claimed with a conditional write); announced by the gods in the War room */
 var taverning=false;
 var crusadeEnding=false;
@@ -8638,6 +8670,7 @@ function render(){
     settleBless();
     settleBless2();
     settleMoveRafael();
+    settleMoveAnna();
     settleNewLandOffer();
     settleNewLandReminder();
     settleTowerRuleChat();
