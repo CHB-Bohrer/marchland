@@ -8672,6 +8672,7 @@ function render(){
     settleBless2();
     settleMoveRafael();
     settleMoveAnna();
+    settleMercyChat();
     settleNewLandOffer();
     settleNewLandReminder();
     settleTowerRuleChat();
@@ -10946,13 +10947,23 @@ var NOTES=[
   {id:'nov26-crusades', eyebrow:'November only', title:'Crusades', when:function(){ return crusadeOn(); },
    html:'<p>Any player with a castle may proclaim a <b>crusade</b> against another. For 72 hours others may take the cross, pay marches into its treasury, and strike the target together, pooling every band that stands beside the same square.</p>'}
 ];
-function wrathNote(){ return {id:'wrath-anna2', eyebrow:'The gods are furious', title:'&#9928; A sacred act defiled',
-   html:(function(){ var w=wrath(), nm=w&&G.players[w.pid]?esc(G.players[w.pid].name):'A warrior'; return '<p><b>'+nm+'</b> has sent the gods a <b>false picture of her steps</b>. The count of steps is one of the last sacred acts of this realm, and it has been defiled. The gods showed mercy once. Not again.</p>'
-     +'<ul><li><b>Her voice is taken.</b> From now on a <b>single hush vote</b> silences '+nm+' in the War room. The Tavern stays open to her, and talking there is free.</li>'
-     +'<li><b>Her marches are taken back:</b> the '+(w&&w.got||0)+' that the false picture won her.</li>'
-     +'<li><b>Her land is frozen.</b> Snow lies on every square of hers for <b>one day</b>, and it gives her <b>nothing</b>.</li>'
-     +'<li>And for that day the gods&rsquo; <b>storm</b> rages over the whole realm, so that all may see how angry they are.</li></ul>'
-     +'<p>One mercy for everyone else: <b>talking is free again</b>. No one pays to speak in the War room any more.</p>'; })(), go:'The gods have spoken'}; }
+function wrathNote(){ return {id:'wrath-mercy1', eyebrow:'The gods speak', title:'&#9928; The gods are weary of your questions',
+   html:(function(){ var w=wrath(), nm=w&&G.players[w.pid]?esc(G.players[w.pid].name):'The young warrior'; return '<p>The gods have heard your murmuring, and they are weary of it. <b>Who are you</b> to question us? <b>Where were you</b> when we laid the rivers that feed your sheep?</p>'
+     +'<p>Know this: <b>'+nm+' is still a young player.</b> Her morals were misguided, and the gods said so. But the young are allowed to find their footing, and she shall have hers.</p>'
+     +'<p>The storm is lifted. The snow has melted from her land, and her fields give harvest again. Mercy is the gods&rsquo; to give, and it is not yours to question.</p>'; })(), go:'The gods have spoken'}; }
+var mercySaying=false;
+function settleMercyChat(){
+  if(!online||mercySaying||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()||(G.fixes&&G.fixes.mercy1)||!wrath()) return false;
+  var now=Date.now(), rec0={t:now}; mercySaying=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/mercy1',rec0).then(function(x){
+    if(x.halted) return;
+    G.fixes=G.fixes||{};
+    if(!x.ok){ if(x.v) G.fixes.mercy1=x.v; return; }
+    G.fixes.mercy1=rec0;
+    plagueChat('THE GODS SPEAK. Who are you to keep questioning us? Where were you when we laid the rivers that feed your sheep? Anna is still a young player; her morals were misguided, but she deserves to find her footing. The storm is lifted and the snow is gone from her land.',now,'mercy1');
+  }).catch(function(){}).then(function(){ mercySaying=false; });
+  return true;
+}
 /* plus a notice, once, to anyone a crusade is proclaimed against */
 function notesNow(){
   var out=NOTES.slice(), x=G&&me()?crusadeAgainst(ME):null, qn=RIFTS.length?quakeNote():null, mn=G&&me()?nlMovedNote():null, an=G&&me()?nlAgainNote():null, tn=G&&me()?tinvNote():null, th2=G&&me()?tinvHitNote():null;
