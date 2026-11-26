@@ -1273,7 +1273,7 @@ function writeCell(q,r,c){
   if(c.tb>0 && c.o){ G.cells[k].tb=c.tb; if(c.tr) G.cells[k].tr=c.tr; }   // trebuchets, and when each can next fire
   if(c.rd && c.o){ G.cells[k].rd=1; if(c.rf) G.cells[k].rf=c.rf; }        // a road, and when it is finished
   if(c.ch && c.o && c.ch.o===c.o) G.cells[k].ch=c.ch;                      // a church (see CHURCHES, PRIESTS AND THE PLAGUE)
-  if(c.o && c.pr>Date.now()){ G.cells[k].pr=c.pr; if(c.pz>Date.now()) G.cells[k].pz=c.pz; }   // the plague: sick until pz, then recovering until pr
+  if(c.o && c.pr>Date.now()){ G.cells[k].pr=c.pr; if(c.pz>Date.now()) G.cells[k].pz=c.pz; if(c.pi>Date.now()) G.cells[k].pi=c.pi; }   // pi: caught, but not showing yet   // the plague: sick until pz, then recovering until pr
   if(c.o && c.b>0 && c.bt>Date.now()-864e5){ G.cells[k].bt=c.bt; if(c.bs>Date.now()){ G.cells[k].bs=c.bs; G.cells[k].bw=c.bw||0; } }   // a band's blessing
   if(c.cb && c.o && c.cbo===c.o && !c.k){ G.cells[k].cb=c.cb; G.cells[k].cbo=c.cbo; }   // a castle going up, and whose (it used to be dropped here, so a begun castle vanished at once)
   cellsGen++;
@@ -4010,9 +4010,12 @@ function faithOn(){ return faithPublic()||!!(G&&me()&&isSteward()); }
 function pestOn(){ return !!(G&&G.pest&&G.pest.start&&!G.pest.end); }
 function pestEver(){ return !!(G&&G.pest&&G.pest.start); }
 function pkey(k){ var p=k.split('_'); return [parseInt(p[0],10),parseInt(p[1],10)]; }
-function infected(c,at){ return !!(c&&c.pz&&c.pz>(at||Date.now())); }
+var PEST_HIDE_MS=864e5;                                // a caught square shows nothing for a day, but already spreads it
+function carrier(c,at){ return !!(c&&c.pz&&c.pz>(at||Date.now())); }                       // carries the plague, seen or not
+function infected(c,at){ at=at||Date.now(); return carrier(c,at)&&!(c.pi>at); }             // sick, and it shows
+function incubating(c,at){ at=at||Date.now(); return carrier(c,at)&&c.pi>at; }               // caught, but nobody can see it yet
 function recovering(c,at){ at=at||Date.now(); return !!(c&&c.pr&&c.pr>at&&!(c.pz&&c.pz>at)); }
-function infectCell(c,at){ at=at||Date.now(); c.pz=at+PEST_MS; c.pr=at+PEST_MS+PEST_REST_MS; }
+function infectCell(c,at){ at=at||Date.now(); c.pi=at+PEST_HIDE_MS; c.pz=c.pi+PEST_MS; c.pr=c.pz+PEST_REST_MS; }
 function isChurch(c){ return !!(c&&c.ch&&c.o&&c.ch.o===c.o); }
 function churchReady(c){ return isChurch(c)&&!(c.ch.f>Date.now()); }
 function myChurchKeys(pid){ var o=[]; for(var k in G.cells){ var c=G.cells[k]; if(c.o===pid&&isChurch(c)) o.push(k); } return o; }
@@ -4078,11 +4081,11 @@ function stewardFaith(){
       orgs.forEach(function(org){ var c0=cellOf(org[0],org[1]); infectCell(c0,now); writeCell(org[0],org[1],c0); patch['cells/'+key(org[0],org[1])]=G.cells[key(org[0],org[1])]; hitBy[c0.o]=1; });
       G.pest={start:now,end:null,tick:Math.floor(now/TICK_MS),o:orgs[0],os:orgs,cp:{},br:{}}; patch['pest']=G.pest;
       var hitNames=Object.keys(hitBy).map(function(p){ return esc(nameOf(p)); });
-      faithGodsLine('The plague has come to Marchland. It broke out on '+orgs.length+' squares at once, on the land of '+(hitNames.length>1?hitNames.slice(0,-1).join(', ')+' and '+hitNames[hitNames.length-1]:hitNames[0])+'. Anna and Lina’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
+      faithGodsLine('The plague has come to Marchland. It broke out on '+orgs.length+' squares at once, and no one can see where. For a day a stricken square looks healthy while it spreads; only then does the sickness show. Anna and Lina’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
     }
     else if(res.value==='end'){
       G.pest.end=now; patch['pest']=G.pest;
-      for(var k in G.cells){ var cc=G.cells[k]; if(cc.pz||cc.pr){ delete cc.pz; delete cc.pr; patch['cells/'+k]=cc; } }
+      for(var k in G.cells){ var cc=G.cells[k]; if(cc.pz||cc.pr||cc.pi){ delete cc.pz; delete cc.pr; delete cc.pi; patch['cells/'+k]=cc; } }
       faithGodsLine('The plague has passed from Marchland. Every square is well again.','pend');
     }
     patch['rev']=now; myRev=now;
@@ -4211,7 +4214,7 @@ function caffaShot(q,r){
     var pl=me(), sc=cellOf(q,r), why=caffaWhy(sc); if(why) return nope(why+'.');
     var tq=res.value[0], tr=res.value[1], now=Date.now(), patch={}, hit=0;
     [[0,0]].concat(AX).forEach(function(d){
-      var cc=cellOf(tq+d[0],tr+d[1]); if(!cc.o||building(cc)||burning(cc,now)||infected(cc,now)||recovering(cc,now)) return;
+      var cc=cellOf(tq+d[0],tr+d[1]); if(!cc.o||building(cc)||burning(cc,now)||carrier(cc,now)||recovering(cc,now)) return;
       infectCell(cc,now); writeCell(tq+d[0],tr+d[1],cc); patch['cells/'+key(tq+d[0],tr+d[1])]=G.cells[key(tq+d[0],tr+d[1])]; hit++;
     });
     pl.res.stone-=1; var tarr=arr(sc.tr).slice(0,sc.tb||0); while(tarr.length<(sc.tb||0)) tarr.push(0);
@@ -4293,7 +4296,7 @@ function pestTick(n){
   var ids=Object.keys(G.priests||{}).sort();
   function mark(k,c){ var a=pkey(k); writeCell(a[0],a[1],c); patch['cells/'+k]=G.cells[k]||null; }
   ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), w=p.w||0, a=pos; [[0,0]].concat(AX).forEach(function(d){ var kk=key(a[0]+d[0],a[1]+d[1]); if(w>(wis[kk]||0)) wis[kk]=w; }); });
-  var sick=keys.filter(function(k){ return infected(G.cells[k],T); }), fresh={};
+  var sick=keys.filter(function(k){ return infected(G.cells[k],T); }), carriers=keys.filter(function(k){ return carrier(G.cells[k],T); }), fresh={};   // hidden carriers spread it too
   // a square whose sickness ran out uncured: 1 chance in 10 the land is lost (burned and cured squares have no sickness left to run out)
   keys.forEach(function(k){
     var c=G.cells[k]; if(!(c&&c.o&&c.pz&&c.pz<=T&&c.pz>T-TICK_MS)) return;
@@ -4305,17 +4308,17 @@ function pestTick(n){
     P.lost=P.lost||{}; P.lost[own]=P.lost[own]||{}; P.lost[own][k]=T; patch['pest/lost/'+own+'/'+k]=T;
   });
 
-  sick.forEach(function(k){
+  carriers.forEach(function(k){
     var c=G.cells[k], a=pkey(k);
     for(i=0;i<6;i++){
-      var nk=key(a[0]+AX[i][0],a[1]+AX[i][1]), nc=G.cells[nk]; if(!nc||!nc.o||building(nc)||infected(nc,T)||recovering(nc,T)||burning(nc,T)||fresh[nk]) continue;
+      var nk=key(a[0]+AX[i][0],a[1]+AX[i][1]), nc=G.cells[nk]; if(!nc||!nc.o||building(nc)||carrier(nc,T)||recovering(nc,T)||burning(nc,T)||fresh[nk]) continue;
       var pr=((c.rd&&nc.rd)?PEST_ROAD:PEST_SPREAD)*PEST_WALL[Math.min(3,nc.w||0)]*Math.max(PEST_FLOOR,Math.pow(PEST_DECAY,orgDist(pkey(nk)[0],pkey(nk)[1])))*(1-(wis[nk]||0)/PEST_WISE);
       if(rng()<pr) fresh[nk]=1;
     }
   });
   sick.forEach(function(k){
     var c=G.cells[k], ch=false;
-    if(wis[k]&&rng()<PEST_CURE*wis[k]){ delete c.pz; c.pr=T+PEST_REST_MS; ch=true; }
+    if(wis[k]&&rng()<PEST_CURE*wis[k]){ delete c.pz; delete c.pi; c.pr=T+PEST_REST_MS; ch=true; }
     else if(c.b>0&&!wis[k]&&n%2===0){ c.b-=1; addGraves(c,1); if(!(c.b>0)) delete c.b; P.cp=P.cp||{}; P.cp[c.o]=Math.min(CORPSE_CAP,(P.cp[c.o]||0)+1); patch['pest/cp/'+c.o]=P.cp[c.o]; ch=true; }
     if(ch) mark(k,c);
   });
@@ -4560,7 +4563,7 @@ var FAITH_STEPS=[
   {title:'The sickness spreads', plague:true, pic:function(){
      return crSvg(fcSick(140,60,22)+crHex(94,34,20,'#dfe8d0')+crHex(94,86,20,'#dfe8d0')+crHex(186,34,20,'#dfe8d0')+crHex(186,86,20,'#dfe8d0')+crHex(228,60,20,'#dfe8d0')+crHex(52,60,20,'#dfe8d0')
        +crTxt(94,38,'20%',11)+crTxt(186,38,'20%',11)+crTxt(94,90,'20%',11)+crTxt(186,90,'20%',11)); },
-   html:'<p>A sick square gives <b>half its harvest</b> for <b>3 days</b>, then it <b>recovers</b>, and can&rsquo;t be caught again for <b>2 days</b>; after that it can. <b>If it is not cured or burned in those 3 days, there is a 10% chance the land is lost</b>: the square becomes nobody&rsquo;s, its band, castle or church with it, and the priests of a lost church die. Bands standing on a sick square <b>lose a man every 2 ticks</b> (and those who die leave corpses).</p>'
+   html:'<p><b>It hides at first.</b> A square that catches the plague looks healthy for <b>a day</b>, but it is already spreading it to its neighbours. Only then does the sickness show.</p><p>A sick square gives <b>half its harvest</b> for <b>3 days</b>, then it <b>recovers</b>, and can&rsquo;t be caught again for <b>2 days</b>; after that it can. <b>If it is not cured or burned in those 3 days, there is a 10% chance the land is lost</b>: the square becomes nobody&rsquo;s, its band, castle or church with it, and the priests of a lost church die. Bands standing on a sick square <b>lose a man every 2 ticks</b> (and those who die leave corpses).</p>'
      +'<p>Each tick it spreads to a neighbour with a <b>20%</b> chance, <b>35%</b> road to road, a little less the farther from where it began. Soldiers don&rsquo;t carry it.</p>'},
   {title:'Priests tend the sick', plague:true, pic:function(){
      return crSvg(fcSick(80,60,26)+fcPriestSvg(150,86,0.85,'#8E1B1B')+crHex(222,60,26,'#dfe8d0')+'<path d="M108 60 H128" stroke="#3a2f18" stroke-width="2"/>'+crTxt(222,100,'cured',11)); },
@@ -11348,7 +11351,7 @@ var NOTES=[
   {id:'pest-start', eyebrow:'The plague', title:'The plague has come',
    when:function(){ return pestEver(); },
    html:'<p>The plague is here, brought by the gods because of Anna and Lina&rsquo;s evil ways. It is on the land now and spreads from square to square.</p>'
-     +'<p>A sick square gives half its harvest. Sick bands lose men. If a sick square isn&rsquo;t cured or burned within its 3 days, there is a <b>10% chance the land is lost</b>. <b>Priests</b> tend the sick, but may die doing it. <b>Walls</b> slow it, <b>cut roads</b> slow it more, and you can <b>burn</b> your own sick square to stop it there. The guide on any square has every number.</p>', go:'Got it'},
+     +'<p>It hides at first: a square that catches it looks healthy for a day while it spreads, and only then shows. A sick square gives half its harvest. Sick bands lose men. If a sick square isn&rsquo;t cured or burned within its 3 days, there is a <b>10% chance the land is lost</b>. <b>Priests</b> tend the sick, but may die doing it. <b>Walls</b> slow it, <b>cut roads</b> slow it more, and you can <b>burn</b> your own sick square to stop it there. The guide on any square has every number.</p>', go:'Got it'},
   {id:'nov26-scrolls', eyebrow:'New this November', title:'Menus on scrolls, and tearing down',
    html:'<p>Every menu and picker is now written on a scroll, with the price in the margin and the reason beneath anything you can&rsquo;t do yet.</p>'
      +'<p>You can <b>tear down</b> your own walls, towers and bridges (not castles) from the square menu for half of what they cost (a wall course gives back 15 stone). And walls now stand on castle and tower squares too.</p>'},
