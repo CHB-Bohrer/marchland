@@ -4071,12 +4071,12 @@ function stewardFaith(){
     if(!res.value) return;
     var now=Date.now(), patch={};
     if(res.value==='open'){ G.faith=G.faith||{}; G.faith.open=now; patch['faith']=G.faith; faithGodsLine('The Church has come to Marchland. Raise a church, train priests, and keep your soldiers blessed. Read the guide on any square of yours.','fopen'); }
-    else if(res.value==='tease'){ G.faith=G.faith||{}; G.faith.tease=now; patch['faith']=G.faith; faithGodsLine('Sick pilgrims have been seen at the border. The gods must be punishing the world for Sir Charlton’s evil ways. Keep your priests close.','ftease'); }
+    else if(res.value==='tease'){ G.faith=G.faith||{}; G.faith.tease=now; patch['faith']=G.faith; faithGodsLine('Sick pilgrims have been seen at the border. The gods must be punishing the world for Anna and Lina’s evil ways. Keep your priests close.','ftease'); }
     else if(res.value==='begin'){
       var org=pestOrigin(); if(!org) return nope('There is no ground to start it on.');
       var c0=cellOf(org[0],org[1]); infectCell(c0,now); writeCell(org[0],org[1],c0); patch['cells/'+key(org[0],org[1])]=G.cells[key(org[0],org[1])];
       G.pest={start:now,end:null,tick:Math.floor(now/TICK_MS),o:org,cp:{},br:{}}; patch['pest']=G.pest;
-      faithGodsLine('The plague has come to Marchland, and it began on the land of '+esc(nameOf(c0.o))+'. Sir Charlton’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
+      faithGodsLine('The plague has come to Marchland, and it began on the land of '+esc(nameOf(c0.o))+'. Anna and Lina’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
     }
     else if(res.value==='end'){
       G.pest.end=now; patch['pest']=G.pest;
@@ -11332,10 +11332,10 @@ var NOTES=[
      +'<p>Every rule is in the guide: tap any square of yours and choose <b>How churches and priests work</b>.</p>', go:'Got it'},
   {id:'faith-tease', eyebrow:'A rumour', title:'Sick pilgrims at the border',
    when:function(){ return !!(G&&G.faith&&G.faith.tease); },
-   html:'<p>Pilgrims have been seen at the border, shaking and grey. The gods must be punishing the world for Sir Charlton&rsquo;s evil ways.</p><p>Raise a church and keep your priests near your soldiers.</p>', go:'Got it'},
+   html:'<p>Pilgrims have been seen at the border, shaking and grey. The gods must be punishing the world for Anna and Lina&rsquo;s evil ways.</p><p>Raise a church and keep your priests near your soldiers.</p>', go:'Got it'},
   {id:'pest-start', eyebrow:'The plague', title:'The plague has come',
    when:function(){ return pestEver(); },
-   html:'<p>The plague is here, brought by the gods because of Sir Charlton&rsquo;s evil ways. It is on the land now and spreads from square to square.</p>'
+   html:'<p>The plague is here, brought by the gods because of Anna and Lina&rsquo;s evil ways. It is on the land now and spreads from square to square.</p>'
      +'<p>A sick square gives half its harvest. Sick bands lose men. If a sick square isn&rsquo;t cured or burned within its 3 days, there is a <b>10% chance the land is lost</b>. <b>Priests</b> tend the sick, but may die doing it. <b>Walls</b> slow it, <b>cut roads</b> slow it more, and you can <b>burn</b> your own sick square to stop it there. The guide on any square has every number.</p>', go:'Got it'},
   {id:'nov26-scrolls', eyebrow:'New this November', title:'Menus on scrolls, and tearing down',
    html:'<p>Every menu and picker is now written on a scroll, with the price in the margin and the reason beneath anything you can&rsquo;t do yet.</p>'
