@@ -1916,13 +1916,14 @@ function judgePids(names){
 }
 /* ms left on a player's freeze (0 = free to move) */
 function frozenLeft(pid){
-  var J=G&&G.judge, t=J&&J.freeze&&J.freeze[pid]; if(!t) return 0;
-  var left=t-Date.now(); return left>0?left:0;
+  var J=G&&G.judge, t=J&&J.freeze&&J.freeze[pid], left=t?t-Date.now():0;
+  return Math.max(left>0?left:0, egyptBoils(pid));   // the boils of the Ten Plagues hold an army the same way
 }
 function frozenText(ms){ var m=Math.ceil(ms/60000), h=Math.floor(m/60); return h>0?(h+' h '+(m%60)+' min'):(m+' min'); }
 function frozenNope(){
   var ms=frozenLeft(ME); if(!ms) return false;
-  nope('<span class="bad">Your army is held by the gods.</span> You may not march, move or attack for another <b>'+frozenText(ms)+'</b>.');
+  if(egyptBoils(ME)>0) nope('<span class="bad">Your soldiers are covered in boils.</span> They cannot march, move or attack for another <b>'+frozenText(ms)+'</b>.');
+  else nope('<span class="bad">Your army is held by the gods.</span> You may not march, move or attack for another <b>'+frozenText(ms)+'</b>.');
   return true;
 }
 function judgeChat(m,now,tag){
@@ -2478,6 +2479,498 @@ function drawTitanBoss(list,s,t){
   if(u>=0.28&&u<0.5){ var fk=(u-0.28)/0.22; ctx.globalAlpha=(1-fk)*.8; ctx.strokeStyle='#ffd36a'; ctx.lineWidth=Math.max(1.5,K*0.1); ctx.beginPath(); ctx.ellipse(cur[0],cur[1]+K*0.1,K*(0.3+1.0*fk),K*(0.18+0.6*fk),0,0,6.284); ctx.stroke(); }
   ctx.restore();
 }
+/* ══ the Ten Plagues  (fixes/egypt1 = {t, end, boils, pids, hail:{pid:[cell keys]}}) ══════════════════════════════════
+   Anna and Lina passed one step picture off as two (24 Nov: Anna's 8,763 photo on Lina's 7,563 claim), and Anna put one
+   old screenshot (it shows 7,092) on two more claims of her own (20 and 22 Nov). Whichever up-to-date screen sees the board
+   first sends the plagues, once (claimed with a conditional write):
+     I–V   blood, frogs, gnats, flies, pestilence: every square they hold yields half for EG_MS (egyptMul, in ratesFor)
+     VI    boils: their armies cannot march, move or attack for EG_BOIL_MS (frozenLeft)
+     VII   hail and fire: EG_HAIL[pid] of their bare squares burn for EG_MS (cell flags bn, and eh for the falling hail)
+     VIII  locusts: half the grain and timber in their stores, eaten on their own screen the next time it opens (fixes/egypt1L<pid>)
+     IX    darkness over their land for EG_MS (drawn only)
+     X     the death of the firstborn: one soldier from every band, and one from every keep holding more than one (fixes/egypt1fb)
+   The gods say so in the chat. Everyone sees the cinematic once, then the scroll ('egypt1'), which links to the saga film.
+   EGYPT_ON gates the strike; marchlandEgyptPreview() and marchlandEgyptMap(true) show it without writing anything. */
+var EGYPT_ON=true, EG_ID='egypt1', EG_MS=3*864e5, EG_BOIL_MS=864e5, EG_PIDS=['p1jzq6ij','p5ibzrv'], EG_HAIL={p1jzq6ij:8,p5ibzrv:5};
+var egypting=false, egFirsting=false, egLocusting=false, EG_PREVIEW=null, EG_SNAP=false, egQ=[], egWaterQ=[];
+function egyptRec(){ return (G&&G.fixes&&G.fixes[EG_ID])||null; }
+function egyptHit(pid,at){ var E=egyptRec(); at=at||Date.now(); return !!(E && E.pids && E.pids.indexOf(pid)>=0 && at>=E.t && at<E.end); }
+function egyptMul(pid,at){ return egyptHit(pid,at)?0.5:1; }
+function egyptBoils(pid){ var E=egyptRec(); if(!E||!E.pids||E.pids.indexOf(pid)<0) return 0; var left=E.boils-Date.now(); return left>0?left:0; }
+function egyptView(){ if(EG_SNAP) return null; var E=egyptRec()||EG_PREVIEW; return (E && E.pids && Date.now()<E.end)?E:null; }   // what the map draws (a steward's preview included)
+function egyptName(pid){ var p=G&&G.players&&G.players[pid]; return p?p.name:(pid==='p1jzq6ij'?'Anna':'Lina'); }
+function egyptChat(m,now,tag){ cometChat(m,now,'eg-'+tag); }
+function egyptHailPick(pid,now){
+  return Object.keys(G.cells).filter(function(ck){ var cc=G.cells[ck]; if(cc.o!==pid || cc.k || cc.cb || cc.ch || building(cc) || burning(cc,now) || cc.b>0 || cc.tb>0) return false; var pp=ck.split('_'); return groundAt(parseInt(pp[0],10),parseInt(pp[1],10))!==RIVER; })
+    .sort(function(a,b){ var pa=a.split('_'), pb=b.split('_'); return artHash(parseInt(pa[0],10),parseInt(pa[1],10),1077)-artHash(parseInt(pb[0],10),parseInt(pb[1],10),1077); })
+    .slice(0,EG_HAIL[pid]||5);
+}
+function settleEgypt(){
+  if(!EGYPT_ON||!online||egypting||!G||!G.players||dirty||ELIM||HALT||QFREEZE||!boardFresh()) return false;
+  if(!Object.keys(G.cells).length||!Object.keys(G.players).length) return false;
+  var E=egyptRec();
+  if(E){ if(!(G.fixes&&G.fixes[EG_ID+'fb']) && Date.now()<E.end) return settleEgyptFirstborn(E); return false; }
+  var pids=EG_PIDS.filter(function(p){ return !!G.players[p]; }); if(!pids.length) return false;
+  var now=Date.now(), end=now+EG_MS, hail={}, base='/marchland/'+gameCode;
+  pids.forEach(function(pid){ hail[pid]=egyptHailPick(pid,now); });
+  var rec0={t:now,end:end,boils:now+EG_BOIL_MS,pids:pids,hail:hail};
+  egypting=true;
+  dbPutIf(base+'/fixes/'+EG_ID,rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes[EG_ID]=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes[EG_ID]=rec0;
+    var patch={};
+    pids.forEach(function(pid){ hail[pid].forEach(function(ck){ var c=G.cells[ck]; if(!c||c.o!==pid) return; c.bn=end; c.eh=1; patch['cells/'+ck+'/bn']=end; patch['cells/'+ck+'/eh']=1; }); });   // only the two flags, never a whole (possibly stale) cell
+    patch.rev=now; myRev=now; cellsGen++;
+    dbPatch(base,patch).then(ok,fail);
+    var A=egyptName(pids[0]), L=pids[1]?egyptName(pids[1]):null, who=L?A+' and '+L:A;
+    egyptChat('The gods have seen. '+who+' passed off ONE step picture as two, and '+A+' put one old screenshot on two more claims of her own.',now,'a');
+    egyptChat('Let the TEN PLAGUES fall upon their land: blood, frogs, gnats, flies, pestilence, boils, hail and fire, locusts, darkness… and the death of the firstborn.',now,'b');
+    egyptChat('For 3 days their fields give half, the hail burns their squares, the locusts eat their stores, and for a day their soldiers are too covered in boils to fight. Let every warrior take heed.',now,'c');
+    render();
+  }).catch(function(){}).then(function(){ egypting=false; });
+  return true;
+}
+/* X. the death of the firstborn: claimed on its own (fixes/egypt1fb), so a screen that closes half-way leaves it for the next */
+function settleEgyptFirstborn(E){
+  if(egFirsting) return false;
+  var base='/marchland/'+gameCode, rec0={t:Date.now()};
+  egFirsting=true;
+  dbPutIf(base+'/fixes/'+EG_ID+'fb',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes[EG_ID+'fb']=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes[EG_ID+'fb']=rec0;
+    var pids=E.pids, list=Object.keys(G.cells).filter(function(k){ var c=G.cells[k]; return pids.indexOf(c.o)>=0 && ((c.b||0)>0 || (c.k===CASTLE && !isRuin(c) && (c.g||0)>1)); }), dead={};
+    function step(j){
+      if(j>=list.length) return Promise.resolve();
+      var p=list[j].split('_'), q=parseInt(p[0],10), r=parseInt(p[1],10), k=list[j];
+      return cellFresh(q,r).then(function(f){
+        var c=f.c; if(!c||pids.indexOf(c.o)<0) return;
+        var nb=(c.b||0)>0?1:0, ng=(c.k===CASTLE && !isRuin(c) && (c.g||0)>1)?1:0; if(!nb&&!ng) return;
+        var nc=JSON.parse(JSON.stringify(c)); if(nb){ nc.b=c.b-1; if(!nc.b) delete nc.b; } if(ng) nc.g=c.g-1; addGraves(nc,nb+ng);
+        return cellPutIf(q,r,nc,f.tag).then(function(w){ if(w){ dead[c.o]=(dead[c.o]||0)+nb+ng; G.cells[k]=nc; cellsGen++; } });
+      }).catch(function(){}).then(function(){ return step(j+1); });
+    }
+    return step(0).then(function(){
+      var parts=pids.map(function(pid){ var n=dead[pid]||0; return egyptName(pid)+' '+n+' soldier'+(n===1?'':'s'); });
+      egyptChat('The angel of death passes over their land. The firstborn of every band falls: '+parts.join(', ')+'.',Date.now(),'fb');
+      render();
+    });
+  }).catch(function(){}).then(function(){ egFirsting=false; });
+  return true;
+}
+/* VIII. the locusts: on the victim's own screen, which owns its stores */
+function settleEgyptLocusts(){
+  if(!EGYPT_ON||!online||egLocusting||!G||!me()||dirty||ELIM||HALT||QFREEZE||!boardFresh()) return false;
+  var E=egyptRec(); if(!E||!E.pids||E.pids.indexOf(ME)<0||Date.now()>=E.end) return false;
+  var id=EG_ID+'L'+ME; if(G.fixes&&G.fixes[id]) return false;
+  var pl=me(), eat={grain:Math.max(0,Math.floor((pl.res.grain||0)/2)), timber:Math.max(0,Math.floor((pl.res.timber||0)/2))}, rec0={t:Date.now(),eat:eat};
+  egLocusting=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/'+id,rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes[id]=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes[id]=rec0;
+    var p=me(); p.res.grain=Math.max(0,(p.res.grain||0)-eat.grain); p.res.timber=Math.max(0,(p.res.timber||0)-eat.timber);
+    pushMe(); render();
+    say('<span class="bad">The locusts have come.</span> They devoured <b>'+eat.grain+' grain</b> and <b>'+eat.timber+' timber</b> from your stores.');
+    egyptChat('A black cloud of locusts settles on the stores of '+egyptName(ME)+': '+eat.grain+' grain and '+eat.timber+' timber devoured.',Date.now(),'loc'+ME);
+  }).catch(function(){}).then(function(){ egLocusting=false; });
+  return true;
+}
+/* the scroll: built from the record, so the numbers are what really fell */
+function egyptNote(){
+  var E=egyptRec(); if(!E||!E.pids) return null;
+  var A=E.pids[0], L=E.pids[1], hn=function(pid){ return ((E.hail&&E.hail[pid])||[]).length; };
+  return {id:EG_ID, eyebrow:'The gods are not fooled', title:'&#9889; The Ten Plagues fall on Anna and Lina',
+    html:'<p><b>Ant</b> spotted it first. On 24 Nov <b>Anna</b> claimed 8,763 steps with a photo of her step counter. About three and a half hours later <b>Lina</b> claimed 7,563 steps with <b>the very same photo</b>: not a similar picture, the identical one, still showing Anna&rsquo;s 8,763.</p>'
+      +'<p>Anna reused one of her own screenshots too. Her claims on 20 Nov (7,653 steps) and 22 Nov (7,852 steps) used the identical phone screenshot, and it shows 7,092 steps. That doesn&rsquo;t match either claim.</p>'
+      +'<p><b>So the gods have sent the Ten Plagues upon their land.</b></p><ul>'
+      +'<li><b>I&ndash;V. Blood, frogs, gnats, flies and pestilence.</b> Their rivers run red and their fields crawl. For <b>3 days</b> every square they hold gives only <b>half</b> its harvest.</li>'
+      +'<li><b>VI. Boils.</b> Their soldiers are covered in boils and cannot march, move or attack for <b>1 day</b>.</li>'
+      +'<li><b>VII. Hail and fire.</b> Flaming hail strikes '+hn(A)+' of Anna&rsquo;s squares'+(L?' and '+hn(L)+' of Lina&rsquo;s':'')+'. They burn for <b>3 days</b> and give nothing.</li>'
+      +'<li><b>VIII. Locusts.</b> Locusts devour <b>half the grain and timber</b> in their stores.</li>'
+      +'<li><b>IX. Darkness.</b> Darkness lies over their land for 3 days.</li>'
+      +'<li><b>X. The death of the firstborn.</b> The first soldier of every band falls, and one man from every keep that holds more than one.</li>'
+      +'</ul><p>Watch how they were caught in <b>the saga</b>. And let every warrior take heed: one picture, one warrior, one day.</p>',
+    go:'The gods have spoken', watch:{label:'&#9654; Watch the saga', url:'saga/plagues/'}, cine:playEgyptCinematic};
+}
+
+/* ── on the map ──  the ground layer (blood and darkness) goes down under the buildings; the air layer (frogs, gnats,
+   flies, hail, boils, the locust cloud and the angel's shadow) over everything. Both read the queues draw() fills. */
+function egyptNearWater(q,r,E){ for(var i=0;i<6;i++){ var n=G.cells[key(q+AX[i][0],r+AX[i][1])]; if(n&&n.o&&E.pids.indexOf(n.o)>=0) return true; } return false; }
+function drawEgyptGround(t){
+  var E=egyptView(); if(!E){ egWaterQ.length=0; return; }
+  ctx.save();
+  egWaterQ.forEach(function(e){ egBloodWater(e[0],e[1],e[2],e[3],t); });
+  egQ.forEach(function(e){
+    if(e[5]){ egBloodWater(e[0],e[1],e[2],e[3],t); return; }
+    var h=artHash(wrapQ(e[2]),wrapR(e[3]),1101), x=e[0], y=e[1];
+    hexPath(x,y,S*0.96); ctx.fillStyle='rgba(12,5,16,'+(0.36+0.07*Math.sin(t*0.7+h*9)).toFixed(3)+')'; ctx.fill();     // IX. darkness
+    ctx.fillStyle='rgba(120,8,12,0.17)'; ctx.fill();                                                                    // I. the blood in the soil
+    if(S>=10 && h<0.3){ ctx.fillStyle='rgba(110,6,10,0.55)'; ctx.beginPath(); ctx.ellipse(x+(h-0.15)*S*2,y+S*0.3,S*(0.18+h*0.4),S*(0.08+h*0.15),0,0,6.284); ctx.fill(); }   // pools of it
+  });
+  egWaterQ.length=0;
+  ctx.restore();
+}
+function egBloodWater(x,y,q,r,t){
+  var h=artHash(wrapQ(q),wrapR(r),1103);
+  hexPath(x,y,S*0.95);
+  var g=ctx.createLinearGradient(x-S,y-S,x+S,y+S); g.addColorStop(0,'#3a0306'); g.addColorStop(0.5,'#8e0d12'); g.addColorStop(1,'#4a0408');
+  ctx.fillStyle=g; ctx.globalAlpha=0.92; ctx.fill(); ctx.globalAlpha=1;
+  if(S<9) return;
+  ctx.save(); hexPath(x,y,S*0.95); ctx.clip();
+  ctx.strokeStyle='rgba(255,120,110,0.35)'; ctx.lineWidth=Math.max(1,S*0.05);
+  for(var i=0;i<3;i++){ var u=((t*0.35+h*3+i/3)%1); ctx.globalAlpha=0.6*Math.sin(u*Math.PI);
+    ctx.beginPath(); ctx.ellipse(x+(artHash(q,r,1110+i)-0.5)*S,y+(artHash(q,r,1120+i)-0.5)*S*0.8,S*0.15+u*S*0.5,(S*0.15+u*S*0.5)*0.45,0,0,6.284); ctx.stroke(); }
+  ctx.globalAlpha=0.5; ctx.strokeStyle='rgba(255,190,170,0.5)'; ctx.lineWidth=Math.max(1,S*0.03); ctx.beginPath();
+  var sx=x-S+((t*S*0.6+h*S*2)%(S*2)); ctx.moveTo(sx,y-S*0.2); ctx.lineTo(sx+S*0.35,y-S*0.28); ctx.stroke();
+  ctx.restore();
+}
+function drawEgyptAir(t){
+  var E=egyptView(); if(!E){ egQ.length=0; return; }
+  var hs={}, now=Date.now(), boils=E.boils>now; Object.keys(E.hail||{}).forEach(function(p){ (E.hail[p]||[]).forEach(function(k){ hs[k]=1; }); });
+  var box={};
+  ctx.save();
+  egQ.forEach(function(e){
+    var x=e[0], y=e[1], q=e[2], r=e[3], c=e[4], k=key(q,r), h=artHash(wrapQ(q),wrapR(r),1131), h2=artHash(wrapQ(q),wrapR(r),1137);
+    var B=box[c.o]||(box[c.o]={x0:x,x1:x,y0:y,y1:y,n:0}); B.x0=Math.min(B.x0,x); B.x1=Math.max(B.x1,x); B.y0=Math.min(B.y0,y); B.y1=Math.max(B.y1,y); B.n++;
+    if(hs[k]){ if(!burning(c)) drawBlaze(x,y,S,q,r,t,true); egHail(x,y,q,r,t); }
+    if(e[5]) return;
+    if(S>=11 && h<0.42) egFrog(x+(h-0.2)*S*1.2,y+S*0.25,q,r,t,h);
+    if(S>=8 && h2<0.55) egGnats(x,y,q,r,t,h2<0.25);
+    if(boils && c.b>0 && S>=10) egBoils(x,y,q,r,t);
+  });
+  for(var pid in box){ var B=box[pid]; if(B.n) egLocusts(B,t,pid==='p1jzq6ij'?0:3.7); }
+  for(var pid2 in box){ var B2=box[pid2]; if(B2.n) egAngel(B2,t,pid2==='p1jzq6ij'?0:11); }
+  ctx.restore();
+  egQ.length=0;
+}
+function egFrog(x,y,q,r,t,h){
+  var per=2.4+h*2, u=((t+h*17)%per)/per, hop=u<0.3, f=hop?u/0.3:0, s=S*0.15;
+  var dir=artHash(q,r,1141)<0.5?-1:1, sp=S*0.5, ox=hop?(f-0.5)*sp*dir:(0.5-((Math.floor((t+h*17)/per)%2)))*sp*0.3*dir, oy=hop?-Math.sin(f*Math.PI)*S*0.35:0;
+  x+=ox; y+=oy;
+  ctx.save(); ctx.translate(x,y); ctx.scale(dir,1);
+  ctx.fillStyle='rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0,s*0.9-oy,s*1.1,s*0.3,0,0,6.284); ctx.fill();
+  ctx.fillStyle='#3f7d22'; ctx.strokeStyle='#183a0c'; ctx.lineWidth=Math.max(1,s*0.12);
+  if(hop){ ctx.beginPath(); ctx.moveTo(-s*0.6,s*0.2); ctx.lineTo(-s*1.6,s*0.9); ctx.moveTo(-s*0.4,s*0.3); ctx.lineTo(-s*1.3,s*1.1); ctx.stroke(); }
+  else { ctx.beginPath(); ctx.ellipse(-s*0.55,s*0.45,s*0.45,s*0.3,0.3,0,6.284); ctx.fill(); ctx.stroke(); }
+  ctx.beginPath(); ctx.ellipse(0,0,s,s*0.62,hop?-0.4:-0.1,0,6.284); ctx.fill(); ctx.stroke();
+  var thr=hop?0:Math.max(0,Math.sin(t*9+h*20))*s*0.25; ctx.fillStyle='#c9d98a'; ctx.beginPath(); ctx.ellipse(s*0.45,s*0.3,s*0.35+thr,s*0.22+thr,0,0,6.284); ctx.fill();   // croaking throat
+  ctx.fillStyle='#4f9a2c'; ctx.beginPath(); ctx.arc(s*0.55,-s*0.45,s*0.3,0,6.284); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#fff6c0'; ctx.beginPath(); ctx.arc(s*0.6,-s*0.5,s*0.17,0,6.284); ctx.fill(); ctx.fillStyle='#000'; ctx.beginPath(); ctx.arc(s*0.65,-s*0.5,s*0.08,0,6.284); ctx.fill();
+  ctx.restore();
+}
+function egGnats(x,y,q,r,t,flies){
+  var n=flies?5:12, i;
+  ctx.fillStyle=flies?'rgba(18,14,10,0.95)':'rgba(30,26,20,0.75)';
+  for(i=0;i<n;i++){ var a=artHash(q,r,1150+i)*6.28, sp=(flies?2.2:6)+artHash(q,r,1170+i)*3;
+    var px=x+Math.sin(t*sp+a)*S*(flies?0.55:0.35)+Math.sin(t*sp*2.3+a*2)*S*0.12, py=y-S*0.45+Math.cos(t*sp*1.3+a)*S*(flies?0.3:0.22);
+    if(flies){ var sz=Math.max(1.3,S*0.05); ctx.globalAlpha=0.35; ctx.fillStyle='#d8e0e8'; ctx.beginPath(); ctx.ellipse(px-sz*0.6,py-sz*0.8,sz*0.9,sz*0.45,-0.6+Math.sin(t*60+i)*0.5,0,6.284); ctx.ellipse(px+sz*0.6,py-sz*0.8,sz*0.9,sz*0.45,0.6-Math.sin(t*60+i)*0.5,0,6.284); ctx.fill();
+      ctx.globalAlpha=1; ctx.fillStyle='rgba(18,14,10,0.95)'; ctx.beginPath(); ctx.arc(px,py,sz,0,6.284); ctx.fill(); }
+    else ctx.fillRect(px,py,Math.max(1,S*0.025),Math.max(1,S*0.025));
+  }
+  ctx.globalAlpha=1;
+}
+function egHail(x,y,q,r,t){
+  var h=artHash(wrapQ(q),wrapR(r),1181), per=2.2+h*1.6, u=((t+h*13)%per)/per;
+  if(u<0.22){                                          // a stone of ice wrapped in fire comes down
+    var f=u/0.22, sx=x+S*1.6*(1-f), sy=y-S*4.5*(1-f), tx=sx+S*1.0, ty=sy-S*2.6;
+    var g=ctx.createLinearGradient(sx,sy,tx,ty); g.addColorStop(0,'rgba(255,200,90,0.95)'); g.addColorStop(0.4,'rgba(255,90,20,0.6)'); g.addColorStop(1,'rgba(120,20,0,0)');
+    ctx.strokeStyle=g; ctx.lineWidth=Math.max(2,S*0.22); ctx.lineCap='round'; ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(tx,ty); ctx.stroke();
+    ctx.fillStyle='#e8f6ff'; ctx.shadowColor='#ff9a3a'; ctx.shadowBlur=S*0.6; ctx.beginPath(); ctx.arc(sx,sy,Math.max(2,S*0.14),0,6.284); ctx.fill(); ctx.shadowBlur=0;
+  } else if(u<0.45){                                   // the strike: a flash, a ring, shards of ice flung out
+    var k=(u-0.22)/0.23;
+    ctx.globalAlpha=(1-k)*0.8; ctx.fillStyle='#fff1c8'; ctx.beginPath(); ctx.arc(x,y,S*(0.2+0.5*k),0,6.284); ctx.fill();
+    ctx.strokeStyle='rgba(255,160,60,'+(1-k).toFixed(3)+')'; ctx.lineWidth=Math.max(1,S*0.08); ctx.beginPath(); ctx.ellipse(x,y+S*0.1,S*(0.3+1.1*k),S*(0.15+0.5*k),0,0,6.284); ctx.stroke();
+    ctx.fillStyle='#dff2ff'; for(var i=0;i<6;i++){ var a=i*1.05+h*3; ctx.globalAlpha=1-k; ctx.beginPath(); ctx.arc(x+Math.cos(a)*S*0.9*k,y-Math.sin(a)*S*0.5*k-S*0.6*k*(1-k),Math.max(1,S*0.05),0,6.284); ctx.fill(); }
+    ctx.globalAlpha=1;
+  }
+}
+function egBoils(x,y,q,r,t){
+  for(var i=0;i<4;i++){ var h=artHash(q,r,1190+i), u=((t*0.6+h*5)%1), px=x+(h-0.5)*S*0.9, py=y-S*0.2+(artHash(q,r,1195+i)-0.5)*S*0.5;
+    var rr=Math.max(1.5,S*0.09*Math.min(1,u*1.6)); if(u>0.85){ ctx.globalAlpha=(1-u)/0.15; rr*=1.5; }
+    ctx.fillStyle='#c0392b'; ctx.beginPath(); ctx.arc(px,py,rr,0,6.284); ctx.fill(); ctx.fillStyle='#f6d36b'; ctx.beginPath(); ctx.arc(px-rr*0.25,py-rr*0.3,rr*0.4,0,6.284); ctx.fill(); ctx.globalAlpha=1; }
+}
+var EG_SWARM=null;
+function egLocusts(B,t,seed){
+  if(!EG_SWARM){ EG_SWARM=[]; for(var i=0;i<160;i++){ var a=Math.random()*6.284, d=Math.pow(Math.random(),0.6); EG_SWARM.push([Math.cos(a)*d,Math.sin(a)*d*0.6,Math.random()*6.28,0.6+Math.random()]); } }
+  var mx=(B.x0+B.x1)/2, my=(B.y0+B.y1)/2, rx=Math.max(S*2,(B.x1-B.x0)/2), ry=Math.max(S*1.5,(B.y1-B.y0)/2);
+  var cx=mx+rx*0.8*Math.sin(t*0.11+seed), cy=my+ry*0.7*Math.sin(t*0.17+seed*1.7)-S*0.8, R=Math.max(40,S*3.2);
+  var hz=ctx.createRadialGradient(cx,cy+R*0.5,0,cx,cy+R*0.5,R*1.2); hz.addColorStop(0,'rgba(20,14,6,0.48)'); hz.addColorStop(1,'rgba(20,14,6,0)');
+  ctx.fillStyle=hz; ctx.beginPath(); ctx.ellipse(cx,cy+R*0.5,R*1.2,R*0.6,0,0,6.284); ctx.fill();     // the shadow it throws on the fields
+  ctx.strokeStyle='rgba(92,72,30,0.95)'; ctx.lineWidth=Math.max(1.5,S*0.06); ctx.lineCap='round'; ctx.beginPath();
+  var n=S>=12?160:90;
+  for(var j=0;j<n;j++){ var L=EG_SWARM[j], px=cx+L[0]*R+Math.sin(t*3*L[3]+L[2])*R*0.12, py=cy+L[1]*R+Math.cos(t*4*L[3]+L[2])*R*0.1, ln=Math.max(3,S*0.15);
+    var a2=Math.sin(t*2+L[2])*0.6; ctx.moveTo(px,py); ctx.lineTo(px+Math.cos(a2)*ln,py+Math.sin(a2)*ln*0.5); }
+  ctx.stroke();
+}
+function egAngel(B,t,seed){                            // X. now and then a vast winged shadow glides across their land
+  var per=26, u=((t+seed)%per)/4.5; if(u>1) return;
+  var mx=(B.x0+B.x1)/2, my=(B.y0+B.y1)/2, span=Math.max(W*0.5,(B.x1-B.x0)+S*8), R=Math.max(60,S*5);
+  var x=mx-span/2+span*u, y=my-S*0.5+Math.sin(u*Math.PI)*S*0.6, fl=Math.sin(t*2.2)*0.18, a=Math.sin(u*Math.PI);
+  ctx.save(); ctx.globalAlpha=0.5*a; ctx.fillStyle='#05030a'; ctx.translate(x,y);
+  [-1,1].forEach(function(sd){ ctx.save(); ctx.scale(sd,1); ctx.rotate(-fl); ctx.beginPath(); ctx.moveTo(0,0);
+    ctx.bezierCurveTo(R*0.4,-R*0.7,R*1.2,-R*0.8,R*1.9,-R*0.35); ctx.lineTo(R*1.55,-R*0.15); ctx.lineTo(R*1.7,R*0.05); ctx.lineTo(R*1.3,0); ctx.lineTo(R*1.35,R*0.22); ctx.lineTo(R*0.9,R*0.08); ctx.lineTo(R*0.85,R*0.3); ctx.quadraticCurveTo(R*0.4,R*0.15,0,R*0.3); ctx.fill(); ctx.restore(); });
+  ctx.beginPath(); ctx.moveTo(-R*0.22,-R*0.15); ctx.quadraticCurveTo(0,-R*0.65,R*0.22,-R*0.15); ctx.lineTo(R*0.3,R*1.1); ctx.quadraticCurveTo(0,R*0.95,-R*0.3,R*1.1); ctx.fill();   // the hooded body
+  ctx.globalAlpha=0.7*a; ctx.fillStyle='#d8e6ff'; ctx.shadowColor='#9fc0ff'; ctx.shadowBlur=R*0.3; ctx.beginPath(); ctx.arc(-R*0.07,-R*0.28,R*0.035,0,6.284); ctx.arc(R*0.07,-R*0.28,R*0.035,0,6.284); ctx.fill();
+  ctx.restore();
+}
+
+/* ── the cinematic ──  Once for every player, before the scroll. A picture of each victim's own land is taken from the map,
+   and the plagues fall on it one after another: I–V on Anna's, VI–X on Lina's. Tap Skip to end it. */
+function egyptSnap(pid){
+  var at=myCastleCells(pid)[0];
+  if(!at){ for(var k0 in G.cells){ if(G.cells[k0].o===pid){ var p0=k0.split('_'); at=[parseInt(p0[0],10),parseInt(p0[1],10)]; break; } } }
+  if(!at) return null;
+  var keep={S:S,q:viewQ,r:viewR,px:panX,py:panY}, out=null;
+  EG_SNAP=true;
+  try{
+    W=innerWidth; H=innerHeight; canvas.width=Math.round(W*dpr); canvas.height=Math.round(H*dpr); ctx.setTransform(dpr,0,0,dpr,0,0);
+    S=Math.max(20,Math.min(36,Math.round(Math.min(W,H)/17)));
+    var pts=[], own=[], wat=[], cols=Math.ceil(W/(S*Math.sqrt(3)))+3, rows=Math.ceil(H/(S*1.5))+3;
+    var near=[at[0],at[1]], best=0;
+    for(var dr=-6;dr<=6;dr++) for(var dq=-6;dq<=6;dq++){ var cq=at[0]+dq-Math.round(dr/2), cr=at[1]+dr, n=0;   // centre on the thickest part of their land near the castle
+      for(var i=0;i<6;i++){ var nb=G.cells[key(cq+AX[i][0],cr+AX[i][1])]; if(nb&&nb.o===pid) n++; } var mc=G.cells[key(cq,cr)]; if(mc&&mc.o===pid) n+=2;
+      if(n>best+Math.abs(dr)*0.15){ best=n; near=[cq,cr]; } }
+    centreOn(near[0],near[1]); draw();
+    for(var dr2=-rows;dr2<=rows;dr2++) for(var dq2=-cols;dq2<=cols;dq2++){
+      var q=near[0]+dq2-Math.round(dr2/2), r=near[1]+dr2, sp=toScreen(q,r); if(sp[0]<-S||sp[0]>W+S||sp[1]<-S||sp[1]>H+S) continue;
+      var c=cellOf(q,r);
+      if(c.t===RIVER){ wat.push([sp[0],sp[1],!!(c.o===pid)]); continue; }
+      if(c.o===pid) own.push([sp[0],sp[1],c.k?1:0,(c.b||0)+(c.g||0)]);
+    }
+    var img=document.createElement('canvas'); img.width=canvas.width; img.height=canvas.height; img.getContext('2d').drawImage(canvas,0,0);
+    out={img:img,W:W,H:H,S:S,own:own,wat:wat,cx:W/2,cy:H/2};
+  } catch(e){ out=null; }
+  finally{
+    EG_SNAP=false; S=keep.S; viewQ=keep.q; viewR=keep.r; panX=keep.px; panY=keep.py;
+    layout(); draw();
+  }
+  return out;
+}
+function egyptSound(){
+  var ac=null; try{ ac=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; }
+  var M=ac.createGain(); M.gain.value=0.85; M.connect(ac.destination);
+  var nb=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate), nd=nb.getChannelData(0); for(var i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+  function noise(f,type,q,v,a,d,at){ var s=ac.createBufferSource(); s.buffer=nb; s.loop=true; var fl=ac.createBiquadFilter(); fl.type=type; fl.frequency.value=f; fl.Q.value=q||1; var g=ac.createGain(), t=ac.currentTime+(at||0);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+a); g.gain.exponentialRampToValueAtTime(0.0001,t+a+d); s.connect(fl); fl.connect(g); g.connect(M); s.start(t,Math.random()); s.stop(t+a+d+0.1); return fl; }
+  function tone(f,type,v,a,d,at,f2){ var o=ac.createOscillator(), g=ac.createGain(), t=ac.currentTime+(at||0); o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+a+d);
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+a); g.gain.exponentialRampToValueAtTime(0.0001,t+a+d); o.connect(g); g.connect(M); o.start(t); o.stop(t+a+d+0.1); }
+  // a low choir of fifths that never quite resolves
+  var pad=ac.createGain(); pad.gain.value=0.0001; var lp=ac.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900; lp.connect(pad); pad.connect(M);
+  [55,82.4,110,130.8,164.8].forEach(function(f,i){ var o=ac.createOscillator(); o.type=i<2?'sawtooth':'triangle'; o.frequency.value=f; o.detune.value=(i-2)*7; var g=ac.createGain(); g.gain.value=i<2?0.09:0.06; o.connect(g); g.connect(lp); o.start(); });
+  pad.gain.exponentialRampToValueAtTime(0.5,ac.currentTime+3);
+  var bz={}; function buzz(name,f,v,dur){                          // a swarm that swells and fades
+    var o=ac.createOscillator(), lf=ac.createOscillator(), lg=ac.createGain(), bp=ac.createBiquadFilter(), g=ac.createGain(), t=ac.currentTime;
+    o.type='sawtooth'; o.frequency.value=f; lf.frequency.value=f>400?31:17; lg.gain.value=f*0.06; lf.connect(lg); lg.connect(o.frequency); bp.type='bandpass'; bp.frequency.value=f*2.2; bp.Q.value=2;
+    g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(v,t+0.8); g.gain.setValueAtTime(v,t+dur-0.9); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(bp); bp.connect(g); g.connect(M); o.start(t); lf.start(t); o.stop(t+dur+0.1); lf.stop(t+dur+0.1); bz[name]=g; }
+  return {
+    thunder:function(v){ v=v||1; noise(3000,'highpass',0.7,0.5*v,0.005,0.25); noise(180,'lowpass',0.8,0.9*v,0.03,2.6); tone(48,'sine',0.5*v,0.02,1.6,0,30); },
+    croak:function(at){ var f=110+Math.random()*90; for(var k=0;k<3;k++) tone(f,'square',0.05,0.008,0.06,(at||0)+k*0.07,f*0.8); },
+    buzz:buzz,
+    splat:function(at){ tone(420,'sine',0.25,0.005,0.18,at||0,70); noise(500,'bandpass',2,0.25,0.005,0.15,at||0); },
+    hail:function(at){ noise(5000,'highpass',1,0.12,0.002,0.05,at||0); },
+    whoosh:function(){ var f=noise(300,'bandpass',3,0.5,1.6,2.6); f.frequency.setValueAtTime(200,ac.currentTime); f.frequency.exponentialRampToValueAtTime(1400,ac.currentTime+1.6); f.frequency.exponentialRampToValueAtTime(160,ac.currentTime+4.2); },
+    bell:function(at){ [110,220,264,330,440].forEach(function(f,i){ tone(f,'sine',[0.32,0.2,0.12,0.1,0.06][i],0.01,4.5-i*0.5,at||0); }); },
+    wind:function(v,d){ noise(420,'bandpass',0.6,v,1.2,d); },
+    hit:function(){ tone(70,'sine',0.7,0.005,0.7,0,32); noise(900,'lowpass',1,0.5,0.005,0.6); },
+    darken:function(){ pad.gain.cancelScheduledValues(ac.currentTime); pad.gain.setValueAtTime(pad.gain.value,ac.currentTime); pad.gain.exponentialRampToValueAtTime(0.12,ac.currentTime+1.5); lp.frequency.exponentialRampToValueAtTime(260,ac.currentTime+1.5); },
+    swell:function(){ pad.gain.cancelScheduledValues(ac.currentTime); pad.gain.setValueAtTime(Math.max(0.001,pad.gain.value),ac.currentTime); pad.gain.exponentialRampToValueAtTime(0.7,ac.currentTime+1); lp.frequency.exponentialRampToValueAtTime(1400,ac.currentTime+1); },
+    end:function(){ try{ M.gain.setValueAtTime(M.gain.value,ac.currentTime); M.gain.exponentialRampToValueAtTime(0.0001,ac.currentTime+1); setTimeout(function(){ try{ ac.close(); }catch(e){} },1300); }catch(e){} }
+  };
+}
+var EG_PLAGUES=[
+  ['I','The waters turn to blood','Their rivers run red. Every field they hold gives half for 3 days.'],
+  ['II','Frogs','Frogs come up out of the water and cover the land.'],
+  ['III','Gnats','The dust of the land becomes gnats.'],
+  ['IV','Flies','Swarms of flies fill every house.'],
+  ['V','Pestilence','The herds sicken and fall.'],
+  ['VI','Boils','Their soldiers break out in boils. No marching, moving or fighting for a day.'],
+  ['VII','Hail and fire','Hail mixed with fire strikes their squares. They burn for 3 days.'],
+  ['VIII','Locusts','Locusts devour half the grain and timber in their stores.'],
+  ['IX','Darkness','A darkness that can be felt lies over their land.'],
+  ['X','The death of the firstborn','The angel of death passes over. The first soldier of every band falls.']];
+function playEgyptCinematic(done){
+  done=done||function(){};
+  var E=egyptRec()||EG_PREVIEW, pids=(E&&E.pids)||EG_PIDS;
+  if(REDUCE||!G||document.getElementById('qcine')){ done(); return; }
+  var SA=null, SB=null; try{ SA=egyptSnap(pids[0]); SB=pids[1]?egyptSnap(pids[1]):null; }catch(e){}
+  if(!SA){ done(); return; }
+  if(!SB) SB=SA;
+  var nmA=esc(egyptName(pids[0])), nmB=esc(pids[1]?egyptName(pids[1]):egyptName(pids[0]));
+  var box=document.createElement('div'); box.id='qcine'; box.setAttribute('role','dialog'); box.setAttribute('aria-label','The Ten Plagues');
+  box.innerHTML='<canvas></canvas><div class="qcap" id="qcap"></div><div class="qsub" id="qsub"></div><button type="button" class="qskip">Skip &#9654;</button>';
+  box.style.zIndex='2147483000';                       // above the chat bar and every scroll
+  document.body.appendChild(box);
+  var cv=box.querySelector('canvas'), g=cv.getContext('2d'), DPR=Math.min(2,window.devicePixelRatio||1), cap=box.querySelector('#qcap'), sub=box.querySelector('#qsub');
+  function size(){ cv.width=Math.round(innerWidth*DPR); cv.height=Math.round(innerHeight*DPR); }
+  size(); addEventListener('resize',size);
+  var snd=egyptSound(), start=performance.now(), ended=false, cued={}, P=[], shake=0, flash=0, flashC='255,240,210', R=Math.random;
+  var INTRO=5200, STEP=3500, T0=INTRO, TEND=INTRO+10*STEP+4600;
+  function cue(id,f){ if(!cued[id]){ cued[id]=1; try{ f(); }catch(e){} } }
+  function caption(a,b){ if(cap.dataset.t!==a){ cap.dataset.t=a; cap.style.opacity=0; sub.style.opacity=0; setTimeout(function(){ cap.innerHTML=a; sub.innerHTML=b||''; cap.style.opacity=a?1:0; sub.style.opacity=b?1:0; },200); } }
+  function finish(){ if(ended) return; ended=true; if(snd) snd.end(); box.classList.add('out'); setTimeout(function(){ removeEventListener('resize',size); box.remove(); done(); },500); }
+  box.querySelector('.qskip').onclick=finish;
+  function pick(a){ return a[Math.floor(R()*a.length)]; }
+  function hexAt(x,y,s){ g.beginPath(); for(var i=0;i<6;i++){ var a=(60*i-30)*Math.PI/180; g.lineTo(x+s*Math.cos(a),y+s*Math.sin(a)); } g.closePath(); }
+  // the per-plague state, so each layer lingers once it has fallen
+  var st={blood:0,dark:0,fog:0,brown:0,red:0};
+  function frogInit(Sn){ for(var i=0;i<70;i++){ var a=pick(Sn.wat.length?Sn.wat:Sn.own), b=pick(Sn.own.length?Sn.own:Sn.wat); P.push({k:'frog',x:a[0],y:a[1],tx:b[0]+(R()-0.5)*Sn.S,ty:b[1]+(R()-0.5)*Sn.S*0.6,d:R()*1.6,ph:R()*6,s:Sn.S*(0.24+R()*0.12)}); } }
+  function sceneFor(e){ return e<T0+5*STEP-250?SA:SB; }
+  function frame(now){
+    if(ended) return;
+    var e=now-start, t=e/1000, Wc=cv.width, Hc=cv.height, Sn=sceneFor(e), pi=Math.floor((e-T0)/STEP), pu=((e-T0)%STEP)/STEP;
+    if(e>=TEND){ finish(); return; }
+    // ---- the cues: words, sounds and the bursts each plague starts with
+    if(e<T0){
+      cue('in',function(){ if(snd) snd.thunder(1); flash=1; caption('THE GODS HAVE SEEN','One picture, passed off as two.'); });
+      if(e>2600) cue('in2',function(){ caption('Upon the land of '+nmA+' and '+nmB+'&hellip;','&hellip;fall the Ten Plagues.'); if(snd) snd.swell(); });
+    } else if(pi<10){
+      var PL=EG_PLAGUES[pi];
+      cue('p'+pi,function(){
+        caption('<span style="font-size:.55em;letter-spacing:.2em;display:block;opacity:.85">'+PL[0]+'</span>'+PL[1],PL[2]+(pi===0||pi===5?' <span style="opacity:.7">('+(pi<5?nmA:nmB)+'&rsquo;s land)</span>':''));
+        if(snd) snd.hit(); shake=Math.max(shake,0.5);
+        if(pi===0){ flash=0.8; flashC='200,10,10'; }
+        if(pi===1){ frogInit(Sn); if(snd) for(var k=0;k<14;k++) snd.croak(k*0.18); }
+        if(pi===2&&snd) snd.buzz('gnats',620,0.06,STEP/1000+0.5);
+        if(pi===3){ for(var k4=0;k4<140;k4++) P.push({k:'fly',x:R()*Sn.W,y:R()*Sn.H,a:R()*6.28,v:60+R()*160,ph:R()*6,big:k4<10}); if(snd) snd.buzz('flies',190,0.12,STEP/1000+0.5); }
+        if(pi===4&&snd) snd.wind(0.25,3);
+        if(pi===5){ P=P.filter(function(p){ return p.k!=='frog'; }); flash=1; flashC='0,0,0'; if(snd) for(var k2=0;k2<8;k2++) snd.splat(0.3+k2*0.32); }
+        if(pi===6&&snd){ snd.thunder(1.2); for(var k3=0;k3<24;k3++) snd.hail(k3*0.12); setTimeout(function(){ if(snd&&!ended) snd.thunder(0.9); },1500); }
+        if(pi===7&&snd){ snd.buzz('loc',300,0.16,STEP/1000+0.6); snd.wind(0.2,3); }
+        if(pi===8&&snd){ snd.darken(); snd.wind(0.18,3.4); }
+        if(pi===9&&snd){ snd.whoosh(); snd.bell(1.4); }
+      });
+    } else cue('end',function(){ caption('THE GODS HAVE SPOKEN','Ten plagues, for three days. One picture, one warrior, one day.'); if(snd){ snd.swell(); snd.bell(0); } });
+    // ---- the picture of their land, slowly pushed in on, shaken by what falls on it
+    var z=(Wc/DPR)/Sn.W, zz=Math.max(z,(Hc/DPR)/Sn.H)*(1.02+0.06*Math.min(1,((e<T0+5*STEP?e:e-(T0+5*STEP))/(5*STEP))));
+    shake*=0.9; flash*=0.9;
+    var jx=(R()-0.5)*shake*24, jy=(R()-0.5)*shake*24;
+    g.setTransform(1,0,0,1,0,0); g.fillStyle='#000'; g.fillRect(0,0,Wc,Hc);
+    var k=DPR*zz, ox=Wc/2-Sn.cx*k+jx, oy=Hc/2-Sn.cy*k+jy;
+    var intro=e<T0?Math.min(1,Math.max(0,(e-1800)/2200)):1;
+    g.globalAlpha=intro; g.setTransform(k/(Sn.img.width/Sn.W),0,0,k/(Sn.img.height/Sn.H),ox,oy); g.drawImage(Sn.img,0,0); g.globalAlpha=1;
+    g.setTransform(k,0,0,k,ox,oy);                       // from here on, the picture's own coordinates
+    var gk=Math.max(0,Math.min(9,pi)); g.globalCompositeOperation='multiply'; g.fillStyle='rgb('+(165-7*gk)+','+(112-7*gk)+','+(112-6*gk)+')'; g.fillRect(-Sn.W,-Sn.H,Sn.W*3,Sn.H*3); g.globalCompositeOperation='source-over';   // a storm-dark, blood-tinged grade over their land, deepening with each plague
+    var s=Sn.S, lina=e>=T0+5*STEP-250, P0=lina?5:0, a, i;
+    // what has already fallen stays: blood on the water, the brown of the eaten fields, the darkness
+    st.blood=pi>=0||lina?Math.min(1,st.blood+(pi>=0?0.02:0)):0; if(lina&&pi<6) st.blood=Math.max(st.blood,0.85);
+    if(st.blood>0){ Sn.wat.forEach(function(w,j){ var reach=Math.min(1,st.blood*1.6-j/Math.max(1,Sn.wat.length)*0.6); if(reach<=0) return;
+        hexAt(w[0],w[1],s*0.96); g.fillStyle='rgba(130,8,14,'+(0.9*reach).toFixed(3)+')'; g.fill(); g.strokeStyle='rgba(255,140,120,'+(0.25*reach*Math.abs(Math.sin(t*2+j))).toFixed(3)+')'; g.lineWidth=s*0.05; g.stroke(); });
+      Sn.own.forEach(function(o){ hexAt(o[0],o[1],s*0.96); g.fillStyle='rgba(110,6,12,'+(0.16*st.blood).toFixed(3)+')'; g.fill(); }); }
+    if(pi===0 && pu<0.7 && !lina){ for(i=0;i<2;i++) P.push({k:'drip',x:R()*Sn.W,y:-10,v:200+R()*300,l:1,w:2+R()*4}); }
+    // II. frogs leap out of the water onto the land
+    if(pi>=1 && !lina && P.filter(function(p){ return p.k==='frog'; }).length===0) frogInit(Sn);
+    // III–IV. gnats and flies: the air itself crawls
+    if(pi===2 || (pi>2&&pi<5&&!lina)){ var ng=pi===2?Math.min(1,pu*3):0.4; g.fillStyle='rgba(12,9,6,0.92)';
+      for(i=0;i<Math.round(2200*ng);i++){ var gx=(i*97.13+Math.sin(t*7+i)*16)%Sn.W, gy=(i*53.71+Math.cos(t*9+i*1.3)*14+t*10)%Sn.H, gz=1.6+(i%3)*0.8; g.fillRect(gx,gy,gz,gz); }
+      if(pi===2){ var cl=g.createRadialGradient(Sn.cx,Sn.cy,0,Sn.cx,Sn.cy,Math.max(Sn.W,Sn.H)*0.6); cl.addColorStop(0,'rgba(60,50,30,'+(0.25*ng).toFixed(3)+')'); cl.addColorStop(1,'rgba(60,50,30,0)'); g.fillStyle=cl; g.fillRect(0,0,Sn.W,Sn.H); } }
+    // V. pestilence: a sick green fog rolls over, and the herds keel over
+    if(pi===4 && !lina){ st.fog=Math.min(1,st.fog+0.03); }
+    if(st.fog>0 && !lina){ for(i=0;i<9;i++){ var fx=((i*190+t*40*(1+i%3))%(Sn.W+400))-200, fy=Sn.H*(0.2+0.09*i), fr=s*(4+i%4*1.5); var fg=g.createRadialGradient(fx,fy,0,fx,fy,fr); fg.addColorStop(0,'rgba(120,170,60,'+(0.28*st.fog).toFixed(3)+')'); fg.addColorStop(1,'rgba(120,170,60,0)'); g.fillStyle=fg; g.fillRect(fx-fr,fy-fr,fr*2,fr*2); }
+      if(pi===4) Sn.own.slice(0,14).forEach(function(o,j){ var fall=Math.min(1,Math.max(0,pu*2-j*0.08)); egSheep(g,o[0],o[1]-s*0.1,s*0.32,fall); }); }
+    // VI. boils: on Lina's land the ground blisters, and they burst against the glass
+    if(pi===5){ Sn.own.forEach(function(o,j){ var u2=((t*0.8+j*0.37)%1), rr=s*0.22*Math.min(1,u2*2); g.fillStyle='rgba(192,40,30,'+(u2>0.85?(1-u2)/0.15:1).toFixed(3)+')'; g.beginPath(); g.arc(o[0]+((j*37)%10-5)*s*0.08,o[1]+((j*53)%10-5)*s*0.05,rr,0,6.284); g.fill(); g.fillStyle='#f4d06a'; g.beginPath(); g.arc(o[0]+((j*37)%10-5)*s*0.08-rr*0.3,o[1]+((j*53)%10-5)*s*0.05-rr*0.3,rr*0.35,0,6.284); g.fill(); });
+      if(R()<0.2) P.push({k:'splat',x:R()*Sn.W,y:R()*Sn.H,r:s*(1+R()*2.4),l:1}); }
+    if(lina && pi>=5) st.blood=Math.max(st.blood,0.85);
+    // VII. hail mixed with fire: stones streak down, the squares they hit burn
+    if(pi===6 && R()<0.55){ var tg=pick(Sn.own.length?Sn.own:Sn.wat); P.push({k:'hail',x:tg[0]+s*6,y:tg[1]-s*14,tx:tg[0],ty:tg[1],u:0,v:1.6+R()*1.2}); }
+    // VIII. locusts: a black wall sweeps across and eats the green away
+    if(pi===7){ st.brown=Math.min(1,st.brown+0.012); var front=Sn.W*1.4-pu*Sn.W*2.2;
+      var lw=g.createLinearGradient(front-Sn.W*0.15,0,front+Sn.W*0.25,0); lw.addColorStop(0,'rgba(14,9,3,0)'); lw.addColorStop(1,'rgba(14,9,3,0.72)'); g.fillStyle=lw; g.fillRect(front-Sn.W*0.15,0,Sn.W*1.6,Sn.H);
+      g.strokeStyle='rgba(122,98,44,0.92)'; g.lineWidth=2.4; g.lineCap='round'; g.beginPath();
+      for(i=0;i<2200;i++){ var lx=front-Sn.W*0.12+((i*61.7)%(Sn.W*1.4))+Math.sin(t*9+i)*7, ly=(i*37.3+Math.sin(t*5+i*0.7)*10)%Sn.H, ll=6+((i*7)%6); if(lx<-20||lx>Sn.W+20) continue; g.moveTo(lx,ly); g.lineTo(lx+ll,ly-ll*0.3); }
+      g.stroke();
+      g.strokeStyle='rgba(140,112,48,0.97)'; g.lineWidth=s*0.14;                  // a few big ones, right at the glass
+      for(i=0;i<26;i++){ var bx=front+((i*173.3)%(Sn.W*1.2))-Sn.W*0.05+Math.sin(t*4+i)*s, by=(i*97.7)%Sn.H, bl=s*(0.8+(i%4)*0.4); if(bx<-40||bx>Sn.W+40) continue;
+        g.beginPath(); g.moveTo(bx,by); g.lineTo(bx+bl,by-bl*0.3); g.stroke(); g.fillStyle='rgba(200,200,190,0.35)'; g.beginPath(); g.ellipse(bx+bl*0.4,by-bl*0.45,bl*0.55,bl*0.18,-0.3+Math.sin(t*60+i)*0.5,0,6.284); g.fill(); } }
+    if(st.brown>0){ Sn.own.forEach(function(o){ hexAt(o[0],o[1],s*0.96); g.fillStyle='rgba(70,48,20,'+(0.35*st.brown).toFixed(3)+')'; g.fill(); }); }
+    // IX–X. darkness; then the angel of death glides over, and crosses rise where soldiers stood
+    if(pi===8){ st.dark=Math.min(0.93,st.dark+0.03); }
+    if(pi>=9){ st.dark=Math.max(0.55,st.dark-0.004); }
+    if(e>=T0+10*STEP){ st.dark=Math.max(0.4,st.dark-0.01); }
+    // the particles
+    P=P.filter(function(p){
+      if(p.k==='drip'){ p.y+=p.v*0.016; p.l-=0.004; g.strokeStyle='rgba(150,10,16,'+p.l.toFixed(3)+')'; g.lineWidth=p.w; g.lineCap='round'; g.beginPath(); g.moveTo(p.x,p.y-p.v*0.12); g.lineTo(p.x,p.y); g.stroke(); return p.y<Sn.H+40; }
+      if(p.k==='frog'){ var fu=Math.max(0,Math.min(1,(t-T0/1000-STEP/1000-p.d)/1.1)), hx=p.x+(p.tx-p.x)*fu, hy=p.y+(p.ty-p.y)*fu-Math.abs(Math.sin(fu*Math.PI*3))*s*0.9*(1-fu*0.3);
+        egFrogAt(g,hx,hy,p.s,t,p.ph,fu<1); if(pi===1&&fu>=1&&R()<0.01&&snd) snd.croak(); return pi<5; }
+      if(p.k==='fly'){ p.a+=Math.sin(t*3+p.ph)*0.25; p.x+=Math.cos(p.a)*p.v*0.016; p.y+=Math.sin(p.a)*p.v*0.016; if(p.x<0)p.x+=Sn.W; if(p.x>Sn.W)p.x-=Sn.W; if(p.y<0)p.y+=Sn.H; if(p.y>Sn.H)p.y-=Sn.H;
+        var fs=p.big?s*0.55*(1+Math.sin(t+p.ph)*0.3):s*0.12; g.fillStyle='rgba(210,225,235,0.45)'; g.beginPath(); g.ellipse(p.x-fs*0.7,p.y-fs*0.8,fs,fs*0.45,-0.6+Math.sin(t*70+p.ph)*0.6,0,6.284); g.ellipse(p.x+fs*0.7,p.y-fs*0.8,fs,fs*0.45,0.6-Math.sin(t*70+p.ph)*0.6,0,6.284); g.fill();
+        g.fillStyle='#120e0a'; g.beginPath(); g.ellipse(p.x,p.y,fs*0.8,fs*0.62,p.a,0,6.284); g.fill(); if(p.big){ g.fillStyle='#7a1a12'; g.beginPath(); g.arc(p.x+Math.cos(p.a)*fs*0.6,p.y+Math.sin(p.a)*fs*0.6,fs*0.32,0,6.284); g.fill(); }
+        return pi<5; }
+      if(p.k==='splat'){ p.l-=0.01; g.fillStyle='rgba(185,45,30,'+(0.75*p.l).toFixed(3)+')'; g.beginPath(); for(var j=0;j<9;j++){ var aa=j*0.7, rr2=p.r*(0.7+0.5*Math.sin(j*2.3+p.r)); g.lineTo(p.x+Math.cos(aa)*rr2,p.y+Math.sin(aa)*rr2); } g.closePath(); g.fill(); return p.l>0; }
+      if(p.k==='hail'){ p.u+=0.016*p.v; var hu=Math.min(1,p.u), hx2=p.x+(p.tx-p.x)*hu, hy2=p.y+(p.ty-p.y)*hu;
+        if(hu<1){ var gr=g.createLinearGradient(hx2,hy2,hx2+s*3,hy2-s*7); gr.addColorStop(0,'rgba(255,210,110,1)'); gr.addColorStop(0.35,'rgba(255,90,20,0.7)'); gr.addColorStop(1,'rgba(90,10,0,0)');
+          g.strokeStyle=gr; g.lineWidth=s*0.35; g.lineCap='round'; g.beginPath(); g.moveTo(hx2,hy2); g.lineTo(hx2+s*3,hy2-s*7); g.stroke(); g.fillStyle='#eef8ff'; g.beginPath(); g.arc(hx2,hy2,s*0.2,0,6.284); g.fill(); return true; }
+        if(!p.hit){ p.hit=1; p.u2=0; shake=Math.max(shake,0.7); flash=Math.max(flash,0.35); flashC='255,170,80'; if(snd) snd.hit(); P.push({k:'fire',x:p.tx,y:p.ty,l:1}); }
+        p.u2+=0.03; g.strokeStyle='rgba(255,190,90,'+(1-p.u2).toFixed(3)+')'; g.lineWidth=s*0.12; g.beginPath(); g.ellipse(p.tx,p.ty,s*(0.4+2*p.u2),s*(0.2+1*p.u2),0,0,6.284); g.stroke(); return p.u2<1; }
+      if(p.k==='fire'){ p.l-=0.0015; for(var f2=0;f2<4;f2++){ var fh=s*(0.5+0.35*Math.sin(t*12+f2*1.7+p.x)); g.fillStyle=['rgba(255,80,10,0.75)','rgba(255,150,30,0.75)','rgba(255,220,120,0.8)','rgba(255,120,20,0.6)'][f2];
+          g.beginPath(); g.moveTo(p.x-s*0.35+f2*s*0.12,p.y+s*0.25); g.quadraticCurveTo(p.x-s*0.3+f2*s*0.15,p.y-fh*0.6,p.x-s*0.2+f2*s*0.14+Math.sin(t*9+f2)*s*0.1,p.y-fh); g.quadraticCurveTo(p.x-s*0.05+f2*s*0.12,p.y-fh*0.4,p.x-s*0.1+f2*s*0.15,p.y+s*0.25); g.fill(); }
+        return p.l>0 && e<TEND; }
+      return false;
+    });
+    // the darkness, the angel and the crosses sit on top
+    if(st.dark>0){ g.fillStyle='rgba(4,2,8,'+st.dark.toFixed(3)+')'; g.fillRect(-Sn.W,-Sn.H,Sn.W*3,Sn.H*3); }
+    if(pi>=9 || e>=T0+10*STEP){ var au=Math.min(1,Math.max(0,(e-(T0+9*STEP))/(STEP*1.15)));
+      if(au<1){ var ax=-Sn.W*0.3+au*Sn.W*1.6, ay=Sn.H*0.38+Math.sin(au*Math.PI)*Sn.H*0.05, AR=Math.min(Sn.W,Sn.H)*0.46;
+        var mg=g.createRadialGradient(ax,ay-AR*0.3,0,ax,ay-AR*0.3,AR*1.4); mg.addColorStop(0,'rgba(170,190,255,0.32)'); mg.addColorStop(1,'rgba(170,190,255,0)'); g.fillStyle=mg; g.fillRect(ax-AR*1.5,ay-AR*1.8,AR*3,AR*3);
+        egAngelAt(g,ax,ay,AR,t); }
+      Sn.own.forEach(function(o){ if(!o[3]) return; var cu=Math.min(1,Math.max(0,(au*Sn.W*1.6-Sn.W*0.3-o[0])/(Sn.W*0.12)+0.0)); if(cu<=0) return;
+        g.globalAlpha=cu; g.strokeStyle='#eef2ff'; g.lineWidth=s*0.16; g.lineCap='square'; g.shadowColor='#bcd0ff'; g.shadowBlur=s*0.8; g.beginPath(); g.moveTo(o[0],o[1]+s*0.3-cu*s*0.3); g.lineTo(o[0],o[1]-s*0.9-cu*s*0.3); g.moveTo(o[0]-s*0.36,o[1]-s*0.5-cu*s*0.3); g.lineTo(o[0]+s*0.36,o[1]-s*0.5-cu*s*0.3); g.stroke(); g.shadowBlur=0; g.globalAlpha=1; }); }
+    // screen-space finish: the flash, the giant numeral, the dark band for the words
+    g.setTransform(1,0,0,1,0,0);
+    if(flash>0.02){ g.fillStyle='rgba('+flashC+','+(0.6*flash).toFixed(3)+')'; g.fillRect(0,0,Wc,Hc); }
+    if(pi>=0 && pi<10){ var na=pu<0.12?pu/0.12:(pu>0.8?(1-pu)/0.2:1), nsz=Math.min(Wc,Hc)*0.36*(1+0.08*pu);
+      g.save(); g.globalAlpha=0.32*na; g.textAlign='center'; g.textBaseline='middle'; g.font='800 '+Math.round(nsz)+'px Georgia, serif'; g.fillStyle=pi===0?'#ff3030':'#ffd27a'; g.shadowColor='#ff5a10'; g.shadowBlur=40*DPR; g.fillText(EG_PLAGUES[pi][0],Wc/2,Hc*0.4); g.restore(); }
+    var vg=g.createRadialGradient(Wc/2,Hc/2,Math.min(Wc,Hc)*0.3,Wc/2,Hc/2,Math.max(Wc,Hc)*0.75); vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.7)'); g.fillStyle=vg; g.fillRect(0,0,Wc,Hc);
+    var bg2=g.createLinearGradient(0,Hc*0.6,0,Hc); bg2.addColorStop(0,'rgba(8,2,2,0)'); bg2.addColorStop(1,'rgba(8,2,2,0.85)'); g.fillStyle=bg2; g.fillRect(0,Hc*0.6,Wc,Hc*0.4);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+function egFrogAt(g,x,y,s,t,ph,hop){
+  g.save(); g.translate(x,y); var dir=Math.sin(ph)>0?1:-1; g.scale(dir,1);
+  g.fillStyle='#3f7d22'; g.strokeStyle='#183a0c'; g.lineWidth=Math.max(1,s*0.12);
+  if(hop){ g.beginPath(); g.moveTo(-s*0.6,s*0.2); g.lineTo(-s*1.6,s*0.9); g.moveTo(-s*0.4,s*0.3); g.lineTo(-s*1.3,s*1.1); g.stroke(); }
+  else { g.beginPath(); g.ellipse(-s*0.55,s*0.45,s*0.45,s*0.3,0.3,0,6.284); g.fill(); g.stroke(); }
+  g.beginPath(); g.ellipse(0,0,s,s*0.62,hop?-0.4:-0.1,0,6.284); g.fill(); g.stroke();
+  var thr=hop?0:Math.max(0,Math.sin(t*9+ph*3))*s*0.25; g.fillStyle='#c9d98a'; g.beginPath(); g.ellipse(s*0.45,s*0.3,s*0.35+thr,s*0.22+thr,0,0,6.284); g.fill();
+  g.fillStyle='#4f9a2c'; g.beginPath(); g.arc(s*0.55,-s*0.45,s*0.3,0,6.284); g.fill(); g.stroke();
+  g.fillStyle='#fff6c0'; g.beginPath(); g.arc(s*0.6,-s*0.5,s*0.17,0,6.284); g.fill(); g.fillStyle='#000'; g.beginPath(); g.arc(s*0.65,-s*0.5,s*0.08,0,6.284); g.fill();
+  g.restore();
+}
+function egSheep(g,x,y,s,fall){                        // a sheep that sickens and topples onto its side
+  g.save(); g.translate(x,y); g.rotate(fall*Math.PI/2); g.globalAlpha=1;
+  var wool=fall>0.5?'#b8bba6':'#f2efe4';
+  g.fillStyle='#2a221c'; for(var i=0;i<4;i++){ g.fillRect(-s*0.55+i*s*0.32,s*0.25,s*0.1,s*0.4); }
+  g.fillStyle=wool; g.strokeStyle='#4a4038'; g.lineWidth=Math.max(1,s*0.06);
+  for(var j=0;j<5;j++){ g.beginPath(); g.arc(-s*0.45+j*s*0.22,(j%2?-s*0.1:0),s*0.3,0,6.284); g.fill(); }
+  g.fillStyle='#2a221c'; g.beginPath(); g.ellipse(s*0.68,-s*0.05,s*0.22,s*0.16,0.3,0,6.284); g.fill();
+  if(fall>0.9){ g.strokeStyle='#2a221c'; g.lineWidth=Math.max(1,s*0.05); g.beginPath(); g.moveTo(s*0.62,-s*0.12); g.lineTo(s*0.72,-s*0.02); g.moveTo(s*0.72,-s*0.12); g.lineTo(s*0.62,-s*0.02); g.stroke(); }
+  g.restore();
+}
+function egAngelAt(g,x,y,R,t){
+  var fl=Math.sin(t*2.4)*0.2;
+  g.save(); g.translate(x,y);
+  g.fillStyle='rgba(4,3,10,0.92)';
+  [-1,1].forEach(function(sd){ g.save(); g.scale(sd,1); g.rotate(-fl); g.beginPath(); g.moveTo(0,0);
+    g.bezierCurveTo(R*0.4,-R*0.8,R*1.25,-R*0.95,R*2.0,-R*0.4); g.lineTo(R*1.6,-R*0.2); g.lineTo(R*1.8,R*0.02); g.lineTo(R*1.35,-R*0.02); g.lineTo(R*1.42,R*0.22); g.lineTo(R*0.95,R*0.06); g.lineTo(R*0.9,R*0.3); g.quadraticCurveTo(R*0.4,R*0.12,0,R*0.3); g.fill(); g.restore(); });
+  g.beginPath(); g.moveTo(-R*0.24,-R*0.12); g.quadraticCurveTo(0,-R*0.75,R*0.24,-R*0.12); g.lineTo(R*0.34,R*1.3); g.quadraticCurveTo(R*0.1,R*1.12,0,R*1.35); g.quadraticCurveTo(-R*0.1,R*1.12,-R*0.34,R*1.3); g.fill();
+  g.strokeStyle='rgba(150,170,230,0.25)'; g.lineWidth=R*0.02; g.stroke();
+  g.fillStyle='#dfe9ff'; g.shadowColor='#9fc0ff'; g.shadowBlur=R*0.25; g.beginPath(); g.arc(-R*0.08,-R*0.3,R*0.035,0,6.284); g.arc(R*0.08,-R*0.3,R*0.035,0,6.284); g.fill(); g.shadowBlur=0;
+  for(var i=0;i<6;i++){ var wu=((t*0.6+i/6)%1); g.fillStyle='rgba(120,140,200,'+(0.18*(1-wu)).toFixed(3)+')'; g.beginPath(); g.arc(-R*0.3-wu*R*1.5,R*(0.6+0.1*i)+Math.sin(t*2+i)*R*0.1,R*(0.1+wu*0.2),0,6.284); g.fill(); }   // wisps trailing behind
+  g.restore();
+}
+/* for checking it from the console: the cinematic with nothing written, and the map layers drawn locally */
+window.marchlandEgyptPreview=function(){ if(!G) return 'Sign in first.'; playEgyptCinematic(function(){}); return 'playing'; };
+window.marchlandEgyptMap=function(on){
+  if(!G) return 'Sign in first.';
+  if(!on){ EG_PREVIEW=null; draw(); return 'off'; }
+  var now=Date.now(), hail={}; EG_PIDS.forEach(function(p){ if(G.players[p]) hail[p]=egyptHailPick(p,now); });
+  EG_PREVIEW={t:now,end:now+3600e3,boils:now+3600e3,pids:EG_PIDS.filter(function(p){ return !!G.players[p]; }),hail:hail,preview:true};
+  ambWake(); draw(); return 'on';
+};
 /* ── hush votes begin ──  once (fixes/hush1, claimed with a conditional write, which also records where every player's battle
    ledger stood, so votes are earned only from war fought from now on); announced by the gods; the scroll is 'nov19-hush'. */
 var hushing=false;
@@ -3310,7 +3803,7 @@ function ratesFor(pid,at){
     // a bridge built since (it has a finish time) yields nothing
     var p=k.split('_'), q0=parseInt(p[0],10), r0=parseInt(p[1],10), y=YIELD[c.f?groundAt(q0,r0):terrainAt(q0,r0)];
     if(td && turkeyHere(q0,r0,c,at,td)) continue;     // turkeys on the square: it yields nothing
-    var pm=plagueMul(pid,at)*plague2Mul(k,at)*(infected(c,at)?0.5:1);          // a plague on the land halves every harvest (and one on a single square halves that square's)
+    var pm=plagueMul(pid,at)*plague2Mul(k,at)*(infected(c,at)?0.5:1)*egyptMul(pid,at);   // (and the Ten Plagues halve Anna's and Lina's)          // a plague on the land halves every harvest (and one on a single square halves that square's)
     var tm=turkeyMul(pid,at);                          // a turkey swarm eats every grain the land brings in
     var bm=blessMul(pid,at);                           // the gods' blessing doubles the land's yield
     if(y) out[y.r]+=y.n*pm*bm*(y.r==='grain'?tm:1);
@@ -7551,6 +8044,7 @@ function draw(){
   var HV=!!harvestState()&&S>=HV_DECOR_S, hvFarms=[], hvOpen=[];   // HARVEST LAYER
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
+  var egv=egyptView(); egQ.length=0; egWaterQ.length=0;
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
@@ -7592,6 +8086,7 @@ function draw(){
     if(c.o && (plagueMul(c.o)<1 || plague2Mul(key(q,r))<1)) drawPlague(p[0],p[1],S,q,r,Date.now()/1000);
     if(burning(G.cells[key(q,r)])){ var bc=G.cells[key(q,r)]; drawBlaze(p[0],p[1],S,q,r,Date.now()/1000,!!(bc.bx||bc.cm)); if(bc.cm) cometQ.push([p[0],p[1],q,r]); }
     if(G.titan && titanActive() && c.o===G.titan.pid && ((c.b||0)+(c.g||0))>0) titanQ.push([p[0],p[1],q,r]);
+    if(egv && !vl){ if(c.o && egv.pids.indexOf(c.o)>=0) egQ.push([p[0],p[1],q,r,G.cells[key(q,r)]||c,wet]); else if(wet && egyptNearWater(q,r,egv)) egWaterQ.push([p[0],p[1],q,r]); }   // the Ten Plagues
     if(tdn && c.o){ var tcl=G.cells[key(q,r)]; if(tcl){ if(turkeyHere(q,r,tcl,tnow,tdn)) tinvQ.push([p[0],p[1],q,r,isFarmCell(tcl,q,r),Math.max(tinvArrive(q,r),tcl.tk||0)]); if(tcl.tk>tnow && tnow-(tcl.tk-TCLEAR_MS)<3600) tburstQ.push([p[0],p[1],q,r,tcl.tk-TCLEAR_MS]); } }
     if(c.o && tswarmOn() && c.o===G.tswarm.pid) turkeyQ.push([p[0],p[1],q,r,isFarmCell(G.cells[key(q,r)],q,r)]);
     if(c.rd && c.o) roads.push([c,{x:p[0],y:p[1],q:q,r:r}]);
@@ -7615,6 +8110,7 @@ function draw(){
   }
   if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
   if(HV){ harvestGround(ctx,hvFarms,hvOpen,now); harvestLeaves(ctx,now); }   // HARVEST LAYER: under the roads and everything else
+  drawEgyptGround(Date.now()/1000);                  // the Ten Plagues: blood and darkness on Anna's and Lina's ground
   drawRoads(roads,detail);                            // the roads: above the ground, below everything built
   if(roadHint && now<roadHint.until){                 // where a road would let you reach a square you tried for
     ctx.save(); ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,S*0.08); ctx.setLineDash([Math.max(3,S*0.16),Math.max(3,S*0.12)]); ctx.lineDashOffset=-now*8;
@@ -7670,6 +8166,7 @@ function draw(){
   cometQ.forEach(function(e){ drawComet(e[0],e[1],S,e[2],e[3],Date.now()/1000); }); cometQ.length=0;
   titanQ.forEach(function(e){ drawTitan(e[0],e[1],S,e[2],e[3],Date.now()/1000); });
   drawTitanBoss(titanQ,S,Date.now()/1000); titanQ.length=0;
+  drawEgyptAir(Date.now()/1000);                     // frogs, gnats, flies, hail, boils, the locust cloud and the angel's shadow
   turkeyQ.forEach(function(e){ drawTurkeys(e[0],e[1],S,e[2],e[3],Date.now()/1000,e[4]); }); turkeyQ.length=0; drawInvasion(S,tnow);   // the turkey swarm struts over everything   // the titan's foot comes down on top   // comets fall over everything else
   drawCrusades(bands,builds,trebs);                 // the crusades' crosses and banners sit above everything on the ground
   drawCaravans(now,amb);
@@ -8117,7 +8614,7 @@ function ambWanted(){ return !!(G && me() && !REDUCE && ambSeen && !document.hid
 function ambLoop(ts){
   ambRaf=0;
   if(!ambWanted()) return;
-  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S) || anyMolten() || (tinvOn()&&S>=9))){ ambLast=ts; draw(); }   // lava keeps moving at any zoom   // the move and pointer loops draw every frame anyway
+  if(ts-ambLast>=1000/AMB_FPS && !animRaf && !coach.raf && (S>=AMB_MIN_S || (harvestState()&&S>=HV_DECOR_S) || anyMolten() || (tinvOn()&&S>=9) || (egyptView()&&S>=6))){ ambLast=ts; draw(); }   // lava keeps moving at any zoom   // the move and pointer loops draw every frame anyway
   ambRaf=requestAnimationFrame(ambLoop);
 }
 function ambKick(){ if(!ambRaf && ambWanted()) ambRaf=requestAnimationFrame(ambLoop); }
@@ -8671,6 +9168,8 @@ function render(){
     settlePinReset2();
     settleGift2();
     settleTitan();
+    settleEgypt();
+    settleEgyptLocusts();
     settleHush();
     settleTurkeySwarm();
     settleTurkeyInvasion();
@@ -10985,6 +11484,7 @@ function notesNow(){
   if(th2) out.unshift(th2);
   if(tn) out.unshift(tn);
   if(mn) out.unshift(mn);
+  var eg=G&&me()?egyptNote():null; if(eg) out.unshift(eg);
   if(x) out.unshift({id:'crusade-'+x.id, eyebrow:'A crusade', title:'A crusade is proclaimed against you',
     html:'<p><b>'+esc(nameOf(x.c.by))+'</b> has proclaimed a crusade against you. For the next '+hoursLeft(x.c.end)+' others may join it and strike your squares together. Guard your borders, and look for its banners on the map.</p>'});
   return out;
@@ -11001,7 +11501,7 @@ function markNoteSeen(id,quiet){
   if(!quiet) pushMe();
 }
 function markNoticeSeen(){ NOTES.forEach(function(n){ if(!n.forNew) markNoteSeen(n.id,true); }); pushMe(); }
-var noteOpen=null;
+var noteOpen=null, noteCine={};
 function closeNotice(){
   var n=document.getElementById('rulesnote'); if(n) n.classList.add('hide');
   document.removeEventListener('keydown',noticeKey,true);
@@ -11016,12 +11516,14 @@ function showNotice(){
   var n=document.getElementById('rulesnote'); if(!n||!G||!me()) return false;
   if(['sagenote','cvnote','godsnote','plaguenote','judgenote','cometnote','turkeynote','undonote','rivernote','shadownote','novnote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); })) return false;
   var due=notesNow().filter(function(x){ return (!x.when||x.when()) && !noteSeen(x.id); })[0]; if(!due) return false;
+  if(due.cine && !noteCine[due.id]){ noteCine[due.id]=1; due.cine(function(){ setTimeout(showNext,250); }); return true; }   // a note with a cinematic plays it first
   noteOpen=due.id;
   document.getElementById('rulesnote-body').innerHTML='<p class="sc-eyebrow">'+due.eyebrow+'</p><h2 id="rulesnote-h">'+due.title+'</h2>'+due.html
-    +'<div class="sc-btns"><button type="button" class="sc-btn primary" id="rulesnote-go">'+(due.go||'Got it')+'</button></div>';
+    +'<div class="sc-btns">'+(due.watch?'<button type="button" class="sc-btn" id="rulesnote-watch">'+due.watch.label+'</button>':'')+'<button type="button" class="sc-btn primary" id="rulesnote-go">'+(due.go||'Got it')+'</button></div>';
   n.classList.remove('hide'); n.scrollTop=0; unfurl(n.querySelector('.scroll'));
   document.addEventListener('keydown',noticeKey,true);
   var b=document.getElementById('rulesnote-go'); b.onclick=closeNotice; try{ b.focus(); }catch(e){}
+  var wb=document.getElementById('rulesnote-watch'); if(wb) wb.onclick=function(){ try{ window.open(due.watch.url,'_blank','noopener'); }catch(e){} closeNotice(); };
   return true;
 }
 /* The Marchland Saga cartoon: announced once per player, after the rules notice (if they still owe one). */
