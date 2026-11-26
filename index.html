@@ -4171,12 +4171,15 @@ function burySquare(q,r){
 function burnSquare(q,r){
   var c=cellOf(q,r), now=Date.now();
   if(!(c.o===ME&&infected(c,now))) return nope('Only an infected square of yours can be burned.');
-  scrollDialog({eyebrow:'Plague', title:'Burn this square?', html:'<p>The land burns for 2 days and gives nothing. The sickness dies with it, so there is no longer any risk of losing the land to it, and the plague can&rsquo;t take it while it burns. It can be caught again later.</p>',
+  scrollDialog({eyebrow:'Plague', title:'Burn this square?', html:'<p><b>The square is gone.</b> It burns to the ground and is <b>no longer yours</b>: whatever stands on it burns with it, and any soldiers on it die. The sickness dies too, so it can&rsquo;t spread from here, and nothing can be caught on the ashes for 2 days.</p><p>Fire is the sure cure, but it costs you the land.</p>',
     cancel:false, buttons:[{label:'Hold back',value:false},{label:'Burn it',value:true,primary:true}]}).then(function(res){
     if(!res.value) return;
-    var c2=cellOf(q,r); if(!(c2.o===ME&&infected(c2))) return;
-    delete c2.pz; c2.pr=Date.now()+PEST_BURN_MS; c2.bn=Date.now()+PEST_BURN_MS; writeCell(q,r,c2); render(); pushCell(q,r);
-    say('The square is burning. The sickness is gone from it.');
+    var c2=cellOf(q,r), k=key(q,r), t=Date.now(); if(!(c2.o===ME&&infected(c2))) return;
+    var c3={o:null,gv:arr(c2.gv).slice(),bn:t+PEST_BURN_MS,pr:t+PEST_BURN_MS};
+    if(c2.b>0) addGraves(c3,c2.b);
+    for(var id in (G.priests||{})){ var pp=G.priests[id]; if(pp&&pp.h===k) killPriest(id,'his church burned'); }
+    writeCell(q,r,c3); cellsGen++; render(); pushCell(q,r);
+    say('The square burns to the ground. It is no longer yours, and the sickness dies with it.');
   });
 }
 /* the Siege of Caffa: a trebuchet hurls a plague corpse; the target square and its neighbours fall sick */
@@ -4238,7 +4241,7 @@ function faithActions(q,r,c,A,wet){
   }
   if(infected(c,now)){
     A('Plague on this square','sick for '+hoursLeft(c.pz),function(){},'It will pass by itself');
-    if(own) A('Burn this square','free &middot; 2 days of fire, ends the sickness',function(){ burnSquare(q,r); });
+    if(own) A('Burn this square','you lose the square &middot; ends the sickness here',function(){ burnSquare(q,r); });
   } else if(recovering(c,now)) A('Recovering from plague','safe for '+hoursLeft(c.pr),function(){},'It can&rsquo;t be caught now');
   if(own&&c.tb>0&&pestEver()){ var cw=caffaWhy(c); A('The Siege of Caffa','1 stone &middot; 1 corpse &middot; range '+CAFFA_RANGE,function(){ caffaShot(q,r); },cw); }
 }
@@ -4556,7 +4559,7 @@ var FAITH_STEPS=[
   {title:'Walls, roads and fire', plague:true, pic:function(){
      return crSvg(crHex(60,60,26,'#dfe8d0')+'<path d="M82 40 L82 80" stroke="#8a7a5a" stroke-width="8"/>'+fcSick(104,60,22)+crTxt(60,104,'wall: slower',10)+crHex(190,60,26,'#dfe8d0')+'<path d="M170 60 H178 M202 60 H210" stroke="#a39271" stroke-width="5"/><path d="M190 76 C176 62 188 56 188 44 C196 52 206 60 200 72 C198 78 192 80 190 76 Z" fill="#e0701f" stroke="#8a3a0a"/>'+crTxt(190,104,'fire: ends it',10)+crTxt(250,60,'',10)); },
    html:'<p><b>Walls</b> make the sickness cross onto a square at <b>50%, 35% or 25%</b> of the chance by wall level, but never stop it. <b>Cut a road</b> and its extra chance (35% instead of 20%) is gone.</p>'
-     +'<p><b>Burn</b> your own sick square: it burns for 2 days, the sickness is gone (so the land can&rsquo;t be lost to it), and it can&rsquo;t be caught while it burns.</p>'},
+     +'<p><b>Burn</b> your own sick square: the sickness dies, but <b>the square is gone</b>. It burns to the ground and is no longer yours, with anything and anyone on it, and nothing can be caught on the ashes for 2 days.</p>'},
   {title:'The Siege of Caffa', plague:true, pic:function(){
      return crSvg(trebDraw(50,88,1)+'<path d="M84 50 Q150 -10 214 56" stroke="#3a2f18" stroke-width="2" stroke-dasharray="5 4" fill="none"/>'+fcSick(236,76,22)); },
    html:'<p>A trebuchet can hurl a plague corpse over an enemy&rsquo;s walls. Tap the square and choose <b>The Siege of Caffa</b>: 1 stone and <b>1 corpse</b>, range '+CAFFA_RANGE+'. The square and its neighbours fall sick.</p>'
