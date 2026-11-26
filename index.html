@@ -803,8 +803,8 @@ body.qafter #game{animation:qshake .2s linear 8}
 <div id="sagenote" class="rulesnote hide" role="dialog" aria-modal="true" aria-labelledby="sagenote-h">
   <div class="rulesnote-card">
     <p class="rulesnote-eyebrow">New chapter &middot; sound on</p>
-    <h2 id="sagenote-h">Strangers at the Tavern&hellip;</h2>
-    <p>A new chapter of the <b>Marchland Saga</b>: <i>The Sickness Arrives</i>. A caravan has come in from the east, and something rides with it.</p>
+    <h2 id="sagenote-h">The plague comes tomorrow&hellip;</h2>
+    <p>A new chapter of the <b>Marchland Saga</b>: <i>The Plague Comes Tomorrow</i>. The gods have named the criminals who brought it upon you, and they tell you how to stand against it. Watch it before it begins.</p>
     <p><i>Any resemblance to actual players is purely coincidental.</i></p>
     <button type="button" class="rulesnote-go" id="sagenote-watch">Watch the cartoon</button>
     <button type="button" class="rulesnote-go rulesnote-alt" id="sagenote-go">Not now</button>
@@ -8540,7 +8540,9 @@ document.getElementById('sagabtn').addEventListener('click',function(){      // 
   var L='display:block;text-align:center;text-decoration:none;margin:8px 0';
   scrollDialog({eyebrow:'Sound on', title:'The Marchland Saga', cancel:null,
     html:'<p>Watch the chronicles of the realm again.</p>'
-      +'<a class="sc-btn primary" style="'+L+'" href="saga/sickness/" target="_blank" rel="noopener">&#9654; The Sickness Arrives <span style="opacity:.7">(new)</span></a>'
+      +'<a class="sc-btn primary" style="'+L+'" href="saga/tomorrow/" target="_blank" rel="noopener">&#9654; The Plague Comes Tomorrow <span style="opacity:.7">(new)</span></a>'
+      +'<a class="sc-btn" style="'+L+'" href="saga/plagues/" target="_blank" rel="noopener">&#9654; The Ten Plagues</a>'
+      +'<a class="sc-btn" style="'+L+'" href="saga/sickness/" target="_blank" rel="noopener">&#9654; The Sickness Arrives</a>'
       +'<a class="sc-btn" style="'+L+'" href="saga/" target="_blank" rel="noopener">&#9654; The first Saga</a>',
     buttons:[{label:'Close',value:null,primary:false}]});
 });
@@ -11542,7 +11544,7 @@ function showNotice(){
   return true;
 }
 /* The Marchland Saga cartoon: announced once per player, after the rules notice (if they still owe one). */
-var SAGA_ID='saga3';
+var SAGA_ID='saga4';
 function sagaSeen(){
   var pl=me();
   if(pl && pl.notes && pl.notes[SAGA_ID]) return true;
@@ -11569,7 +11571,7 @@ function showSaga(){
   document.addEventListener('keydown',sagaKey,true);
   document.getElementById('sagenote-go').onclick=closeSaga;
   var w=document.getElementById('sagenote-watch');
-  w.onclick=function(){ try{ window.open('saga/sickness/','_blank','noopener'); }catch(e){} closeSaga(); };
+  w.onclick=function(){ try{ window.open('saga/tomorrow/','_blank','noopener'); }catch(e){} closeSaga(); };
   try{ w.focus(); }catch(e){}
   return true;
 }
