@@ -4065,7 +4065,7 @@ function stewardFaith(){
     list:[
       {label:'Open the churches',cost:'announces them to everyone',why:open?'Already open':'',value:'open'},
       {label:'Send the pilgrim teaser',cost:'sick pilgrims at the border',why:!open?'Open the churches first':(f.tease?'Already sent':''),value:'tease'},
-      {label:'Begin the plague',cost:'starts it at one square of someone’s land',why:!open?'Open the churches first':(begun&&!ended?'Already raging':''),value:'begin'},
+      {label:'Begin the plague',cost:'breaks out on 10 random squares of people’s land',why:!open?'Open the churches first':(begun&&!ended?'Already raging':''),value:'begin'},
       {label:'End the plague',cost:'every square is well again at once',why:!(begun&&!ended)?'It is not raging':'',value:'end'}
     ], cancel:null, buttons:[{label:'Close',value:null}]}).then(function(res){
     if(!res.value) return;
@@ -4073,10 +4073,12 @@ function stewardFaith(){
     if(res.value==='open'){ G.faith=G.faith||{}; G.faith.open=now; patch['faith']=G.faith; faithGodsLine('The Church has come to Marchland. Raise a church, train priests, and keep your soldiers blessed. Read the guide on any square of yours.','fopen'); }
     else if(res.value==='tease'){ G.faith=G.faith||{}; G.faith.tease=now; patch['faith']=G.faith; faithGodsLine('Sick pilgrims have been seen at the border. The gods must be punishing the world for Anna and Lina’s evil ways. Keep your priests close.','ftease'); }
     else if(res.value==='begin'){
-      var org=pestOrigin(); if(!org) return nope('There is no ground to start it on.');
-      var c0=cellOf(org[0],org[1]); infectCell(c0,now); writeCell(org[0],org[1],c0); patch['cells/'+key(org[0],org[1])]=G.cells[key(org[0],org[1])];
-      G.pest={start:now,end:null,tick:Math.floor(now/TICK_MS),o:org,cp:{},br:{}}; patch['pest']=G.pest;
-      faithGodsLine('The plague has come to Marchland, and it began on the land of '+esc(nameOf(c0.o))+'. Anna and Lina’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
+      var orgs=pestOrigins(PEST_SEEDS); if(!orgs.length) return nope('There is no ground to start it on.');
+      var hitBy={};
+      orgs.forEach(function(org){ var c0=cellOf(org[0],org[1]); infectCell(c0,now); writeCell(org[0],org[1],c0); patch['cells/'+key(org[0],org[1])]=G.cells[key(org[0],org[1])]; hitBy[c0.o]=1; });
+      G.pest={start:now,end:null,tick:Math.floor(now/TICK_MS),o:orgs[0],os:orgs,cp:{},br:{}}; patch['pest']=G.pest;
+      var hitNames=Object.keys(hitBy).map(function(p){ return esc(nameOf(p)); });
+      faithGodsLine('The plague has come to Marchland. It broke out on '+orgs.length+' squares at once, on the land of '+(hitNames.length>1?hitNames.slice(0,-1).join(', ')+' and '+hitNames[hitNames.length-1]:hitNames[0])+'. Anna and Lina’s evil ways have brought the gods’ wrath on every one of you. Priests can tend the sick; walls and cut roads slow it; fire stops it on a square.','pbegin');
     }
     else if(res.value==='end'){
       G.pest.end=now; patch['pest']=G.pest;
@@ -4087,6 +4089,12 @@ function stewardFaith(){
     if(online) dbPatch('/marchland/'+gameCode,patch).then(ok,fail); else pushAll();
     render(); say('Done.');
   });
+}
+var PEST_SEEDS=10;                                   // the plague breaks out on this many squares at once, chosen at random
+function pestOrigins(n){
+  var ks=Object.keys(G.cells).filter(function(k){ var c=G.cells[k]; return c.o&&!c.k&&!building(c)&&!c.ch; }).sort(), out=[], rng=mulberry32(newSeed());
+  while(out.length<n&&ks.length){ var i=Math.floor(rng()*ks.length); out.push(pkey(ks[i])); ks.splice(i,1); }
+  return out;
 }
 function pestOrigin(){
   var ks=Object.keys(G.cells).filter(function(k){ var c=G.cells[k]; return c.o&&!c.k&&!building(c)&&!c.ch; }).sort();
@@ -4280,7 +4288,8 @@ function settleFaith(){
 /* ── the plague, one tick at a time (every screen computes the same tick; one of them wins the right to apply it) ── */
 var pestBusy=false;
 function pestTick(n){
-  var T=n*TICK_MS, rng=mulberry32((n*2654435761)>>>0), P=G.pest, keys=Object.keys(G.cells).sort(), wis={}, patch={}, org=P.o||[0,0], i, kill=[];
+  var T=n*TICK_MS, rng=mulberry32((n*2654435761)>>>0), P=G.pest, keys=Object.keys(G.cells).sort(), wis={}, patch={}, org=P.o||[0,0], orgs=arr(P.os).length?arr(P.os):[org], i, kill=[];
+  function orgDist(q,r){ var m=Infinity; orgs.forEach(function(o){ var d=hexDist(o[0],o[1],q,r); if(d<m) m=d; }); return m; }   // distance to the nearest outbreak
   var ids=Object.keys(G.priests||{}).sort();
   function mark(k,c){ var a=pkey(k); writeCell(a[0],a[1],c); patch['cells/'+k]=G.cells[k]||null; }
   ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), w=p.w||0, a=pos; [[0,0]].concat(AX).forEach(function(d){ var kk=key(a[0]+d[0],a[1]+d[1]); if(w>(wis[kk]||0)) wis[kk]=w; }); });
@@ -4300,7 +4309,7 @@ function pestTick(n){
     var c=G.cells[k], a=pkey(k);
     for(i=0;i<6;i++){
       var nk=key(a[0]+AX[i][0],a[1]+AX[i][1]), nc=G.cells[nk]; if(!nc||!nc.o||building(nc)||infected(nc,T)||recovering(nc,T)||burning(nc,T)||fresh[nk]) continue;
-      var pr=((c.rd&&nc.rd)?PEST_ROAD:PEST_SPREAD)*PEST_WALL[Math.min(3,nc.w||0)]*Math.max(PEST_FLOOR,Math.pow(PEST_DECAY,hexDist(org[0],org[1],pkey(nk)[0],pkey(nk)[1])))*(1-(wis[nk]||0)/PEST_WISE);
+      var pr=((c.rd&&nc.rd)?PEST_ROAD:PEST_SPREAD)*PEST_WALL[Math.min(3,nc.w||0)]*Math.max(PEST_FLOOR,Math.pow(PEST_DECAY,orgDist(pkey(nk)[0],pkey(nk)[1])))*(1-(wis[nk]||0)/PEST_WISE);
       if(rng()<pr) fresh[nk]=1;
     }
   });
