@@ -676,6 +676,8 @@ body.qafter #game{animation:qshake .2s linear 8}
           <button id="namesbtn" aria-label="List of players" title="List of players: tap one to go to their castle">&#9776;</button>
           <button id="dipbtn" aria-label="Diplomacy board: allies, neutrals and enemies" title="Diplomacy board: mark players as allies, neutral or enemies">&#9876;</button>
           <button id="ledgerbtn" aria-label="War ledger: who took the most land, spoils and soldiers from whom" title="War ledger: who has taken the most land, stolen the most goods and killed the most soldiers, from whom">&#9760;</button>
+          <button id="supplybtn" aria-pressed="false" aria-label="Supply view: how every castle is fed, and its weak links" title="Supply view: how every castle is fed, and the squares that would cut it off">&#127806;</button>
+          <button id="chronbtn" aria-label="Chronicle: what happened to your realm in the last day" title="Chronicle: what happened to your realm in the last day">&#128220;</button>
           <button id="sagabtn" aria-label="Watch the Marchland Saga cartoons" title="Watch the Marchland Saga cartoons">&#127916;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
@@ -4660,6 +4662,7 @@ var lastFresh=0;
 var dlRev=0, dlAt=0;
 function boardFresh(){
   if(!online) return true;
+  if(verHold()) return false;                          // the site has a newer version than this page: settle nothing, it is about to reload
   if(typeof document!=='undefined' && document.hidden) return false;
   return Date.now()-lastFresh<45000;
 }
@@ -6412,6 +6415,7 @@ function cellTitle(c){
   else if(isChurch(c)) what='church'+(c.ch.f>Date.now()?' (being raised, ready in '+hoursLeft(c.ch.f)+')':'')+' &middot; on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]);
   else what=c.o?'ground ('+TERRAIN_NAME[c.t]+')':'Unclaimed '+TERRAIN_NAME[c.t];
   var t=who+what, sub=[];
+  if(c.o && c.q!=null && !wet){ var sn=''; try{ sn=supplyNote(c); }catch(e){} if(sn) sub.push(sn); }
   if((c.k===CASTLE||c.k===TOWER)&&!wet&&c.t!=null) sub.push('built on '+(c.t===PLAIN?'plain ground':TERRAIN_NAME[c.t]));
   if(c.o&&c.b>0){ sub.push('band of '+c.b); if(c.o===ME && !building(c) && !fedGround(ME)[key(c.q,c.r)]){ var sv0=c.sv||0; sub.push(sv0>STRAND_GRACE_TICKS?'<span class="bad">cut off &mdash; starving, losing a man every tick</span>':'<span class="bad">cut off from every castle and farm &mdash; starves in '+fmtDur((STRAND_GRACE_TICKS-sv0+1)*TICK_MS)+'</span>'); } }
   if(c.o&&infected(c)) sub.push('<span class="bad">sick for '+hoursLeft(c.pz)+' more &mdash; if it isn&rsquo;t cured or burned by then, '+Math.round(PEST_LOSS*100)+'% the land is lost</span>');
@@ -8108,6 +8112,248 @@ function drawRiverNames(){
   ctx.restore();
 }
 
+/* ═══ only fresh pages may play ═══════════════════════════════════════════
+   GitHub Pages stamps every file with the time of the deploy (Last-Modified), and the browser keeps the stamp this
+   page came with (document.lastModified). Every couple of minutes, and every time the page comes back from the
+   background, the two are compared; when the site is newer this page stops settling the board (see boardFresh)
+   and reloads itself as soon as nothing is waiting to be saved. So no screen running old rules writes to the board. */
+var VER={doc:0,stale:false,at:0,busy:false,srv:0,wait:false,waitAt:0,hidAt:0};
+function verHold(){ return VER.stale || (VER.wait && Date.now()-VER.waitAt<10000); }
+function verBanner(stuck){
+  var b=document.getElementById('verbanner');
+  if(!b){ b=document.createElement('div'); b.id='verbanner'; b.setAttribute('role','status');
+    b.style.cssText='position:fixed;left:50%;top:10px;transform:translateX(-50%);z-index:99999;background:#2a1c10;color:#f3e6bf;border:1px solid #c9a14e;border-radius:8px;padding:10px 16px;font:600 14px Georgia,serif;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:92vw;text-align:center';
+    document.body.appendChild(b); }
+  b.innerHTML=stuck?'Marchland has been updated. <a href="#" id="verbanner-go" style="color:#ffd27a">Tap here to load the new version</a>.':'Marchland has been updated &mdash; loading the new version&hellip;';
+  var g=document.getElementById('verbanner-go'); if(g) g.onclick=function(e){ e.preventDefault(); verGo(); };
+}
+function verGo(){
+  try{ sessionStorage.setItem('marchland.ver.reload',JSON.stringify({srv:VER.srv,t:Date.now()})); }catch(e){}
+  var u; try{ u=new URL(location.href); u.searchParams.set('ver',String(VER.srv||Date.now())); u=u.toString(); }catch(e){ u=location.href; }
+  location.replace(u);
+}
+function verReload(){
+  var last=null; try{ last=JSON.parse(sessionStorage.getItem('marchland.ver.reload')||'null'); }catch(e){}
+  if(last && last.srv===VER.srv && Date.now()-last.t<5*60000){ VER.stale=false; verBanner(true); return; }   // just reloaded for this very version and still old: never loop
+  verBanner(false);
+  var tries=0, t=setInterval(function(){
+    tries++;
+    var a=document.activeElement, typing=!!(a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.value);
+    if((!dirty && !typing) || tries>=20){ clearInterval(t); verGo(); }
+  },1000);
+}
+function verCheck(force){
+  if(typeof fetch!=='function' || location.protocol!=='https:' || VER.busy || VER.stale) return;
+  if(!VER.doc){ var d=Date.parse(document.lastModified); VER.doc=isNaN(d)?0:d; }
+  if(!VER.doc){ VER.wait=false; return; }
+  if(!force && Date.now()-VER.at<120000) return;
+  VER.busy=true;
+  fetch(location.pathname+'?vc='+Date.now(),{method:'HEAD',cache:'no-store'}).then(function(r){
+    VER.busy=false; VER.at=Date.now(); VER.wait=false;
+    var lm=Date.parse(r.headers.get('last-modified')||''); if(!r.ok||isNaN(lm)) return;
+    if(lm-VER.doc>5000){ VER.stale=true; VER.srv=lm; verReload(); }
+  }).catch(function(){ VER.busy=false; VER.wait=false; });
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden){ VER.hidAt=Date.now(); return; }
+  if(VER.hidAt && Date.now()-VER.hidAt>60000){ VER.wait=true; VER.waitAt=Date.now(); }   // back from a long sleep: settle nothing until the version is known
+  verCheck(true);
+});
+setInterval(function(){ if(!document.hidden) verCheck(false); },60000);
+setTimeout(function(){ verCheck(true); },4000);
+
+/* ═══ the supply view ═════════════════════════════════════════════════════
+   For any standing castle: the ground that feeds it (its owner's unbroken ground, as castleFed walks it), the farms on
+   that ground, the shortest way to the nearest one, and the weak links: squares on that way without which no farm
+   can be reached at all. (Any square whose loss cuts a castle off lies on every way to a farm, so on this one too.) */
+var supplyOn=false, supMemo={};
+function supWalk(q,r,pid,block,want){                  // breadth-first over pid's ground from the castle; block: a key treated as lost
+  q=wrapQ(q); r=wrapR(r);
+  var k0=key(q,r), par={}, queue=[[q,r]], farms=[], head=0; par[k0]=null;
+  while(head<queue.length){
+    var cur=queue[head++];
+    for(var i=0;i<6;i++){
+      var nq=wrapQ(cur[0]+AX[i][0]), nr=wrapR(cur[1]+AX[i][1]), nk=key(nq,nr);
+      if(nk in par || nk===block) continue;
+      var n=G.cells[nk]; if(!n || n.o!==pid || building(n)) continue;
+      par[nk]=key(cur[0],cur[1]);
+      if(isFarmCell(n,nq,nr)){ farms.push(nk); if(!want) return {farms:farms,par:par}; }
+      queue.push([nq,nr]);
+    }
+  }
+  return {farms:farms,par:par,size:queue.length};
+}
+function supplyInfo(q,r,pid){
+  var k=key(q,r), m=supMemo[k], now=Date.now();
+  if(m && m.o===pid && m.gen===cellsGen && now-m.t<20000) return m;
+  var w=supWalk(q,r,pid,null,true), out={o:pid,gen:cellsGen,t:now,farms:w.farms,path:[],choke:{},nch:0,size:w.size||0};
+  if(w.farms.length){
+    for(var c=w.farms[0];c&&c!==k;c=w.par[c]) out.path.unshift(c);
+    out.path.forEach(function(v){ if(!supWalk(q,r,pid,v,false).farms.length){ out.choke[v]=1; out.nch++; } });
+  }
+  supMemo[k]=out; return out;
+}
+function supplyNote(c){                                 // one line for the tap menu: what this square means for somebody's grain
+  if(!c||!c.o||!G) return '';
+  var q=wrapQ(c.q), r=wrapR(c.r), k=key(q,r), mine=c.o===ME, whose=mine?'your':esc(nameOf(c.o).split(' (')[0])+'&rsquo;s';
+  if(c.k===CASTLE && !isRuin(c)){
+    var s=supplyInfo(q,r,c.o);
+    if(!s.farms.length) return '<span class="bad">no farm reaches it: it is starving</span>';
+    return 'fed by '+s.farms.length+' farm'+(s.farms.length>1?'s':'')+(s.nch?' &middot; <span class="bad">'+s.nch+' weak link'+(s.nch>1?'s':'')+'</span> on the way (see the supply view)':' &middot; no single square cuts it off');
+  }
+  var n=0; for(var ck in G.cells){ var cc=G.cells[ck]; if(!cc||cc.o!==c.o||cc.k!==CASTLE||isRuin(cc)) continue; var a=pkey(ck); if(supplyInfo(a[0],a[1],c.o).choke[k]) n++; }
+  return n?'<span class="bad">&#9986; weak link: without this square, '+n+' of '+whose+' castles '+(n>1?'are':'is')+' cut off from grain</span>':'';
+}
+function drawSupply(builds,now){
+  if(!supplyOn||!G) return;
+  var t=REDUCE?0:now, gold='#ffd66b', red='#ff5a48';
+  ctx.save();
+  ctx.fillStyle='rgba(6,10,9,0.5)'; ctx.fillRect(0,0,W,H);
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  var chokeSeen={}, farmSeen={};
+  builds.forEach(function(e){
+    var c=e[0]; if(c.k!==CASTLE||c.site||isRuin(c)||!c.o||c.q==null) return;
+    var s=supplyInfo(c.q,c.r,c.o), x=e[1][0], y=e[1][1], pts=[[x,y]];
+    s.path.forEach(function(k){ var a=pkey(k), P=toNear(a[0],a[1]); pts.push(P); });
+    if(pts.length>1){                                  // the road the grain takes: a glowing line that flows toward the keep
+      var ok=true; for(var i=1;i<pts.length;i++) if(Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1])>S*3) ok=false;   // (not across the world's seam)
+      if(ok){
+        ctx.beginPath(); pts.forEach(function(P,i){ i?ctx.lineTo(P[0],P[1]):ctx.moveTo(P[0],P[1]); });
+        ctx.strokeStyle='rgba(255,214,107,0.22)'; ctx.lineWidth=Math.max(4,S*0.42); ctx.setLineDash([]); ctx.stroke();
+        ctx.strokeStyle=gold; ctx.lineWidth=Math.max(1.6,S*0.11); ctx.setLineDash([Math.max(4,S*0.3),Math.max(4,S*0.26)]); ctx.lineDashOffset=t*S*0.9; ctx.stroke(); ctx.setLineDash([]);
+      }
+    }
+    s.farms.forEach(function(k,i){                      // every farm that can feed it
+      if(farmSeen[k]) return; farmSeen[k]=1; var a=pkey(k), P=toNear(a[0],a[1]); if(P[0]<-S||P[0]>W+S||P[1]<-S||P[1]>H+S) return;
+      ctx.globalAlpha=i?0.55:1; hexPath(P[0],P[1],S*0.8); ctx.strokeStyle=gold; ctx.lineWidth=Math.max(1.2,S*0.07); ctx.stroke();
+      ctx.fillStyle='rgba(255,214,107,'+(i?0.14:0.3)+')'; ctx.fill(); ctx.globalAlpha=1;
+    });
+    for(var ck in s.choke){ if(chokeSeen[ck]) continue; chokeSeen[ck]=1;      // the weak links: lose one and the castle starves
+      var a=pkey(ck), P=toNear(a[0],a[1]), pu=0.55+0.45*Math.sin(t*4+P[0]*0.01);
+      hexPath(P[0],P[1],S*0.9); ctx.fillStyle='rgba(255,70,50,'+(0.22+0.2*pu)+')'; ctx.fill();
+      ctx.strokeStyle=red; ctx.lineWidth=Math.max(1.8,S*0.12); ctx.shadowColor=red; ctx.shadowBlur=S*0.5*pu; ctx.stroke(); ctx.shadowBlur=0;
+      if(S>=11){ ctx.font='700 '+Math.round(S*0.62)+'px Georgia,serif'; ctx.lineWidth=3; ctx.strokeStyle='rgba(20,6,4,.9)'; ctx.strokeText('✂',P[0],P[1]); ctx.fillStyle='#fff3ea'; ctx.fillText('✂',P[0],P[1]); }
+    }
+    var cut=!s.farms.length, col=cut?red:(s.nch?'#ffb347':'#7fe08a'), pr=cut?(0.5+0.5*Math.sin(t*6)):1;    // the keep's own ring: green safe, amber weak, red starving
+    ctx.beginPath(); ctx.arc(x,y,S*0.98,0,6.284); ctx.strokeStyle=col; ctx.lineWidth=Math.max(2,S*0.13); ctx.globalAlpha=0.55+0.45*pr; ctx.shadowColor=col; ctx.shadowBlur=S*0.6; ctx.stroke(); ctx.shadowBlur=0; ctx.globalAlpha=1;
+    if(S>=10){
+      var lab=cut?'cut off':(s.farms.length+(s.farms.length>1?' farms':' farm')+(s.nch?' · '+s.nch+' weak':'')), fs=Math.max(9,Math.min(13,S*0.42));
+      ctx.font='700 '+fs+'px Georgia,serif'; var tw=ctx.measureText(lab).width+10, ty=y+S*1.32;
+      ctx.fillStyle='rgba(10,14,12,.82)'; ctx.fillRect(x-tw/2,ty-fs*0.75,tw,fs*1.5); ctx.strokeStyle=col; ctx.lineWidth=1; ctx.strokeRect(x-tw/2,ty-fs*0.75,tw,fs*1.5);
+      ctx.fillStyle=col; ctx.fillText(lab,x,ty);
+    }
+  });
+  ctx.restore();
+}
+
+/* ═══ kingdoms on the map: one bright border round each realm, and its name written across it from afar ═══ */
+var EDGE_A=null, EDGE_S=0;
+function edgeAngles(){ if(EDGE_S!==S){ EDGE_S=S; EDGE_A=AX.map(function(d){ var p=hexPx(d[0],d[1]); return Math.atan2(p[1],p[0]); }); } return EDGE_A; }
+function drawBorders(edges){                            // edges: {colour:[x,y,side,...]}
+  var A=edgeAngles(), R=S*0.93, h=Math.PI/6;
+  ctx.save(); ctx.lineCap='round';
+  for(var col in edges){
+    var L=edges[col]; ctx.beginPath();
+    for(var i=0;i<L.length;i+=3){ var a=A[L[i+2]]; ctx.moveTo(L[i]+R*Math.cos(a-h),L[i+1]+R*Math.sin(a-h)); ctx.lineTo(L[i]+R*Math.cos(a+h),L[i+1]+R*Math.sin(a+h)); }
+    ctx.strokeStyle=col;
+    if(S>=9){ ctx.globalAlpha=0.2; ctx.lineWidth=S*0.3; ctx.stroke(); }
+    ctx.globalAlpha=0.95; ctx.lineWidth=Math.max(1.4,S*0.1); ctx.stroke();
+  }
+  ctx.restore();
+}
+function drawRealmNames(realms){                        // realms: {pid:[sumx,sumy,n]} over the squares on screen
+  if(S>=12||S<3) return;
+  ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.lineJoin='round';
+  for(var pid in realms){
+    var R=realms[pid], pl=G.players[pid]; if(!pl||R[2]<16) continue;
+    var x=R[0]/R[2], y=R[1]/R[2], fs=Math.max(11,Math.min(30,Math.sqrt(R[2])*S*0.27)), nm=String(pl.name||'').toUpperCase();
+    if(x<20||x>W-20||y<14||y>H-14) continue;
+    ctx.font='700 '+Math.round(fs)+'px Georgia, "Times New Roman", serif';
+    try{ ctx.letterSpacing=Math.round(fs*0.22)+'px'; }catch(e){}
+    var tw=ctx.measureText(nm).width/2+6; if(x-tw<0||x+tw>W) continue;                       // never a name cut off by the edge
+    ctx.globalAlpha=0.8; ctx.lineWidth=Math.max(3,fs*0.2); ctx.strokeStyle='rgba(8,12,10,.78)'; ctx.strokeText(nm,x,y);
+    ctx.fillStyle=pColor(pid); ctx.fillText(nm,x,y); ctx.globalAlpha=0.5; ctx.fillStyle='#fff8e4'; ctx.fillText(nm,x,y);
+  }
+  try{ ctx.letterSpacing='0px'; }catch(e){}
+  ctx.restore();
+}
+
+/* ═══ while you were away ═════════════════════════════════════════════════
+   On coming back: what was done to your realm since you last looked, from the public log of moves, plus how your
+   land, soldiers and buildings compare with the last time this device saw them (kept in this browser). */
+var chron={since:0,seen:0,snap0:null,ready:false,shown:false};
+function chronKey(){ return 'marchland.snap.'+gameCode+'.'+ME; }
+function chronStats(){
+  var s={sq:0,ca:0,to:0,so:0,ch:0,pr:0,sick:0};
+  for(var k in G.cells){ var c=G.cells[k]; if(!c||c.o!==ME) continue; s.sq++; if(c.k===CASTLE&&!isRuin(c)) s.ca++; if(c.k===TOWER) s.to++; s.so+=(c.b||0); if(isChurch(c)) s.ch++; if(infected(c)) s.sick++; }
+  for(var id in (G.priests||{})) if(G.priests[id]&&G.priests[id].o===ME) s.pr++;
+  return s;
+}
+function chronSave(){ if(!G||!ME||!G.players[ME]||!chron.ready) return; try{ var s=chronStats(); s.t=Date.now(); localStorage.setItem(chronKey(),JSON.stringify(s)); }catch(e){} }
+function chronBegin(since,seen){ chron.since=since||0; chron.seen=seen||0; chron.shown=false; try{ chron.snap0=JSON.parse(localStorage.getItem(chronKey())||'null'); }catch(e){ chron.snap0=null; } chron.ready=true; }
+function chronSpan(ms){ var h=ms/36e5; return h<1?'less than an hour':h<36?Math.round(h)+' hour'+(Math.round(h)===1?'':'s'):Math.round(h/24)+' days'; }
+function chronBuild(since,snap0){
+  var by={}, first=null, caravans={}, n=0, GN=function(p){ return esc(nameOf(p).split(' (')[0]); };
+  var slot=function(p){ return by[p]||(by[p]={took:0,towers:0,castles:0,held:0,theirLoss:0,shots:0,fell:0,bridges:0,sp:{}}); };
+  Object.keys(G.events||{}).forEach(function(id){
+    var e=G.events[id]; if(!e||!(e.t>since)||e.pid===ME) return;
+    if(e.k==='cv' && e.to===ME){ caravans[e.pid]=(caravans[e.pid]||0)+1; n++; return; }
+    if(e.prev!==ME) return;
+    var s=slot(e.pid);
+    if(e.k==='duel'){
+      if(e.won){ s.took++; if(e.pk===TOWER) s.towers++; if(e.pk===CASTLE) s.castles++; if(!first||e.t>first.t) first={q:e.q,r:e.r,t:e.t}; }
+      else { s.held++; s.theirLoss+=(e.loss||0); }
+      n++;
+    } else if(e.k==='fire'){ s.shots++; if(/collaps|fall|falls|destroy/i.test(e.out||'')) s.fell++; if(!first) first={q:e.q,r:e.r,t:e.t}; n++; }
+    else if(e.k==='brk'){ s.bridges++; n++; }
+    else if(e.k==='spoils' && e.sp){ GOODS.forEach(function(g){ if(e.sp[g]) s.sp[g]=(s.sp[g]||0)+e.sp[g]; }); }
+  });
+  var L=[];
+  Object.keys(by).sort(function(a,b){ return by[b].took-by[a].took; }).forEach(function(p){
+    var s=by[p], bits=[];
+    if(s.took) bits.push('<span class="bad">took '+s.took+' of your squares</span>'+(s.towers?' (tearing down '+s.towers+' tower'+(s.towers>1?'s':'')+')':'')+(s.castles?' <span class="bad">and seized '+(s.castles>1?s.castles+' fallen castles':'a fallen castle')+'</span>':''));
+    var sp=GOODS.filter(function(g){ return s.sp[g]; }).map(function(g){ return s.sp[g]+' '+g; }); if(sp.length) bits.push('carried off '+sp.join(', '));
+    if(s.held) bits.push('was <span class="good">beaten back '+s.held+' time'+(s.held>1?'s':'')+'</span>'+(s.theirLoss?', losing '+s.theirLoss+' soldier'+(s.theirLoss>1?'s':''):''));
+    if(s.shots) bits.push('loosed '+s.shots+' trebuchet shot'+(s.shots>1?'s':'')+' at your walls and towers'+(s.fell?' ('+s.fell+' brought something down)':''));
+    if(s.bridges) bits.push('broke '+s.bridges+' of your bridges');
+    if(bits.length) L.push('<li><b>'+GN(p)+'</b> '+bits.join('; ')+'.</li>');
+  });
+  Object.keys(caravans).forEach(function(p){ L.push('<li><b>'+GN(p)+'</b> sent you '+(caravans[p]>1?caravans[p]+' caravans':'a caravan')+'.</li>'); });
+  var now=chronStats(), D=[];
+  if(snap0 && snap0.t){
+    [['sq','square','squares'],['so','soldier','soldiers'],['ca','castle','castles'],['to','tower','towers'],['ch','church','churches'],['pr','priest','priests']].forEach(function(f){
+      var a=snap0[f[0]]||0, b=now[f[0]]||0; if(a===b) return;
+      D.push('<li>'+f[2].charAt(0).toUpperCase()+f[2].slice(1)+': '+a+' &rarr; <b>'+b+'</b> <span class="'+(b<a?'bad':'good')+'">('+(b>a?'+':'&minus;')+Math.abs(b-a)+')</span></li>'); n++;
+    });
+    var taken=0; for(var p2 in by) taken+=by[p2].took;
+    var other=(snap0.sq||0)-(now.sq||0)-taken;
+    if(other>0 && (snap0.sq||0)>(now.sq||0)) D.push('<li class="muted">'+other+' of those squares were not taken in battle: the plague, fire, neglect or a gift.</li>');
+  }
+  var A=[]; var ca=castleAlert(ME); if(ca&&ca.long) A.push('<li>'+ca.long+'</li>');
+  if(now.sick) A.push('<li><span class="bad">'+now.sick+' of your squares '+(now.sick>1?'are':'is')+' sick with the plague.</span> Send a priest, or burn '+(now.sick>1?'them':'it')+'.</li>');
+  var html=(L.length?'<p><b>What the others did</b></p><ul>'+L.join('')+'</ul>':'')+(D.length?'<p><b>Your realm, then and now</b></p><ul>'+D.join('')+'</ul>':'')+(A.length?'<p><b>Needs you now</b></p><ul>'+A.join('')+'</ul>':'');
+  return {html:html, n:n+A.length, first:first};
+}
+function chronOpen(since,snap0,label){
+  var c=chronBuild(since,snap0);
+  scrollDialog({eyebrow:label, title:'The chronicle of your realm', cancel:null,
+    html:c.html||'<p>All quiet. Nobody touched your realm.</p>',
+    buttons:(c.first?[{label:'Show me where',value:'go',primary:true}]:[]).concat([{label:'Close',value:null,primary:!c.first}])
+  }).then(function(res){ if(res&&res.value==='go'&&c.first){ centreOn(c.first.q,c.first.r); draw(); } });
+  return c;
+}
+function showChronicle(){
+  if(!chron.ready||chron.shown||!G||!me()) return false;
+  chron.shown=true;
+  var away=Date.now()-(chron.seen||chron.since||Date.now());
+  if(!chron.since||away<36e5) return false;
+  if(!chronBuild(chron.since,chron.snap0).n) return false;
+  chronOpen(chron.since,chron.snap0,'While you were away &middot; '+chronSpan(away));
+  return true;
+}
+setInterval(chronSave,60000);
+window.addEventListener('pagehide',chronSave);
+
 function draw(){
   bandBadgeQ=[]; trekBadgeQ=[];                     // (laid out and drawn at the end, see drawBandBadges)
   if(!G) return;
@@ -8122,6 +8368,7 @@ function draw(){
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   var egv=egyptView(); egQ.length=0; egWaterQ.length=0;
+  var edgeQ={}, realmQ={}, doEdges=S>=4;
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
@@ -8147,8 +8394,12 @@ function draw(){
       if(glowOn){ ctx.save(); ctx.globalAlpha=0.14+0.16*(0.5+0.5*Math.sin(now*4.5)); ctx.fillStyle=pColor(ME); hexPath(p[0],p[1],S*0.9); ctx.fill(); ctx.restore(); }
       hexPath(p[0],p[1],S*0.94);
     }
-    ctx.lineWidth=c.o&&detail?1.8:1; ctx.globalAlpha=c.o?.9:.28;
+    ctx.lineWidth=1; ctx.globalAlpha=c.o?(doEdges?.34:.9):.28;                        // inside a realm the squares are only faintly ruled; its edge is drawn bright (drawBorders)
     ctx.strokeStyle=c.o?col:T['--rule']; ctx.stroke(); ctx.globalAlpha=1;
+    if(c.o && !lav){
+      var rq=realmQ[c.o]||(realmQ[c.o]=[0,0,0]); rq[0]+=p[0]; rq[1]+=p[1]; rq[2]++;
+      if(doEdges) for(var ei=0;ei<6;ei++){ var en=G.cells[key(q+AX[ei][0],r+AX[ei][1])]; if(!en||en.o!==c.o){ (edgeQ[col]||(edgeQ[col]=[])).push(p[0],p[1],ei); } }
+    }
     if(detail){
       var vr=Math.floor(artHash(wrapQ(q),wrapR(r),1)*3);
       if(wet){ if(c.o) spans.push([c,p,col]); else if(!amb) stampTerrain(ctx,5,p[0],p[1],S,vr); }   // with animations on, open water is drawn moving (ambWater)
@@ -8188,6 +8439,7 @@ function draw(){
   if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
   if(HV){ harvestGround(ctx,hvFarms,hvOpen,now); harvestLeaves(ctx,now); }   // HARVEST LAYER: under the roads and everything else
   drawEgyptGround(Date.now()/1000);                  // the Ten Plagues: blood and darkness on Anna's and Lina's ground
+  if(doEdges) drawBorders(edgeQ);                     // each realm's bright border
   drawRoads(roads,detail);                            // the roads: above the ground, below everything built
   if(roadHint && now<roadHint.until){                 // where a road would let you reach a square you tried for
     ctx.save(); ctx.strokeStyle=T['--brass']; ctx.lineWidth=Math.max(2,S*0.08); ctx.setLineDash([Math.max(3,S*0.16),Math.max(3,S*0.12)]); ctx.lineDashOffset=-now*8;
@@ -8249,6 +8501,8 @@ function draw(){
   drawCaravans(now,amb);
   drawTreks(now,amb);
   drawFaith(now);
+  drawSupply(builds,now);                            // the supply view, when it is switched on
+  drawRealmNames(realmQ);
   drawRiverNames();                                 // the rivers' names, lying along the water
   drawBandBadges();                                 // every standing band's number, laid out so none hides another
   if(amb) ambClouds(ctx,now);
@@ -8598,6 +8852,14 @@ function openLedger(view){
     }});
 }
 document.getElementById('ledgerbtn').addEventListener('click',function(){ openLedger('land'); });
+document.getElementById('supplybtn').addEventListener('click',function(){
+  if(!G||!me()) return;
+  supplyOn=!supplyOn; this.setAttribute('aria-pressed',supplyOn?'true':'false'); this.style.outline=supplyOn?'2px solid #ffd66b':'';
+  if(supplyOn) say('<b>Supply view.</b> A gold line shows how each castle reaches its nearest farm, and every farm that can feed it glows. <span class="bad">&#9986; Red squares are weak links</span>: take one and that castle is cut off from grain. Ring: green safe, amber has a weak link, red starving. Tap the button again to leave.');
+  else say('Supply view off.');
+  ambKick(); draw();
+});
+document.getElementById('chronbtn').addEventListener('click',function(){ if(G&&me()) chronOpen(Date.now()-864e5,null,'The last day'); });
 document.getElementById('sagabtn').addEventListener('click',function(){      // the Saga cartoons, to watch again any time
   var L='display:block;text-align:center;text-decoration:none;margin:8px 0';
   scrollDialog({eyebrow:'Sound on', title:'The Marchland Saga', cancel:null,
@@ -11967,7 +12229,7 @@ function showRiverNote(){
 }
 /* the order players meet the announcements in */
 function showNext(){ if(document.getElementById('qcine')) return false;   // nothing on top of the earthquake while it plays (it calls showNext when it ends)
-  if(showNewLandOffer()) return true; if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote() || showNewLandOffer(); }
+  if(showNewLandOffer()) return true; if(showNotice()) return true; if(showSaga()) return true; if(showCvNote()) return true; if(showGodsNote()) return true; if(showPlagueNote()) return true; if(showJudgeNote()) return true; if(showCometNote()) return true; if(showTurkeyNote()) return true; if(showUndoNote()) return true; if(showRiverNote()) return true; if(showShadowNote()) return true; return showNovNote() || showNewLandOffer() || showChronicle(); }
 
 function join(){
   var name=(document.getElementById('handle').value||'').trim().slice(0,16);
@@ -12044,6 +12306,7 @@ function join(){
       if(online) dbPut('/marchland/'+gameCode+'/fallen/'+ME,null).catch(function(){});
     }
     var since=isNew?Date.now():(G.players[ME].evSeen||G.players[ME].seen||0);
+    chronBegin(isNew?0:since,isNew?0:(G.players[ME].seen||0));
     if(isNew){
       if(!seedPlayer(ME,name)){
         G=null; ME=null;
