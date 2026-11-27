@@ -11728,7 +11728,31 @@ function enterGame(isNew){
    follows them to another device) and in this browser as a backup. */
 /* The November announcements, one per new feature, each shown once on a scroll in #rulesnote. A player who joins
    after a change never needs telling about it (forNew marks the ones that are for everyone). */
+function chronPic(){                                    // the map with its column of buttons, the chronicle's one lit up
+  var g='<svg viewBox="0 0 280 176" width="100%" style="max-width:340px;display:block;margin:6px auto 10px" role="img" aria-hidden="true">'
+    +'<rect x="6" y="4" width="268" height="168" rx="6" fill="#16221d" stroke="#6d5e40" stroke-width="2"/>', i, lab=['+','−','◎','⚑','▶','☰','⚔','☠','🌾','📜','❄','🎬','Tr','?'];
+  [[60,52,'#3f6fb0'],[86,52,'#3f6fb0'],[73,75,'#3f6fb0'],[99,75,'#b8443a'],[125,75,'#b8443a'],[112,98,'#b8443a'],[60,98,'#3f6fb0'],[86,98,'#d0a23a'],[99,121,'#d0a23a'],[138,98,'#b8443a'],[47,75,'#3f6fb0'],[125,121,'#d0a23a']].forEach(function(h,i){ if(!i) g+='<g transform="translate(8,-30) scale(.92)">'; g+=crHex(h[0],h[1],14,h[2]+'55',h[2],1.5); });
+  g+='<rect x="66" y="64" width="14" height="13" fill="#cfc4ae" stroke="#1b100b"/><path d="M73 64 V54 l8 3 -8 3" fill="#3f6fb0" stroke="#1b100b" stroke-width=".8"/></g>';
+  for(i=0;i<14;i++){ var y=9+i*11.4, on=i===9;
+    g+='<rect x="248" y="'+y+'" width="18" height="10" rx="2" fill="'+(on?'#f3e6bf':'#22302a')+'" stroke="'+(on?'#ffd66b':'#4a5a52')+'" stroke-width="'+(on?2:1)+'"/>'
+      +'<text x="257" y="'+(y+7.8)+'" font-size="7.5" text-anchor="middle" fill="'+(on?'#3a2f18':'#aab8b0')+'">'+lab[i]+'</text>'; }
+  var cy=9+9*11.4+5;
+  g+='<circle cx="257" cy="'+cy+'" r="13" fill="none" stroke="#ffd66b" stroke-width="2" opacity=".9"/>'
+    +'<path d="M186 '+cy+' H232" stroke="#ffd66b" stroke-width="3"/><polygon points="232,'+(cy-6)+' 244,'+cy+' 232,'+(cy+6)+'" fill="#ffd66b"/>'
+    +'<rect x="62" y="'+(cy-22)+'" width="126" height="40" rx="5" fill="#0e1613" opacity=".85"/>'
+    +'<text x="182" y="'+(cy-6)+'" font-size="13" text-anchor="end" fill="#f3e6bf" font-family="inherit" font-weight="700">The chronicle</text>'
+    +'<text x="182" y="'+(cy+9)+'" font-size="10" text-anchor="end" fill="#cdb98a" font-family="inherit">the scroll, beside the map</text>';
+  return g+'</svg>';
+}
 var NOTES=[
+  {id:'chron-btn1', eyebrow:'Something new', title:'&#128220; The chronicle of your realm', forNew:true,
+   html:chronPic()+'<p>There is a new <b>scroll button &#128220;</b> in the column of buttons at the right edge of the map, just under the wheat &#127806;. Tap it any time to read <b>what happened to your realm in the last day</b>:</p><ul>'
+     +'<li>who <b>took your squares</b>, tore down your towers or carried off your goods;</li>'
+     +'<li>attacks you <b>beat back</b>, trebuchet shots at your walls, bridges broken;</li>'
+     +'<li>caravans sent to you;</li>'
+     +'<li>and what <b>needs you now</b>: a starving castle, or squares sick with the plague.</li></ul>'
+     +'<p>When you come back after an hour or more away, the chronicle <b>opens by itself</b> and also shows how your land, soldiers and buildings changed. <b>Show me where</b> takes you to the latest loss.</p>'
+     +'<p>Its neighbour, the wheat &#127806;, is the new <b>supply view</b>: how every castle is fed, and the squares that would cut it off.</p>', go:'Good to know'},
   {id:'plague-rules1', eyebrow:'Hear the gods', title:'&#9763; How the plague will work', forNew:true,
    when:function(){ return faithPublic(); },
    html:'<p>The plague is coming. Know its rules before it reaches you.</p><ul>'
