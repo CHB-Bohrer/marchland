@@ -660,7 +660,7 @@ body.qafter #game{animation:qshake .2s linear 8}
         <div class="stat" id="s-gar"><span class="k">Garrison</span><span class="v" id="v-gar">0/0</span><span class="u" id="u-gar">manned</span></div>
         <div class="stat" id="s-march"><span class="k">Marches</span><span class="v" id="v-march">0</span><span class="u" id="u-march">squares</span></div>
       </div>
-      <div class="bless-note hide" id="bless-note">&#10022; <b>The gods&rsquo; blessing is on you.</b> Your land yields <b>double</b>.</div>
+      <div class="bless-note hide" id="bless-note">&#10022; <b>The gods&rsquo; blessing is on you.</b> Your land yields <b>double</b> while you hold fewer than 100 squares.</div>
 
       <div class="canvas-pad">
         <canvas id="board"></canvas>
@@ -3329,6 +3329,20 @@ function settleBless2(){
   }).catch(function(){}).then(function(){ blessing2=false; });
   return true;
 }
+/* ── the blessing for the small ──  once (fixes/bless3): the gods say the blessing is only for those under BLESS_CAP squares */
+var blessing3=false;
+function settleBless3(){
+  if(!online||blessing3||!G||!G.players||dirty||ELIM||!boardFresh()||!(G.fixes&&G.fixes.bless1)||(G.fixes&&G.fixes.bless3)) return false;
+  var now=Date.now(), rec0={t:now};
+  blessing3=true;
+  dbPutIf('/marchland/'+gameCode+'/fixes/bless3',rec0).then(function(x){
+    if(x.halted) return;
+    if(!x.ok){ if(x.v){ G.fixes=G.fixes||{}; G.fixes.bless3=x.v; } return; }
+    G.fixes=G.fixes||{}; G.fixes.bless3=rec0; bumpRev().then(ok,fail);
+    plagueChat('The gods see that some of the little ones are little no more. From now on the blessing is only for warriors holding FEWER THAN 100 squares. Reach 100 and it leaves you; fall below and it finds you again. The blessed still reap DOUBLE.',now,'bless3');
+  }).catch(function(){}).then(function(){ blessing3=false; });
+  return true;
+}
 /* ── Rafael moved ──  "It's me guys" (Rafael) joined boxed in by neighbours. Once (fixes/move1, claimed with a conditional write):
    his land is lifted off the board and he starts again on the most open ground there is: the square farthest from anyone
    else's land, castle or ruin. He keeps his resources, marches and soldiers (they wait at the new keep). */
@@ -3733,18 +3747,18 @@ function garrisonNeed(pid){
   for(var k in G.cells){ var c=G.cells[k]; if(c.o!==pid||!c.k||isRuin(c)) continue; have+=c.g||0; need+=garNeed(c); }
   return [have,need];
 }
-/* ── the gods' blessing ──  Players in the bottom half of land holders (counted among everyone who holds at least one
-   square; ties at the line are all blessed) are blessed: taking another player's land costs them 1 march instead of
+/* ── the gods' blessing ──  Since 27 Nov: players holding at least one but fewer than BLESS_CAP (100) squares are blessed
+   (before that it was the bottom half of land holders): taking another player's land costs them 1 march instead of
    ATTACK_COST, and their land yields double. It follows the board as it is now, so it comes and goes as land changes hands.
    Begins with G.fixes.bless1 (announced once by the gods); harvest from before then is not doubled. */
-var blessCache={at:0,gen:-1,set:{},cut:0};
+var blessCache={at:0,gen:-1,set:{},cut:0}, BLESS_CAP=100;
 function blessOn(){ return !!(G && G.fixes && G.fixes.bless1); }
 function landCounts(){ var n={}; for(var k in G.cells){ var c=G.cells[k]; if(c&&c.o&&G.players[c.o]) n[c.o]=(n[c.o]||0)+1; } return n; }
 function blessedSet(){
   var now=Date.now();
   if(now-blessCache.at<2000 && blessCache.gen===cellsGen) return blessCache.set;
-  var n=landCounts(), ids=Object.keys(n).sort(function(a,b){ return n[a]-n[b]; }), set={}, cut=0;
-  if(ids.length>=2){ cut=n[ids[Math.floor(ids.length/2)-1]]; ids.forEach(function(p){ if(n[p]<=cut) set[p]=1; }); }
+  var n=landCounts(), set={}, cut=BLESS_CAP;                 // 27 Nov: blessed only while holding fewer than BLESS_CAP squares (was the bottom half)
+  Object.keys(n).forEach(function(p){ if(n[p]<BLESS_CAP) set[p]=1; });
   blessCache={at:now,gen:cellsGen,set:set,cut:cut};
   return set;
 }
@@ -9193,6 +9207,7 @@ function render(){
     settleAnnaVotes();
     settleBless();
     settleBless2();
+    settleBless3();
     settleMoveRafael();
     settleMoveAnna();
     settleMercyChat();
@@ -11382,7 +11397,15 @@ var NOTES=[
      +'<li><b>&#127866; Tavern</b> is for <b>everything else</b>. Talk about anything, as much as you like. There are no hush votes in the Tavern, and even a hushed warrior may drink here.</li>'
      +'<li>Each room shows its own count of new messages. The chat bar only lights up for new messages in <b>War</b>.</li>'
      +'</ul><p>Keep the chatter in the Tavern, and the war in War.</p>', go:'Pull up a stool'},
-  {id:'nov20-bless2', eyebrow:'The gods have spoken', title:'&#10022; The blessing is tempered',
+  {id:'nov27-bless3', eyebrow:'The gods have spoken', title:'&#10022; The blessing is only for the small',
+   html:'<p><i>&ldquo;Some of the &lsquo;little ones&rsquo; we blessed are not so little any more.&rdquo;</i></p>'
+     +'<p><b>What changed</b></p><ul>'
+     +'<li>The blessing now goes only to warriors holding <b>fewer than 100 squares</b> of land.</li>'
+     +'<li>Hold <b>100 squares or more</b> and the blessing leaves you. Fall back below 100 and it finds you again.</li>'
+     +'<li>The blessing still gives a <b>double harvest</b>: twice the stone, timber, iron and grain from your land.</li>'
+     +'<li>If you are blessed, the <b>golden banner</b> above your map says so.</li>'
+     +'</ul><p>Grow strong, little ones. Then stand on your own.</p>', go:'Praise the gods', forNew:true},
+  {id:'nov20-bless2', when:function(){ return false; }, eyebrow:'The gods have spoken', title:'&#10022; The blessing is tempered',
    html:'<p><i>&ldquo;We watched the little ones feast&hellip; and perhaps we were too generous.&rdquo;</i></p>'
      +'<p><b>What changed</b></p><ul>'
      +'<li>Taking another player&rsquo;s land costs the usual <b>2 marches</b> again, for <b>everyone</b>, blessed or not.</li>'
@@ -11390,7 +11413,7 @@ var NOTES=[
      +'<li>The blessing still <b>follows the land</b>. Grow into the top half and it leaves you; fall into the bottom half and it finds you.</li>'
      +'<li>If you are blessed, the <b>golden banner</b> above your map says so.</li>'
      +'</ul><p>Spend your harvest wisely, little ones.</p>', go:'Praise the gods'},
-  {id:'nov19-bless', eyebrow:'The gods have spoken', title:'&#10022; The gods&rsquo; blessing',
+  {id:'nov19-bless', when:function(){ return false; }, eyebrow:'The gods have spoken', title:'&#10022; The gods&rsquo; blessing',
    html:'<p><i>&ldquo;We look down upon the realm and see the mighty growing fat while the small go hungry. This displeases us. (It is also boring to watch.)&rdquo;</i></p>'
      +'<p><b>The rules</b></p><ul>'
      +'<li>Every warrior in the <b>bottom half of land holders</b> is blessed by the gods.</li>'
