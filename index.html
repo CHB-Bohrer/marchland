@@ -1187,13 +1187,48 @@ function dbPut(path,val){
     {method:'PUT',body:JSON.stringify(val),headers:{'Content-Type':'application/json'}})
     .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
 }
-/* several paths in one request: {"cells/3_4":null,"players/abc":null,...} relative to the path given */
+/* ── what this screen last knew of each square (27 Nov) ──
+   Saving a square used to write the whole square from this screen's own copy, so a screen holding an older copy
+   wiped out whatever had been added there since (most often trebuchets on a castle, which live on its square).
+   Now a square is saved as just the fields this screen changed, compared with the copy it last downloaded or
+   wrote; what others changed meanwhile is left alone. A square whose owner changed, or that is removed or new,
+   is still written whole. CBASE: square key -> JSON of the last copy known to be in the database. */
+var CBASE={}, CELL_SKIP={q:1,r:1,t:1};
+function setCellBase(cells){ CBASE={}; if(cells) for(var k in cells) CBASE[k]=JSON.stringify(cells[k]); }
+function markBase(k,json){ if(json==null||json==='null') delete CBASE[k]; else CBASE[k]=json; }
+function cellDiff(k,val){                              // -> null: write the square whole; else {field: new value or null}
+  if(!online || val==null || typeof val!=='object') return null;
+  var b=CBASE[k]; if(b==null) return null;
+  var bo; try{ bo=JSON.parse(b); }catch(e){ return null; }
+  if(!bo || typeof bo!=='object' || (bo.o||null)!==(val.o||null)) return null;
+  var d={}, n=0, f;
+  for(f in val){ if(CELL_SKIP[f]||val[f]===undefined) continue; if(JSON.stringify(val[f])!==JSON.stringify(bo[f])){ d[f]=val[f]; n++; } }
+  for(f in bo){ if(CELL_SKIP[f]) continue; if(!(f in val)||val[f]===undefined){ d[f]=null; n++; } }
+  if(n) d.o=val.o||null;                               // the owner is always restated, so a field never lands on a square with no owner
+  return d;
+}
+/* several paths in one request: {"cells/3_4":null,"players/abc":null,...} relative to the path given.
+   Whole squares in a board patch ("cells/3_4": {...}) are cut down to the fields that changed (see CBASE). */
 function dbPatch(path,obj){
   if(ELIM||HALT||PLOCK||QFREEZE) return Promise.resolve(null);
+  var marks=[];
+  if(G && gameCode && path==='/marchland/'+gameCode && obj){
+    var out={};
+    Object.keys(obj).forEach(function(p){
+      var m=/^cells\/([^\/]+)$/.exec(p), v=obj[p];
+      if(!m){ out[p]=v; return; }
+      marks.push([m[1],JSON.stringify(v==null?null:v)]);
+      var d=cellDiff(m[1],v);
+      if(!d){ out[p]=v; return; }
+      for(var f in d) out[p+'/'+f]=d[f];
+    });
+    obj=out;
+    if(!Object.keys(obj).length) return Promise.resolve(null);
+  }
   lastWrite=Date.now();
   return fetch(window.DB_URL.replace(/\/$/,'')+path+'.json',
     {method:'PATCH',body:JSON.stringify(obj),headers:{'Content-Type':'application/json'}})
-    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); });
+    .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); marks.forEach(function(x){ markBase(x[0],x[1]); }); return r.json(); });
 }
 
 /* Conditional writes: read a path with its ETag, and write it back only if nobody has changed it since.
@@ -1790,6 +1825,7 @@ function doUndo(){
       if(U.ev){ if(G.events) delete G.events[U.ev]; putPath('/events/'+U.ev,null); }
       if(U.cv){
         if(G.caravans) delete G.caravans[U.cv];
+        if(pl.cvOut) delete pl.cvOut[U.cv]; pl.cvPub=pl.cvPub||{}; pl.cvPub[U.cv]=Date.now();   // undone: never put on the road later
         putPath('/caravans/'+U.cv,null);
         if(pl.hxOut && pl.hxOut[U.cv]){ delete pl.hxOut[U.cv]; }
         if(U.lt && online && U.to){ dbPut(letterPath(U.to,U.cv),null).catch(function(){}); dbPut('/marchland/'+gameCode+'/players/'+U.to+'/lids/'+U.cv,null).catch(function(){}); }
@@ -3955,15 +3991,15 @@ function catchUp(pid){
     pl.res.stone+=R.out.stone; pl.res.timber+=R.out.timber; pl.res.iron+=R.out.iron;
     pl.res.grain+=R.out.grain-(R.mouths-R.wagons+wagonsAt(pid,tickEnd));
     if(pl.res.grain<0){                       // hungry soldiers desert (and trebuchets are abandoned), biggest group first
-      var gone=Math.ceil(-pl.res.grain/2), gone0=gone; pl.res.grain=0;
+      var gone=Math.ceil(-pl.res.grain/2), gone0=gone, tbGone=0; pl.res.grain=0;
       var groups=bandsOf(pid).map(function(bd){ return {k:bd.k,n:bd.n,f:'b'}; });
       for(var tk0 in G.cells){ var tc0=G.cells[tk0]; if(tc0.o===pid && tc0.tb>0) groups.push({k:tk0,n:tc0.tb,f:'tb'}); }
       groups.sort(function(a,b){ return (b.n-a.n)||(a.f===b.f?0:(a.f==='b'?-1:1)); }).forEach(function(gp){
         if(gone<=0) return; var c=G.cells[gp.k], t=Math.min(c[gp.f],gone); c[gp.f]-=t; gone-=t;
-        if(gp.f==='tb'){ c.tr=arr(c.tr).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } } else if(!c.b) delete c.b;
+        if(gp.f==='tb'){ tbGone+=t; c.tr=arr(c.tr).slice(0,c.tb); if(!c.tb){ delete c.tb; delete c.tr; } } else if(!c.b) delete c.b;
         touched[gp.k]=1;
       });
-      if(gone0>gone){ var dz=pl.des&&!pl.des.seen?pl.des:(pl.des={n:0,t:0,seen:false}); dz.n+=gone0-gone; dz.t=Date.now(); }   // remembered, so the warning shows until it is read
+      if(gone0>gone){ var dz=pl.des&&!pl.des.seen?pl.des:(pl.des={n:0,t:0,seen:false}); dz.n+=gone0-gone; dz.tb=(dz.tb||0)+tbGone; dz.t=Date.now(); }   // remembered, so the warning shows until it is read
     }
     // cut-off bands: a day of rations, then one man dies each tick until they are joined to a castle again
     var sup0=fedGround(pid,R.supset), strK=strandedCells(pid,R.supset), lostStr=0;
@@ -4664,7 +4700,7 @@ function absorbMine(v){                                // → true when v was an
     ['evSeen','lastTick'].forEach(function(f){ if((v[f]||0)>(pl[f]||0)) pl[f]=v[f]; });
     if(v.cw){ var cwU={}; arr(pl.cw).concat(arr(v.cw)).forEach(function(x){ if(x>=Date.now()-CHAT_WIN) cwU[x]=1; }); pl.cw=Object.keys(cwU).map(Number).sort(); }   // chat send times: both screens' lists joined
     if(v.cq && (!pl.cq || v.cq.k>pl.cq.k || (v.cq.k===pl.cq.k && (v.cq.n||0)>(pl.cq.n||0)))) pl.cq=v.cq;   // chat messages this tick: the higher count wins
-    ['notes','cvGot','hxIn','hxOut'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
+    ['notes','cvGot','hxIn','hxOut','cvOut','cvPub'].forEach(function(f){ if(v[f]){ pl[f]=pl[f]||{}; for(var k in v[f]) if(pl[f][k]==null) pl[f][k]=v[f][k]; } });
     if((v.wv||0)>(pl.wv||0)) pl.wv=v.wv;
     if(v.led) ledMerge(pl,v.led);
   }
@@ -4701,18 +4737,22 @@ function pushMeNow(tries){
 function pushCell(q,r){
   if(!G) return Promise.resolve();
   var k=key(q,r); cellsGen++;
-  return dbPut('/marchland/'+gameCode+'/cells/'+k, G.cells[k]||null).then(bumpRev).then(ok,fail);
+  var val=G.cells[k]||null, json=JSON.stringify(val), d=cellDiff(k,val), w;
+  if(d){ if(!Object.keys(d).length) return Promise.resolve(); w=dbPatch('/marchland/'+gameCode+'/cells/'+k,d); }   // only what changed
+  else w=dbPut('/marchland/'+gameCode+'/cells/'+k,val);                                                              // new, removed or changed hands: whole
+  return w.then(function(){ markBase(k,json); }).then(bumpRev).then(ok,fail);
 }
 /* one cell fresh from the database, with its ETag; and the write that only lands if it is unchanged */
 function cellFresh(q,r){
   var k=key(q,r);
   if(!online) return Promise.resolve({c:G.cells[k]||null, tag:null});
-  return dbGetTag('/marchland/'+gameCode+'/cells/'+k).then(function(x){ return {c:x.v, tag:x.tag}; });
+  return dbGetTag('/marchland/'+gameCode+'/cells/'+k).then(function(x){ markBase(k,JSON.stringify(x.v==null?null:x.v)); return {c:x.v, tag:x.tag}; });
 }
 function cellPutIf(q,r,val,tag){
   cellsGen++;
   if(!online){ pushAll(); return Promise.resolve(true); }
-  return dbPutIf('/marchland/'+gameCode+'/cells/'+key(q,r),val,tag).then(function(x){ if(x.ok) bumpRev().then(ok,fail); return !!x.ok; });
+  var json=JSON.stringify(val==null?null:val);
+  return dbPutIf('/marchland/'+gameCode+'/cells/'+key(q,r),val,tag).then(function(x){ if(x.ok){ markBase(key(q,r),json); bumpRev().then(ok,fail); } return !!x.ok; });
 }
 function ok(){ dirty=false; setSync('saved '+new Date().toLocaleTimeString()); }
 function fail(){ dirty=true; setSync('could not save — retrying'); }
@@ -4728,7 +4768,7 @@ function applyRemote(remote){
   if(!remote||!remote.players) return false;
   if(quakeWatch(remote)) return true;                  // the world itself has moved (or is about to): nothing of this copy is applied
   var before=JSON.stringify([G.cells,G.claims||{},G.events||{},G.caravans||{},G.treks||{},othersOf(G.players),G.pending||{},G.crusades||{},G.strikes||{},G.sponsorships||{}]);
-  G.cells=remote.cells||{}; tidyBoard(G); cellsGen++;
+  G.cells=remote.cells||{}; setCellBase(G.cells); tidyBoard(G); cellsGen++;
   G.claims=remote.claims||{};
   G.events=remote.events||{};
   G.caravans=remote.caravans||{};
@@ -9208,6 +9248,7 @@ function render(){
     settleBless();
     settleBless2();
     settleBless3();
+    settleCaravansOut();
     settleMoveRafael();
     settleMoveAnna();
     settleMercyChat();
@@ -11917,7 +11958,7 @@ function join(){
   gameCode=GAME_CODE;
   document.getElementById('join-hint').textContent='Opening the board…';
   dbGet('/marchland/'+gameCode).then(function(remote){
-    if(remote&&remote.players){ G=remote; setWorld(G); G.cells=G.cells||{}; G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; dlRev=myRev; dlAt=Date.now(); lastFresh=Date.now(); tidyBoard(G); }
+    if(remote&&remote.players){ G=remote; setWorld(G); G.cells=G.cells||{}; setCellBase(G.cells); G.claims=G.claims||{}; G.events=G.events||{}; G.caravans=G.caravans||{}; G.treks=G.treks||{}; myRev=remote.rev||0; dlRev=myRev; dlAt=Date.now(); lastFresh=Date.now(); tidyBoard(G); }
     else { G=blankGame(gameCode); setWorld(G); }
     var ex=G.players[tryPid];
     var rnIn=(document.getElementById('realname').value||'').trim().replace(/\s+/g,' ').slice(0,24);
@@ -12148,13 +12189,44 @@ function sendCaravan(){
   if(hv){ c.hv=hv; pl.hxOut=pl.hxOut||{}; pl.hxOut[id]=hv; document.getElementById('cv-hush').value=''; }
   document.getElementById('cv-letter').value=''; letterCount();
   G.caravans=G.caravans||{}; G.caravans[id]=c;
+  pl.cvOut=pl.cvOut||{}; pl.cvOut[id]=c;               // saved with the goods taken out, in one write; then put on the road (see publishCaravan)
   GOODS.forEach(function(k){ document.getElementById('cv-'+k).value=''; });
-  pushMe().then(function(){ return putPath('/caravans/'+id,c); });
+  pushMe().then(function(){ return publishCaravan(id); });
   logMove('cv',pl.q,pl.r,null,null,0,{to:to, g:g, lt:txt?1:null, hv:hv||null});
   undoCommit('Caravan sent',uSnap,{cv:id,to:to,lt:txt?1:0});
   render();
   say('Caravan on its way to <b>'+esc(full(them))+'</b> with '+cvWhat(c)+'. No marches spent. It arrives in about <b>'+fmtDur(c.eta-now)+'</b> &mdash; you can watch the wagon on the map. While it rolls it costs you <b>1 grain every tick</b>.');
   if(document.getElementById('caravan').classList.contains('onmap')) closeCaravanMap();
+}
+/* ── caravans can't go missing (27 Nov) ──
+   Sending used to take the goods (one write) and then put the wagon on the road (a second write); a tab closed or a
+   connection lost between the two lost the wagon and its goods. Now the wagon rides in the sender's own record
+   (cvOut) in the same write that takes the goods, and is then put on the road only if no wagon of that id exists yet.
+   Any screen of the sender's finishes the job if it never landed. cvPub remembers wagons already on the road, so one
+   delivered and cleared away is never sent twice. */
+var cvPubBusy={};
+function publishCaravan(id){
+  var pl=me(); if(!pl||!pl.cvOut||!pl.cvOut[id]) return Promise.resolve();
+  var c=pl.cvOut[id], done=function(){ pl.cvPub=pl.cvPub||{}; pl.cvPub[id]=Date.now(); delete pl.cvOut[id]; return pushMe(); };
+  if((pl.cvPub&&pl.cvPub[id]) || (G.caravans&&G.caravans[id]&&G.caravans[id]!==c)) return done();
+  if(!online){ G.caravans=G.caravans||{}; G.caravans[id]=c; return done(); }
+  if(cvPubBusy[id]) return Promise.resolve();
+  cvPubBusy[id]=1;
+  return dbPutIf('/marchland/'+gameCode+'/caravans/'+id,c,'null_etag').then(function(x){
+    if(x.halted) return;
+    if(x.ok || x.v){ G.caravans=G.caravans||{}; G.caravans[id]=x.ok?c:x.v; bumpRev().then(ok,fail); return done(); }
+  }).catch(function(){}).then(function(){ delete cvPubBusy[id]; });
+}
+function settleCaravansOut(){
+  var pl=me(); if(!pl||ELIM||!boardFresh()) return;
+  var now=Date.now(), drop=false;
+  Object.keys(pl.cvOut||{}).forEach(function(id){
+    var c=pl.cvOut[id];
+    if(!c || now-(c.t||0)>14*864e5){ delete pl.cvOut[id]; drop=true; return; }
+    publishCaravan(id);
+  });
+  for(var k in (pl.cvPub||{})) if(now-pl.cvPub[k]>20*864e5){ delete pl.cvPub[k]; drop=true; }
+  if(drop) pushMe();
 }
 /* the receiver's tab: unload anything that has arrived, and tidy old wagons away */
 function settleCaravans(){
@@ -12346,11 +12418,17 @@ function payHorseGift(c){
 }
 
 /* ── hunger: a warning before the grain runs out, and a notice (until read) of soldiers who deserted ── */
+function desLine(d){                                   // "3 soldiers walked off and 2 trebuchets were abandoned"
+  var tb=Math.min(d.tb||0,d.n), men=d.n-tb, out=[];
+  if(men>0) out.push('<b>'+men+'</b> soldier'+(men>1?'s':'')+' walked off');
+  if(tb>0) out.push('<b>'+tb+'</b> trebuchet'+(tb>1?'s were':' was')+' abandoned');
+  return out.join(' and ')||'<b>'+d.n+'</b> soldiers walked off';
+}
 function renderHungerAlert(){
   var el=document.getElementById('hungeralert'); if(!el||!G||!me()) return;
   var pl=me(), rows=[], R=ratesFor(ME,Date.now()), net=R.net, gr=Math.floor(pl.res.grain||0);
   if(pl.des && !pl.des.seen && pl.des.n>0){
-    rows.push('<div class="ca-row"><span class="ca-head">Hungry men deserted</span></div><div class="ca-row"><span>Your grain ran out, and <b>'+pl.des.n+'</b> soldier'+(pl.des.n>1?'s':'')+' (or trebuchets) walked off. Keep your grain above zero, or more will go.</span> <button data-act="hgseen">Got it</button></div>');
+    rows.push('<div class="ca-row"><span class="ca-head">Hungry men deserted</span></div><div class="ca-row"><span>Your grain ran out, and '+desLine(pl.des)+'. Keep your grain above zero, or more will go.</span> <button data-act="hgseen">Got it</button></div>');
   }
   if(pl.starved && !pl.starved.seen && pl.starved.n>0){
     rows.push('<div class="ca-row"><span class="ca-head">Cut-off soldiers starved</span></div><div class="ca-row"><span><b>'+pl.starved.n+'</b> of your soldiers died of hunger, cut off from every castle and grain square. Join the ground around them back to a castle or a grain square of yours (take the squares between), or they will keep dying.</span> <button data-act="svseen">Got it</button></div>');
