@@ -11405,6 +11405,18 @@ function enterGame(isNew){
 /* The November announcements, one per new feature, each shown once on a scroll in #rulesnote. A player who joins
    after a change never needs telling about it (forNew marks the ones that are for everyone). */
 var NOTES=[
+  {id:'plague-rules1', eyebrow:'Hear the gods', title:'&#9763; How the plague will work', forNew:true,
+   when:function(){ return faithPublic(); },
+   html:'<p>The plague is coming. Know its rules before it reaches you.</p><ul>'
+     +'<li><b>It starts in secret.</b> It breaks out on <b>10 random squares at once</b>, and the gods will not say whose.</li>'
+     +'<li><b>It hides for a day.</b> A square that catches it looks perfectly healthy for a day, but it is <b>already spreading it</b>. By the time you see one sick square, its neighbours may carry it too.</li>'
+     +'<li><b>Then it shows</b>: green mist and a skull, for <b>3 days</b>. A sick square gives <b>half its harvest</b>, and a band on it loses a soldier every 8 hours.</li>'
+     +'<li><b>1 in 10 is lost.</b> If a sick square isn&rsquo;t cured or burned by the end of those 3 days, there is a <b>10% chance the land is lost</b> for good. Otherwise it recovers, and can&rsquo;t catch it again for 2 days.</li>'
+     +'<li><b>How it spreads.</b> Every 4 hours, each carrier passes it to each neighbour with a <b>20%</b> chance (<b>35%</b> road to road). <b>Walls</b> cut that to a half, a third or a quarter. Castles, towers and churches never catch it.</li>'
+     +'<li><b>Priests are the cure.</b> A priest guards his own square and the six around it. At wisdom 10 he cuts the spread there by <b>80%</b>, cures a sick square with an <b>80%</b> chance every 4 hours, and keeps its soldiers alive. But each sick square near him is a risk he dies of it.</li>'
+     +'<li><b>Fire is certain, and costly.</b> Burn a sick square of yours and the sickness is gone, but <b>so is the square</b>, with anything and anyone on it.</li>'
+     +'<li><b>The Siege of Caffa.</b> While it rages, a trebuchet can hurl a plague corpse at an enemy square up to 3 away: it and its neighbours catch it. The gods will name whoever does it.</li></ul>'
+     +'<p><b>Raise a church and train priests now</b> (a church: '+costLine(CHURCH_COST)+', 12 hours). Every number is under <a href="manual/" target="_blank" rel="noopener">How to play</a>, in <i>The exact numbers</i>.</p>', go:'We will be ready'},
   {id:'faith-open', eyebrow:'A new building', title:'The Church comes to Marchland',
    when:function(){ return faithPublic(); },
    html:crSvg(crHex(140,64,46,'#e9dcb6')+fcChurchSvg(120,98,0.85,'#8E1B1B')+fcPriestSvg(214,96,0.8,'#8E1B1B'))+'<p>You can now raise a <b>church</b> on an empty square of yours ('+costLine(CHURCH_COST)+', 12 hours, up to '+CHURCH_MAX+'). Each holds '+CHURCH_SLOTS+' <b>priests</b>, and the first is free.</p>'
