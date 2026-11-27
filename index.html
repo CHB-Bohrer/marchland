@@ -678,6 +678,7 @@ body.qafter #game{animation:qshake .2s linear 8}
           <button id="ledgerbtn" aria-label="War ledger: who took the most land, spoils and soldiers from whom" title="War ledger: who has taken the most land, stolen the most goods and killed the most soldiers, from whom">&#9760;</button>
           <button id="supplybtn" aria-pressed="false" aria-label="Supply view: how every castle is fed, and its weak links" title="Supply view: how every castle is fed, and the squares that would cut it off">&#127806;</button>
           <button id="chronbtn" aria-label="Chronicle: what happened to your realm in the last day" title="Chronicle: what happened to your realm in the last day">&#128220;</button>
+          <button id="frostbtn" class="hide" aria-pressed="true" aria-label="Frost on or off" title="Frost on/off">&#10052;</button>
           <button id="sagabtn" aria-label="Watch the Marchland Saga cartoons" title="Watch the Marchland Saga cartoons">&#127916;</button>
           <button id="harvestbtn" class="hide" aria-label="Harvest decorations" title="Harvest on/off">&#127810;</button><!-- HARVEST LAYER -->
           <button id="trebhelp" aria-label="How trebuchets work" title="How trebuchets work">Tr</button>
@@ -3525,7 +3526,7 @@ function settleTurkey(){
 }
 function renderTurkey(){
   var el=document.getElementById('turkeypanel'); if(!el) return;
-  var on=!!(G&&me()&&G.turkeyhunt); el.classList.toggle('hide',!on); if(!on) return;
+  var on=!!(G&&me()&&G.turkeyhunt&&turkeyOpen()); el.classList.toggle('hide',!on); if(!on) return;   // the hunt ended with Thanksgiving: the box goes with it
   var mine=(G.turkeys||{})[ME], form=document.getElementById('turkeyform'), st=document.getElementById('turkeystat');
   var txt='', show=true;
   if(mine&&mine.void){ txt='Bohrer turned your photo down, so the 10 marches were taken back. It has to be a <b>living</b> turkey!'; show=false; }
@@ -8246,6 +8247,44 @@ function drawSupply(builds,now){
   ctx.restore();
 }
 
+/* ═══ a light frost ═══  From the day after Thanksgiving to the end of February: a pale rime on the land, a glint here and
+   there, thin ice at the river banks and a few slow snowflakes. Only drawn; it changes nothing in the game. The ❄ button turns it off. */
+var FROST_OK=(function(){ var d=new Date(), m=d.getMonth(); return m===11||m===0||m===1||(m===10&&d.getDate()>=27)||/[?&]frost=1/.test(location.search); })();
+var FROST_ON=true; try{ FROST_ON=localStorage.getItem('marchland.frost')!=='0'; }catch(e){}
+function frostOn(){ return FROST_OK&&FROST_ON; }
+function drawFrost(Q,now){                             // Q: [x,y,q,r,wet]
+  if(!frostOn()) return;
+  var t=REDUCE?0:now, i, j;
+  ctx.save();
+  if(S<12){ ctx.fillStyle='rgba(214,230,250,0.06)'; ctx.fillRect(0,0,W,H); ctx.restore(); return; }
+  ctx.lineCap='round';
+  for(i=0;i<Q.length;i++){
+    var e=Q[i], x=e[0], y=e[1], q=wrapQ(e[2]), r=wrapR(e[3]), h=artHash(q,r,401);
+    if(e[4]){                                          // open water: a thin rim of ice along two banks
+      ctx.strokeStyle='rgba(235,246,255,0.5)'; ctx.lineWidth=Math.max(1,S*0.07);
+      var a0=Math.floor(h*6)*Math.PI/3-Math.PI/6; ctx.beginPath(); ctx.arc(x,y,S*0.8,a0,a0+0.9); ctx.stroke(); ctx.beginPath(); ctx.arc(x,y,S*0.8,a0+3.1,a0+3.7); ctx.stroke();
+      continue;
+    }
+    hexPath(x,y,S*0.94); ctx.fillStyle='rgba(226,238,252,0.085)'; ctx.fill();                       // the cold light on the ground
+    ctx.fillStyle='rgba(244,250,255,0.55)';
+    for(j=0;j<5;j++){ var hx=artHash(q,r,410+j), hy=artHash(q,r,420+j); ctx.beginPath(); ctx.ellipse(x+(hx-0.5)*S*1.25,y+S*0.28+(hy-0.5)*S*0.7,S*(0.05+0.05*hy),S*0.022,0,0,6.284); ctx.fill(); }   // rime in the hollows
+    if(h<0.22){                                        // a glint of frost that catches the light now and then
+      var tw=REDUCE?0.6:Math.max(0,Math.sin(t*1.6+h*40)), gx=x+(artHash(q,r,431)-0.5)*S, gy=y+(artHash(q,r,432)-0.5)*S*0.8, gl=S*0.13*tw;
+      if(gl>0.6){ ctx.strokeStyle='rgba(255,255,255,'+(0.85*tw)+')'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(gx-gl,gy); ctx.lineTo(gx+gl,gy); ctx.moveTo(gx,gy-gl); ctx.lineTo(gx,gy+gl); ctx.stroke(); }
+    }
+  }
+  ctx.restore();
+}
+function drawFlakes(now){
+  if(!frostOn()||REDUCE||S<10) return;
+  ctx.save(); ctx.fillStyle='#ffffff';
+  for(var i=0;i<34;i++){
+    var sp=0.02+0.018*((i*7)%5), u=(now*sp+i*0.173)%1, x=((i*211.3)%(W+60))-30+Math.sin(now*0.6+i)*18, y=u*(H+30)-15, r=1+((i*3)%3)*0.55;
+    ctx.globalAlpha=0.5*Math.sin(u*Math.PI); ctx.beginPath(); ctx.arc(x,y,r,0,6.284); ctx.fill();
+  }
+  ctx.restore();
+}
+
 /* ═══ kingdoms on the map: one bright border round each realm, and its name written across it from afar ═══ */
 var EDGE_A=null, EDGE_S=0;
 function edgeAngles(){ if(EDGE_S!==S){ EDGE_S=S; EDGE_A=AX.map(function(d){ var p=hexPx(d[0],d[1]); return Math.atan2(p[1],p[0]); }); } return EDGE_A; }
@@ -8368,7 +8407,7 @@ function draw(){
   var amb=!REDUCE && S>=AMB_MIN_S, waters=[], works=[], folk=[], wild=[];   // the living map: only when animations are on and the map is close enough to see it
   var glowOn=!!(coach.target && coach.target.glow && now<coach.target.until);   // the coach lighting up every cell you can take
   var egv=egyptView(); egQ.length=0; egWaterQ.length=0;
-  var edgeQ={}, realmQ={}, doEdges=S>=4;
+  var edgeQ={}, realmQ={}, doEdges=S>=4, frostQ=[], frost=frostOn()&&S>=12;
   for(var dr=-rows;dr<=rows;dr++) for(var dq=-cols;dq<=cols;dq++){
     var q=viewQ+dq-Math.round(dr/2), r=viewR+dr, p=toScreen(q,r);
     if(p[0]<-S||p[0]>W+S||p[1]<-S||p[1]>H+S) continue;
@@ -8396,6 +8435,7 @@ function draw(){
     }
     ctx.lineWidth=1; ctx.globalAlpha=c.o?(doEdges?.34:.9):.28;                        // inside a realm the squares are only faintly ruled; its edge is drawn bright (drawBorders)
     ctx.strokeStyle=c.o?col:T['--rule']; ctx.stroke(); ctx.globalAlpha=1;
+    if(frost && !lav && (!wet||!c.o)) frostQ.push([p[0],p[1],q,r,wet]);
     if(c.o && !lav){
       var rq=realmQ[c.o]||(realmQ[c.o]=[0,0,0]); rq[0]+=p[0]; rq[1]+=p[1]; rq[2]++;
       if(doEdges) for(var ei=0;ei<6;ei++){ var en=G.cells[key(q+AX[ei][0],r+AX[ei][1])]; if(!en||en.o!==c.o){ (edgeQ[col]||(edgeQ[col]=[])).push(p[0],p[1],ei); } }
@@ -8439,6 +8479,7 @@ function draw(){
   if(amb){ ambGround(ctx,waters,works,now); ambWild(ctx,wild,now); ambFolk(ctx,folk,now); }
   if(HV){ harvestGround(ctx,hvFarms,hvOpen,now); harvestLeaves(ctx,now); }   // HARVEST LAYER: under the roads and everything else
   drawEgyptGround(Date.now()/1000);                  // the Ten Plagues: blood and darkness on Anna's and Lina's ground
+  try{ drawFrost(frostQ,now); }catch(e){}            // a light frost on the ground, under everything built
   if(doEdges) drawBorders(edgeQ);                     // each realm's bright border
   drawRoads(roads,detail);                            // the roads: above the ground, below everything built
   if(roadHint && now<roadHint.until){                 // where a road would let you reach a square you tried for
@@ -8506,6 +8547,7 @@ function draw(){
   drawRiverNames();                                 // the rivers' names, lying along the water
   drawBandBadges();                                 // every standing band's number, laid out so none hides another
   if(amb) ambClouds(ctx,now);
+  try{ drawFlakes(now); }catch(e){}
   drawWrath(now);                                   // the gods' storm, and the snow on the land of whoever angered them
   anims.forEach(function(a){ drawAnim(ctx,a,now,toNear,S); });
   if(amb) ambBirds(ctx,now);
@@ -8859,6 +8901,8 @@ document.getElementById('supplybtn').addEventListener('click',function(){
   else say('Supply view off.');
   ambKick(); draw();
 });
+(function(){ var b=document.getElementById('frostbtn'); if(!b||!FROST_OK) return; b.classList.remove('hide'); var paint=function(){ b.setAttribute('aria-pressed',FROST_ON?'true':'false'); b.style.opacity=FROST_ON?'':'0.5'; }; paint();
+  b.addEventListener('click',function(){ FROST_ON=!FROST_ON; try{ localStorage.setItem('marchland.frost',FROST_ON?'1':'0'); }catch(e){} paint(); ambKick(); if(G) draw(); }); })();
 document.getElementById('chronbtn').addEventListener('click',function(){ if(G&&me()) chronOpen(Date.now()-864e5,null,'The last day'); });
 document.getElementById('sagabtn').addEventListener('click',function(){      // the Saga cartoons, to watch again any time
   var L='display:block;text-align:center;text-decoration:none;margin:8px 0';
@@ -9311,7 +9355,7 @@ function ambBirds(g,now){
    and the four marked calls in draw() and the button. */
 function thanksgivingDay(year){ var d=new Date(year,10,1).getDay(), first=1+((4-d+7)%7); return new Date(year,10,first+21); }
 var HARVEST_FORCE=(function(){ try{ var m=/[?&]harvest=([a-z0-9]+)/.exec(location.search); return m?m[1]:''; }catch(e){ return ''; } })();
-var HARVEST_OK=new Date().getMonth()===10 || !!HARVEST_FORCE;
+var HARVEST_OK=(new Date().getMonth()===10 && new Date().getDate()<27) || !!HARVEST_FORCE;   // the harvest and its feast end after Thanksgiving; the frost follows (see drawFrost)
 var HARVEST_ON=true; try{ HARVEST_ON=localStorage.getItem('marchland.harvest')!=='0'; }catch(e){}
 function harvestState(){
   if(!HARVEST_OK||!HARVEST_ON) return '';
@@ -12167,7 +12211,7 @@ function closeTurkeyNote(){
 }
 function turkeyNoteKey(e){ if(e.key==='Escape'){ e.preventDefault(); closeTurkeyNote(); } }
 function showTurkeyNote(){
-  var n=document.getElementById('turkeynote'); if(!n||!G||!me()||!G.turkeyhunt||turkeySeen()) return false;
+  var n=document.getElementById('turkeynote'); if(!n||!G||!me()||!G.turkeyhunt||!turkeyOpen()||turkeySeen()) return false;
   var other=['rulesnote','sagenote','cvnote','godsnote','shadownote','novnote','undonote','rivernote','plaguenote','judgenote','cometnote','turkeynote','outnote','waitnote'].some(function(id){ var o=document.getElementById(id); return o&&!o.classList.contains('hide'); });
   if(other) return false;
   n.classList.remove('hide'); n.scrollTop=0;
