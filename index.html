@@ -4344,7 +4344,8 @@ function pestTick(n){
   var T=n*TICK_MS, rng=mulberry32((n*2654435761)>>>0), P=G.pest, keys=Object.keys(G.cells).sort(), wis={}, patch={}, org=P.o||[0,0], orgs=arr(P.os).length?arr(P.os):[org], i, kill=[];
   function orgDist(q,r){ var m=Infinity; orgs.forEach(function(o){ var d=hexDist(o[0],o[1],q,r); if(d<m) m=d; }); return m; }   // distance to the nearest outbreak
   var ids=Object.keys(G.priests||{}).sort();
-  function mark(k,c){ var a=pkey(k); writeCell(a[0],a[1],c); patch['cells/'+k]=G.cells[k]||null; }
+  function mark(k,c,fields){ var a=pkey(k); writeCell(a[0],a[1],c); var w=G.cells[k];   // write only the plague's own fields, so nothing else on the square is overwritten
+    fields.forEach(function(f){ patch['cells/'+k+'/'+f]=(w&&w[f]!=null)?w[f]:null; }); }
   ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), w=p.w||0, a=pos; [[0,0]].concat(AX).forEach(function(d){ var kk=key(a[0]+d[0],a[1]+d[1]); if(w>(wis[kk]||0)) wis[kk]=w; }); });
   var sick=keys.filter(function(k){ return infected(G.cells[k],T); }), carriers=keys.filter(function(k){ return carrier(G.cells[k],T); }), fresh={};   // hidden carriers spread it too
   // a square whose sickness ran out uncured: 1 chance in 10 the land is lost (burned and cured squares have no sickness left to run out)
@@ -4370,10 +4371,10 @@ function pestTick(n){
     var c=G.cells[k], ch=false;
     if(wis[k]&&rng()<PEST_CURE*wis[k]){ delete c.pz; delete c.pi; c.pr=T+PEST_REST_MS; ch=true; }
     else if(c.b>0&&!wis[k]&&n%2===0){ c.b-=1; addGraves(c,1); if(!(c.b>0)) delete c.b; P.cp=P.cp||{}; P.cp[c.o]=Math.min(CORPSE_CAP,(P.cp[c.o]||0)+1); patch['pest/cp/'+c.o]=P.cp[c.o]; ch=true; }
-    if(ch) mark(k,c);
+    if(ch) mark(k,c,['pz','pi','pr','b','gv']);
   });
-  Object.keys(fresh).forEach(function(k){ var c=G.cells[k]; infectCell(c,T); mark(k,c); });
-  ids.forEach(function(id){ var p=G.priests[id], pos=priestPos(p,T), m=0; [[0,0]].concat(AX).forEach(function(d){ if(infected(G.cells[key(pos[0]+d[0],pos[1]+d[1])],T)) m++; }); if(m&&rng()<Math.min(PEST_TEND_CAP,PEST_TEND*m)) kill.push(id); });
+  Object.keys(fresh).forEach(function(k){ var c=G.cells[k]; infectCell(c,T); mark(k,c,['pz','pi','pr']); });
+  ids.forEach(function(id){ var p=G.priests[id]; if(!p) return; var pos=priestPos(p,T), m=0; [[0,0]].concat(AX).forEach(function(d){ if(infected(G.cells[key(pos[0]+d[0],pos[1]+d[1])],T)) m++; }); if(m&&rng()<Math.min(PEST_TEND_CAP,PEST_TEND*m)) kill.push(id); });
   kill.forEach(function(id){ var hk=G.priests[id].h; killPriest(id,'he died tending the sick'); });
   patch['pest/tick']=n; P.tick=n;
   return patch;
