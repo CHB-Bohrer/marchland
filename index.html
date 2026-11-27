@@ -4161,6 +4161,7 @@ function buildChurch(q,r){
   var pl=me(), c=cellOf(q,r), now=Date.now();
   if(!faithOn()) return;
   if(c.o!==ME||c.k||c.cb||c.ch||c.t===RIVER||building(c)) return nope('A church stands on an empty square of yours (not a river, castle or tower).');
+  if(infected(c)) return nope('Not while the plague is on this square.');
   if(myChurchKeys(ME).length>=CHURCH_MAX) return nope('You can have at most '+CHURCH_MAX+' churches.');
   var lk=lackText(CHURCH_COST); if(lk) return nope(lk+'.');
   for(var g in CHURCH_COST) pl.res[g]-=CHURCH_COST[g];
@@ -5955,6 +5956,7 @@ function build0(q,r,kind){
   var pl=me(), c=cellOf(q,r);
   if(c.o!==ME) return nope('Build on ground you hold.');
   if(c.k||isChurch(c)) return nope('Something already stands here.');
+  if(typeof infected==='function'&&infected(c)) return nope('Not while the plague is on this square.');
   if(c.cb) return nope(c.cb>Date.now()?'A castle is already going up here &mdash; it is ready in <b>'+hoursLeft(c.cb)+'</b>.':'A castle is already going up here &mdash; tap it to see what it still needs.');
   if(c.t===RIVER) return nope('Nothing can be built on a river, even on a bridge.');
   var cost = kind===CASTLE ? castleCost(ME) : SPEC[kind].cost;
@@ -6485,6 +6487,11 @@ function cellActions(q,r){
   }
   var nf=out.length; faithActions(q,r,c,A,wet);
   if(own&&isChurch(c)){ var ci=-1; for(var fi=nf;fi<out.length;fi++) if(/^(The church|Church being raised)/.test(out[fi].label)) ci=fi; if(ci>0) out.unshift(out.splice(ci,1)[0]); }   // on a church square, the church comes first
+  if(own&&infected(c)){                                // on a sick square: the plague first, and nothing new can be raised on it
+    var pi2=[]; for(var fi2=out.length-1;fi2>=0;fi2--) if(/^(Plague on this square|Burn this square)/.test(out[fi2].label)) pi2.unshift(out.splice(fi2,1)[0]);
+    out.forEach(function(a){ if(/^(Raise a tower|Build a church|Found a castle)/.test(a.label)&&!a.why){ a.why='Not while the plague is on it'; } });
+    out=pi2.concat(out);
+  }
   if(wet) A('Name this river','1 march',function(){ renameRiver(q,r); },riverWhy(q,r));
   Object.keys(G.players).forEach(function(pid){
     var o=G.players[pid]; if(pid===ME||!o||key(o.q,o.r)!==key(q,r)) return;
