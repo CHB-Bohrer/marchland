@@ -13126,9 +13126,16 @@ function chatNote(t){
   var n=document.getElementById('chat-note');
   n.textContent=t||''; n.classList.toggle('hide',!t); chatMeasure();
 }
+/* 27 Nov: five plague-rule lines were written with a clock two days fast, so they sat below every new message; any tab removes them */
+var PEST_BAD=['0mx2ic5s0-pestrules-0','0mx2ic5s1-pestrules-1','0mx2ic5s2-pestrules-2','0mx2ic5s3-pestrules-3','0mx2ic5s4-pestrules-4'], pestGone=false;
+function chatDropPest(){
+  if(pestGone) return; pestGone=true;
+  PEST_BAD.forEach(function(k){ delete chat.msgs[k]; chatPut('/m/'+k,null).catch(function(){}); });
+}
 function chatFetch(){
   return chatGet('/m','?orderBy=%22%24key%22&limitToLast='+(CHAT_SHOW*2)).catch(function(){ return chatGet('/m'); }).then(function(d){
     var fresh=[];
+    chatDropPest(); if(d) PEST_BAD.forEach(function(k){ delete d[k]; });
     if(d) Object.keys(d).forEach(function(k){
       var m=d[k]; if(!m||typeof m!=='object') return;
       if(!chat.msgs[k] || chat.msgs[k].pending){ if(!chat.msgs[k] && m.pid!==ME) fresh.push(m); chat.msgs[k]=m; }
